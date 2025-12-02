@@ -1,0 +1,38 @@
+version: '3.8'
+
+services:
+  youtu-agent:
+    build:
+      context: ./youtu-agent/docker
+      dockerfile: Dockerfile
+    container_name: cdut-youtu-agent
+    ports:
+      - "8848:8848"
+    volumes:
+      # 环境配置文件
+      - ./.env:/youtu-agent/.env
+      # 数据持久化目录
+      - ./data/submissions:/youtu-agent/data/submissions
+      - ./data/training:/youtu-agent/data/training
+      - ./data/chat_history:/youtu-agent/data/chat_history
+      - ./data/problems:/youtu-agent/data/problems
+      # 自定义配置和代码
+      - ./youtu-agent/configs:/youtu-agent/configs
+      - ./custom_agents:/youtu-agent/custom_agents
+    environment:
+      - TZ=Asia/Shanghai
+    env_file:
+      - .env
+    restart: unless-stopped
+    networks:
+      - cdut-network
+
+networks:
+  cdut-network:
+    driver: bridge
+
+volumes:
+  submissions:
+  training:
+  chat_history:
+  problems:
