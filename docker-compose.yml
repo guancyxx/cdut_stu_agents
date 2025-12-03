@@ -1,6 +1,7 @@
 version: '3.8'
 
 services:
+  # ==================== AI Agent 服务 ====================
   youtu-agent:
     build:
       context: ./youtu-agent/docker
@@ -21,8 +22,82 @@ services:
       - ./custom_agents:/youtu-agent/custom_agents
     environment:
       - TZ=Asia/Shanghai
+      - OJ_API_URL=http://oj-backend:8000
     env_file:
       - .env
+    depends_on:
+      - oj-backend
+    restart: unless-stopped
+    networks:
+      - cdut-network
+
+  # ==================== QDUOJ 后端服务 ====================
+  oj-backend:
+    image: registry.cn-hongkong.aliyuncs.com/oj-image/backend:1.6.1
+    container_name: cdut-oj-backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./qduoj/data/backend:/data
+    environment:
+      - POSTGRES_DB=onlinejudge
+      - POSTGRES_USER=onlinejudge
+      - POSTGRES_PASSWORD=onlinejudge
+      - JUDGE_SERVER_TOKEN=cdut-secure-token-2024
+    depends_on:
+      - oj-postgres
+      - oj-redis
+      - oj-judge
+    restart: unless-stopped
+    networks:
+      - cdut-network
+
+  # ==================== QDUOJ 判题服务器 ====================
+  oj-judge:
+    image: registry.cn-hongkong.aliyuncs.com/oj-image/judge:1.6.1
+    container_name: cdut-oj-judge
+    read_only: true
+    cap_drop:
+      - SETPCAP
+      - MKNOD
+      - NET_BIND_SERVICE
+      - SYS_CHROOT
+      - SETFCAP
+      - FSETID
+    tmpfs:
+      - /tmp
+    volumes:
+      - ./qduoj/data/backend/test_case:/test_case:ro
+      - ./qduoj/data/judge_server/log:/log
+      - ./qduoj/data/judge_server/run:/judger
+    environment:
+      - SERVICE_URL=http://oj-judge:8080
+      - BACKEND_URL=http://oj-backend:8000/api/judge_server_heartbeat/
+      - TOKEN=cdut-secure-token-2024
+    restart: unless-stopped
+    networks:
+      - cdut-network
+
+  # ==================== PostgreSQL 数据库 ====================
+  oj-postgres:
+    image: postgres:10-alpine
+    container_name: cdut-oj-postgres
+    environment:
+      - POSTGRES_DB=onlinejudge
+      - POSTGRES_USER=onlinejudge
+      - POSTGRES_PASSWORD=onlinejudge
+    volumes:
+      - ./qduoj/data/postgres:/var/lib/postgresql/data
+    restart: unless-stopped
+    networks:
+      - cdut-network
+
+  # ==================== Redis 缓存 ====================
+  oj-redis:
+    image: redis:4.0-alpine
+    container_name: cdut-oj-redis
+    volumes:
+      - ./qduoj/data/redis:/data
     restart: unless-stopped
     networks:
       - cdut-network
@@ -30,9 +105,3 @@ services:
 networks:
   cdut-network:
     driver: bridge
-
-volumes:
-  submissions:
-  training:
-  chat_history:
-  problems:
