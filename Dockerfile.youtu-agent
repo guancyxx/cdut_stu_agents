@@ -1,0 +1,29 @@
+# 使用官方Python基础镜像
+FROM python:3.12
+
+# 安装系统依赖
+RUN apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
+
+# 设置工作目录
+WORKDIR /youtu-agent
+
+# 复制本地youtu-agent代码
+COPY ./youtu-agent /youtu-agent
+
+# 安装uv构建工具
+RUN pip install uv
+
+# 同步Python环境和依赖
+RUN uv sync
+
+# 将虚拟环境的bin目录添加到PATH
+ENV PATH="/youtu-agent/.venv/bin:$PATH"
+
+# 安装前端UI包
+RUN uv pip install https://github.com/TencentCloudADP/youtu-agent/releases/download/frontend/v0.3.0/utu_agent_ui-0.3.0-py3-none-any.whl
+
+# 暴露端口
+EXPOSE 8848
+
+# 启动命令（可通过docker-compose覆盖）
+CMD ["python", "examples/svg_generator/main_web.py"]

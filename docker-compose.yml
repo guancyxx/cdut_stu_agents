@@ -4,8 +4,8 @@ services:
   # ==================== AI Agent 服务 ====================
   youtu-agent:
     build:
-      context: ./youtu-agent/docker
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: Dockerfile.youtu-agent
     container_name: cdut-youtu-agent
     ports:
       - "8848:8848"
