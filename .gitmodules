@@ -1,9 +1,9 @@
 [submodule "youtu-agent"]
 	path = youtu-agent
-	url = https://github.com/TencentCloudADP/youtu-agent.git
+	url = https://github.com/guancyxx/youtu-agent.git
 [submodule "qduoj"]
 	path = qduoj
-	url = https://github.com/QingdaoU/OnlineJudgeDeploy.git
+	url = https://github.com/guancyxx/OnlineJudgeDeploy.git
 [submodule "fps-problems"]
 	path = fps-problems
-	url = https://github.com/zhblue/freeproblemset.git
+	url = https://github.com/guancyxx/freeproblemset.git
