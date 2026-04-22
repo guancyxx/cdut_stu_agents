@@ -38,6 +38,8 @@ const {
   problems,
   problemLoading,
   problemError,
+  submitLoading,
+  submitResult,
   keyword,
   difficulty,
   isLoginMode,
@@ -47,7 +49,8 @@ const {
   login,
   register,
   logout,
-  fetchProblems
+  fetchProblems,
+  submitSolution
 } = useOjAuthAndProblems()
 
 const authActionText = computed(() => (ojUser.value.loggedIn ? ojUser.value.profileName : '去登录'))
@@ -72,6 +75,8 @@ const selectedProblemDescription = computed(() => {
 })
 
 const selectedProblemDescriptionHtml = computed(() => sanitizeHtmlContent(selectedProblemDescription.value))
+
+const renderMessageHtml = (content) => sanitizeHtmlContent(String(content || ''))
 
 const handleGoToAuth = () => {
   if (ojUser.value.loggedIn) {
@@ -167,7 +172,43 @@ const handleClearAllSessions = () => {
   submitState.value = { type: '', message: '' }
 }
 
-const handleSubmitCode = () => {
+const mapSubmissionLabelToUiMessage = (result) => {
+  if (!result) {
+    return {
+      type: 'error',
+      message: 'No submission result returned.'
+    }
+  }
+
+  if (result.label === 'ERROR') {
+    return {
+      type: 'error',
+      message: result.message || 'Submission failed.'
+    }
+  }
+
+  if (result.label === 'TIMEOUT') {
+    return {
+      type: 'warning',
+      message: 'Judge polling timed out. Please refresh later.'
+    }
+  }
+
+  const detailMessage = `Result: ${result.label} | Score: ${result.score} | Time: ${result.timeCost}ms | Memory: ${result.memoryCost}KB | Submission: ${result.submissionId || '-'}`
+  if (result.label === 'ACCEPTED') {
+    return {
+      type: 'success',
+      message: detailMessage
+    }
+  }
+
+  return {
+    type: 'info',
+    message: detailMessage
+  }
+}
+
+const handleSubmitCode = async () => {
   submitState.value = { type: '', message: '' }
 
   if (!selectedProblem.value) {
@@ -183,10 +224,14 @@ const handleSubmitCode = () => {
     return
   }
 
-  submitState.value = {
-    type: 'info',
-    message: 'Submission API is not integrated yet. UI and validation are ready.'
-  }
+  const result = await submitSolution({
+    problemId: selectedProblem.value.id,
+    problemQueryId: selectedProblem.value._id,
+    language: submitLanguage.value,
+    code: normalizedCode
+  })
+
+  submitState.value = mapSubmissionLabelToUiMessage(result)
 }
 
 const handleSubmitCodeToAi = () => {
@@ -410,7 +455,7 @@ onBeforeUnmount(() => {
         <main class="chat-main" ref="listRef">
           <div v-for="(msg, idx) in messages" :key="idx" class="msg" :class="msg.role">
             <div class="meta">{{ msg.role === 'user' ? '你' : 'AI' }} · {{ msg.time }}</div>
-            <div class="bubble">{{ msg.content }}</div>
+            <div class="bubble" v-html="renderMessageHtml(msg.content)" />
           </div>
         </main>
 
@@ -503,8 +548,8 @@ onBeforeUnmount(() => {
                     placeholder="Enter your source code here"
                   />
                   <div class="submit-action-row">
-                    <button @click="handleSubmitCode">提交代码</button>
-                    <button class="secondary-btn" @click="handleSubmitCodeToAi">发给AI</button>
+                    <button :disabled="submitLoading" @click="handleSubmitCode">{{ submitLoading ? '提交中...' : '提交代码' }}</button>
+                    <button class="secondary-btn" :disabled="submitLoading" @click="handleSubmitCodeToAi">发给AI</button>
                   </div>
                 </div>
               </div>

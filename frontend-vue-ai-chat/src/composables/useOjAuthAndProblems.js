@@ -78,6 +78,8 @@ export function useOjAuthAndProblems() {
   const problems = ref([])
   const problemLoading = ref(false)
   const problemError = ref('')
+  const submitLoading = ref(false)
+  const submitResult = ref(null)
   const keyword = ref('')
   const difficulty = ref('')
 
@@ -273,6 +275,154 @@ export function useOjAuthAndProblems() {
     }
   }
 
+  const normalizeSubmissionResult = (row) => {
+    if (!row || typeof row !== 'object') {
+      return {
+        status: null,
+        label: 'UNKNOWN',
+        score: 0,
+        timeCost: 0,
+        memoryCost: 0,
+        submissionId: ''
+      }
+    }
+
+    const status = Number(row.result)
+    const statusMap = {
+      '-2': 'COMPILING',
+      '-1': 'SYSTEM_ERROR',
+      '0': 'PENDING',
+      '1': 'JUDGING',
+      '2': 'COMPILING',
+      '3': 'COMPILE_ERROR',
+      '4': 'ACCEPTED',
+      '5': 'PRESENTATION_ERROR',
+      '6': 'WRONG_ANSWER',
+      '7': 'TIME_LIMIT_EXCEEDED',
+      '8': 'MEMORY_LIMIT_EXCEEDED',
+      '9': 'RUNTIME_ERROR',
+      '10': 'SYSTEM_ERROR'
+    }
+
+    const statisticInfo = row.statistic_info && typeof row.statistic_info === 'object' ? row.statistic_info : {}
+
+    return {
+      status,
+      label: statusMap[String(status)] || 'UNKNOWN',
+      score: Number(statisticInfo.score || 0),
+      timeCost: Number(statisticInfo.time_cost || 0),
+      memoryCost: Number(statisticInfo.memory_cost || 0),
+      submissionId: sanitizeTextInput(String(row.id || ''), 64)
+    }
+  }
+
+  const isFinalSubmissionStatus = (status) => ![0, 1, 2, -2].includes(status)
+
+  const submitSolution = async ({ problemId, problemQueryId, language, code }) => {
+    submitLoading.value = true
+    submitResult.value = null
+
+    try {
+      const parsedProblemId = Number(problemId)
+      if (!Number.isInteger(parsedProblemId) || parsedProblemId <= 0) {
+        throw new Error('Invalid problem id.')
+      }
+
+      const normalizedLanguage = sanitizeTextInput(language, 24)
+      const normalizedCode = sanitizeTextInput(code, 20000)
+      if (normalizedCode.length < 10) {
+        throw new Error('Code must be at least 10 characters.')
+      }
+
+      const csrfToken = await ensureCsrfToken(apiClient)
+      const submitResponse = await apiClient.submitCode(
+        {
+          problem_id: parsedProblemId,
+          language: normalizedLanguage,
+          code: normalizedCode
+        },
+        csrfToken
+      )
+
+      if (submitResponse.data?.error) {
+        throw new Error(typeof submitResponse.data.data === 'string' ? submitResponse.data.data : submitResponse.data.error)
+      }
+
+      const submittedId = sanitizeTextInput(String(submitResponse.data?.data?.submission_id || ''), 64)
+      if (!submittedId) {
+        throw new Error('Submission id is missing in submit response.')
+      }
+
+      const startTimestamp = Date.now()
+      const timeoutMs = 45000
+      const intervalMs = 1500
+      const queryProblemId = sanitizeTextInput(String(problemQueryId || problemId || ''), 64)
+      const query = {
+        myself: '1',
+        ...(queryProblemId ? { problem_id: queryProblemId } : {}),
+        limit: '20',
+        page: '1'
+      }
+
+      let normalized = {
+        status: 0,
+        label: 'PENDING',
+        score: 0,
+        timeCost: 0,
+        memoryCost: 0,
+        submissionId: submittedId
+      }
+      submitResult.value = normalized
+
+      while (Date.now() - startTimestamp <= timeoutMs) {
+        const listResponse = await apiClient.fetchSubmissions(query)
+        const payload = listResponse.data
+        if (payload?.error) {
+          throw new Error(typeof payload.data === 'string' ? payload.data : payload.error)
+        }
+
+        const rows = Array.isArray(payload.data?.results) ? payload.data.results : []
+        const matchedRow = rows.find((row) => sanitizeTextInput(String(row?.id || ''), 64) === submittedId)
+        if (!matchedRow) {
+          await new Promise((resolve) => setTimeout(resolve, intervalMs))
+          continue
+        }
+
+        normalized = normalizeSubmissionResult(matchedRow)
+        submitResult.value = normalized
+
+        if (isFinalSubmissionStatus(normalized.status)) {
+          return normalized
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, intervalMs))
+      }
+
+      return normalized || {
+        status: null,
+        label: 'TIMEOUT',
+        score: 0,
+        timeCost: 0,
+        memoryCost: 0,
+        submissionId: ''
+      }
+    } catch (error) {
+      const failedResult = {
+        status: null,
+        label: 'ERROR',
+        score: 0,
+        timeCost: 0,
+        memoryCost: 0,
+        submissionId: '',
+        message: error.message || String(error)
+      }
+      submitResult.value = failedResult
+      return failedResult
+    } finally {
+      submitLoading.value = false
+    }
+  }
+
   return {
     AUTH_MODES,
     authMode,
@@ -282,6 +432,8 @@ export function useOjAuthAndProblems() {
     problems,
     problemLoading,
     problemError,
+    submitLoading,
+    submitResult,
     keyword,
     difficulty,
     isLoginMode,
@@ -291,6 +443,7 @@ export function useOjAuthAndProblems() {
     login,
     register,
     logout,
-    fetchProblems
+    fetchProblems,
+    submitSolution
   }
 }

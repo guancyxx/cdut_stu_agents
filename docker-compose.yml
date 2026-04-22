@@ -29,6 +29,34 @@ services:
     networks:
       - cdut-network
 
+  ai-agent-lite:
+    build:
+      context: ./ai-agent-lite
+      dockerfile: Dockerfile
+    container_name: cdut-ai-agent-lite
+    ports:
+      - "8850:8848"
+    volumes:
+      - ./.env:/app/.env
+      - ./data/submissions:/app/data/submissions
+      - ./data/training:/app/data/training
+      - ./data/chat_history:/app/data/chat_history
+      - ./data/problems:/app/data/problems
+    environment:
+      - TZ=Asia/Shanghai
+      - OJ_API_URL=http://oj-backend:8000
+      - LITE_LLM_BASE_URL=${UTU_LLM_BASE_URL}
+      - LITE_LLM_API_KEY=${UTU_LLM_API_KEY}
+      - LITE_LLM_MODEL=${UTU_LLM_MODEL}
+      - LITE_LLM_TIMEOUT=30
+    env_file:
+      - .env
+    depends_on:
+      - oj-backend
+    restart: unless-stopped
+    networks:
+      - cdut-network
+
   # ==================== Vue AI Chat 前端 ====================
   vue-ai-chat:
     build:
@@ -45,7 +73,7 @@ services:
     working_dir: /app
     restart: unless-stopped
     depends_on:
-      - youtu-agent
+      - ai-agent-lite
     networks:
       - cdut-network
 

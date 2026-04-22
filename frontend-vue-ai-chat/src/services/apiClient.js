@@ -73,12 +73,31 @@ export function createApiClient(baseUrl = '/oj-api') {
     return requestJson(`/api/problem/?${query.toString()}`)
   }
 
+  const submitCode = (payload, csrfToken) =>
+    requestJson('/api/submission', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(csrfToken ? { 'X-CSRFToken': csrfToken } : {}),
+        Referer: window.location.origin,
+        Origin: window.location.origin
+      },
+      body: JSON.stringify(payload)
+    })
+
+  const fetchSubmissions = (params = {}) => {
+    const query = new URLSearchParams(params)
+    return requestJson(`/api/submissions?${query.toString()}`)
+  }
+
   return {
     fetchProfile,
     fetchCaptcha,
     login,
     register,
     logout,
-    fetchProblems
+    fetchProblems,
+    submitCode,
+    fetchSubmissions
   }
 }

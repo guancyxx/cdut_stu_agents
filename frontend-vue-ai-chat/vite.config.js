@@ -18,7 +18,7 @@ export default defineConfig({
   server: {
     proxy: {
       '/ws': {
-        target: 'ws://youtu-agent:8848',
+        target: 'ws://ai-agent-lite:8848',
         ws: true,
       },
       '/oj-api': {
