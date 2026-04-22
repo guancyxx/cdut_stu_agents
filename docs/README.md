@@ -1,175 +1,133 @@
-# CDUT OJ 系统文档中心
+# CDUT OJ - Documentation Center
 
-## 📂 文档目录结构
+## Directory Structure
 
 ```
 docs/
-├── README.md                          # 本文档索引
-├── CDUT_OJ系统当前状态.md             # 🌟 系统当前状态总览（推荐从这里开始）
-├── FPS_IMPORT_GUIDE.md                # FPS题库导入技术指南
-├── QDUOJ_DEPLOYED.md                  # QDUOJ部署记录
-├── QDUOJ_DEPLOYMENT.md                # QDUOJ部署详细文档
-├── QDUOJ_INTEGRATION.md               # QDUOJ集成文档
-│
-├── reports/                           # 📊 项目报告
-│   ├── FPS题库导入完成报告.md         # Phase 2: 609题导入报告
-│   ├── FPS题库修复完成报告.md         # Phase 3: 标签系统报告
-│   ├── 判题流程测试验证报告.md        # Phase 4: 判题验证报告
-│   └── 批量添加测试数据完成报告.md    # Phase 5: 22题测试数据报告
-│
-├── guides/                            # 📖 使用指南
-│   ├── FPS题库导入指南.md             # 如何导入FPS题库
-│   ├── 题目推荐使用指南.md            # 教学使用建议（课程大纲）
-│   └── 题目管理后台访问指南.md        # 管理员操作手册
-│
-└── archive/                           # 🗂️ 历史文档
-    ├── INTEGRATION_SUCCESS.md         # 旧集成成功文档
-    ├── INTEGRATION_SUMMARY.md         # 旧集成摘要
-    ├── INTEGRATION_VERIFICATION.md    # 旧集成验证
-    ├── INTEGRATED_DEPLOYMENT.md       # 旧集成部署
-    ├── QDUOJ_DEPLOYMENT_SUCCESS.md    # 旧部署成功文档
-    ├── 中期考核表格.md                # 中期考核材料
-    ├── 中期考核表格-更新说明.md       # 中期考核更新
-    └── 中期考核表格-术语清理说明.md   # 中期考核术语清理
++-- README.md                          # This index
++-- CDUT_OJ_system_status.md           # System status overview
++-- FPS_IMPORT_GUIDE.md                # FPS problem import guide
++-- QDUOJ_DEPLOYED.md                  # Deployment record
++-- QDUOJ_DEPLOYMENT.md                # Deployment detailed doc
++-- QDUOJ_INTEGRATION.md               # Integration doc
++-- guides/
+|   +-- problem_admin_guide.md         # OJ admin guide
+|   +-- problem_recommendation_guide.md # Teaching guide
++-- reports/
+|   +-- fps_import_report.md           # Phase 2: 609 problem import
+|   +-- fps_fix_report.md              # Phase 3: tag system
+|   +-- judge_test_report.md           # Phase 4: judge verification
+|   +-- test_data_report.md            # Phase 5: 24-problem test data
++-- archive/                            # Historical documents
+    +-- INTEGRATION_SUCCESS.md
+    +-- INTEGRATION_SUMMARY.md
+    +-- INTEGRATION_VERIFICATION.md
+    +-- INTEGRATED_DEPLOYMENT.md
+    +-- QDUOJ_DEPLOYMENT_SUCCESS.md
+    +-- milestone_table*.md
 ```
 
----
-
-## 🚀 快速开始
-
-### 新手入门路径
-
-1. **了解系统状态** → 📄 [CDUT_OJ系统当前状态.md](./CDUT_OJ系统当前状态.md)
-   - 系统概况、可用题目、使用建议
-
-2. **开始使用系统** → 📖 [题目推荐使用指南.md](./guides/题目推荐使用指南.md)
-   - 按难度分类、课程大纲、学习路径
-
-3. **管理后台操作** → 📖 [题目管理后台访问指南.md](./guides/题目管理后台访问指南.md)
-   - 如何管理题目、用户、提交记录
+> Note: Chinese-named files in guides/ and reports/ are being gradually
+> renamed to English for consistency. Both old and new names may coexist
+> during transition.
 
 ---
 
-## 📊 项目进度报告
+## Quick Navigation
 
-### Phase 1: 系统部署 ✅
-- 文档: [QDUOJ_DEPLOYMENT.md](./QDUOJ_DEPLOYMENT.md)
-- 状态: 完成
+### New User Path
 
-### Phase 2: 题库导入 ✅
-- 报告: [FPS题库导入完成报告.md](./reports/FPS题库导入完成报告.md)
-- 成果: 导入609道题目
-- 状态: 完成
+1. System overview -> CDUT_OJ_system_status.md (10 min)
+2. What problems are available -> guides/problem_recommendation_guide.md (15 min)
+3. Admin operations -> guides/problem_admin_guide.md (10 min)
 
-### Phase 3: 标签分类 ✅
-- 报告: [FPS题库修复完成报告.md](./reports/FPS题库修复完成报告.md)
-- 成果: 19个标签分类，100%覆盖
-- 状态: 完成
+### Developer Path
 
-### Phase 4: 判题验证 ✅
-- 报告: [判题流程测试验证报告.md](./reports/判题流程测试验证报告.md)
-- 成果: AC/WA判定正确
-- 状态: 完成
-
-### Phase 5: 测试数据 ✅
-- 报告: [批量添加测试数据完成报告.md](./reports/批量添加测试数据完成报告.md)
-- 成果: 24题可用（2题手动+22题批量）
-- 状态: 完成
-
-### Phase 6: 扩展题库 🔄
-- 目标: 扩展到100题
-- 状态: 进行中
+1. Architecture -> ../README.md
+2. AI Agent API -> ../ai-agent-lite/README.md
+3. Frontend -> ../frontend-vue-ai-chat/README.md
+4. Integration -> QDUOJ_INTEGRATION.md
 
 ---
 
-## 📖 按用途分类
+## Service Access
 
-### 对于系统管理员
-
-1. **部署与维护**
-   - [QDUOJ_DEPLOYMENT.md](./QDUOJ_DEPLOYMENT.md) - 部署指南
-   - [CDUT_OJ系统当前状态.md](./CDUT_OJ系统当前状态.md) - 维护指南
-
-2. **题库管理**
-   - [FPS_IMPORT_GUIDE.md](./FPS_IMPORT_GUIDE.md) - 导入新题库
-   - [题目管理后台访问指南.md](./guides/题目管理后台访问指南.md) - 后台操作
-
-### 对于教师
-
-1. **教学使用**
-   - [题目推荐使用指南.md](./guides/题目推荐使用指南.md) - 课程设计
-   - [批量添加测试数据完成报告.md](./reports/批量添加测试数据完成报告.md) - 可用题目清单
-
-2. **题目管理**
-   - [题目管理后台访问指南.md](./guides/题目管理后台访问指南.md) - 如何编辑题目
-
-### 对于开发者
-
-1. **技术文档**
-   - [FPS_IMPORT_GUIDE.md](./FPS_IMPORT_GUIDE.md) - FPS格式说明
-   - [QDUOJ_INTEGRATION.md](./QDUOJ_INTEGRATION.md) - 系统集成
-
-2. **测试报告**
-   - [判题流程测试验证报告.md](./reports/判题流程测试验证报告.md) - 判题测试
-   - 所有reports目录下的文档
+| Service          | URL                         |
+|------------------|-----------------------------|
+| AI Chat Frontend | http://localhost:5173       |
+| OJ Backend API   | http://localhost:8000/api    |
+| OJ Admin Panel   | http://localhost:8000/admin  |
+| AI Agent Health   | http://localhost:8850/healthz |
+| Problem List     | http://localhost:8000/problem |
 
 ---
 
-## 🎯 推荐阅读顺序
+## System Status Snapshot
 
-### 第一次接触系统
+**Last updated**: 2026-04-22
 
-```
-1. CDUT_OJ系统当前状态.md          (10分钟) - 了解整体情况
-2. 题目推荐使用指南.md             (15分钟) - 看看有什么题目
-3. 题目管理后台访问指南.md         (10分钟) - 学会基本操作
-```
-
-### 想要深入了解
-
-```
-4. 批量添加测试数据完成报告.md     (20分钟) - 了解题目详情
-5. 判题流程测试验证报告.md         (15分钟) - 了解判题系统
-6. FPS题库导入完成报告.md          (10分钟) - 了解题库来源
-```
-
-### 需要扩展题库
-
-```
-7. FPS_IMPORT_GUIDE.md             (30分钟) - 学习导入流程
-8. FPS题库修复完成报告.md          (10分钟) - 了解标签系统
-```
+- OK  System running
+- OK  Judge service normal
+- OK  AI agent (ai-agent-lite) active, LLM connected
+- OK  609 problems imported, 24 with test data
+- OK  Frontend (vue-ai-chat) serving on port 5173
+- WARN  Session storage is in-memory (not yet persistent)
+- INFO  youtu-agent runs but frontend no longer routes to it
 
 ---
 
-## 📞 获取帮助
+## Project Phases
 
-- **系统问题**: 查看 [CDUT_OJ系统当前状态.md](./CDUT_OJ系统当前状态.md) 的故障排查部分
-- **题目问题**: 查看 [题目管理后台访问指南.md](./guides/题目管理后台访问指南.md)
-- **导入问题**: 查看 [FPS_IMPORT_GUIDE.md](./FPS_IMPORT_GUIDE.md) 的常见问题部分
+### Phase 1: Foundation (completed)
+- System deployment
+- 609-problem FPS import
+- Tag classification (19 tags)
+- Judge verification
+- 24-problem test data
+- AI chat with WebSocket protocol
 
----
+### Phase 2: Stability (in progress)
+- Persistent session storage
+- User identity binding
+- Error handling hardening
+- Observability (metrics, structured logs)
 
-## 📈 系统状态快照
-
-**最后更新**: 2025年12月3日
-
-- ✅ **系统运行**: 正常
-- ✅ **判题服务**: 正常
-- ✅ **可用题目**: 24题
-- 🟡 **使用阶段**: 小范围试用
-- 🎯 **下一目标**: 扩展到50题
-
----
-
-## 🔗 相关链接
-
-- **OJ访问地址**: http://localhost:8000
-- **管理后台**: http://localhost:8000/admin
-- **题目列表**: http://localhost:8000/problem
-- **提交记录**: http://localhost:8000/status
+### Phase 3: Intelligence (planned)
+- Problem-context prompt engineering
+- Code review structure
+- Judge result auto-analysis
+- Learning progress tracking
 
 ---
 
-**文档维护**: CDUT Student Agents Team  
-**项目仓库**: [QingdaoU/OnlineJudgeDeploy](https://github.com/QingdaoU/OnlineJudgeDeploy)
+## For System Administrators
+
+1. Deployment & Maintenance
+   - QDUOJ_DEPLOYMENT.md
+   - CDUT_OJ_system_status.md
+
+2. Problem Management
+   - FPS_IMPORT_GUIDE.md
+   - guides/problem_admin_guide.md
+
+## For Teachers
+
+1. Teaching Usage
+   - guides/problem_recommendation_guide.md
+   - reports/test_data_report.md
+
+2. Problem Management
+   - guides/problem_admin_guide.md
+
+## For Developers
+
+1. Technical
+   - FPS_IMPORT_GUIDE.md
+   - QDUOJ_INTEGRATION.md
+
+2. Testing
+   - reports/judge_test_report.md
+
+---
+
+Maintained by CDUT Student Agents Team

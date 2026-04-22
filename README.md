@@ -1,291 +1,189 @@
-# CDUT 学生竞赛培训系统
+# CDUT Student Contest Training System
 
-基于腾讯开源的 youtu-agent 框架和 QDUOJ 在线评测系统构建的 AI 化学生竞赛培训系统。
+AI-powered programming contest training platform built on a lightweight FastAPI agent and QDUOJ Online Judge.
 
-## 🎯 系统特色
-
-- **AI 辅导对话系统**: 基于 DeepSeek-V3 的智能编程辅导
-- **在线评测系统**: QDUOJ 完整的 Online Judge 功能
-- **整合架构**: AI Agent 与 OJ 系统无缝集成
-- **Docker 化部署**: 一键启动所有服务
-
-## 📦 系统架构
+## System Architecture
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│              CDUT 竞赛训练系统 (整合部署)                │
-├─────────────────────────────────────────────────────────┤
-│                                                          │
-│  ┌──────────────────┐         ┌──────────────────┐     │
-│  │  AI 辅导系统      │◄───────►│  OJ 评测系统      │     │
-│  │  (youtu-agent)   │         │  (QDUOJ)         │     │
-│  │  Port: 8848      │         │  Port: 8000      │     │
-│  └──────────────────┘         └──────────────────┘     │
-│                                        │                │
-│                              ┌─────────┴─────────┐      │
-│                              │  判题服务器 + DB   │      │
-│                              └───────────────────┘      │
-└─────────────────────────────────────────────────────────┘
++--------------------------------------------------------------+
+|                  Browser (Student)                            |
++------------------+-------------------------+------------------+
+                   |                         |
+                   v                         v
++------------------+            +---------------------------+
+|  frontend-vue   |   /ws      |  ai-agent-lite            |
+|  -ai-chat        +---------->|  (FastAPI + DeepSeek)     |
+|  Vue 3 + Vite    |<----------+  Port: 8848 (internal)   |
+|  Port: 5173     |  stream    |  Port: 8850 (host)       |
++--+--------------+            +--+------------------------+
+   |                               |
+   | /oj-api                       | HTTP
+   v                               v
++--------------------+        +-------------+
+|  QDUOJ Backend     |<-------+  OJ Judge  |
+|  Port: 8000        |        |  Server     |
++---------+----------+        +-------------+
+          |
+    +-----+------+
+    |            |
++---+----+ +----+---+
+| Postgres| | Redis  |
++---------+ +--------+
+
+Legacy: youtu-agent (Port 8848) still runs in docker-compose
+        but frontend no longer routes to it.
 ```
 
-## 📂 项目结构
+## Services
+
+| Service              | Container            | Host Port | Internal Port | Status  |
+|----------------------|----------------------|-----------|---------------|---------|
+| frontend-vue-ai-chat | cdut-vue-ai-chat     | 5173      | 5173          | Active  |
+| ai-agent-lite        | cdut-ai-agent-lite   | 8850      | 8848          | Active  |
+| youtu-agent          | cdut-youtu-agent     | 8848      | 8848          | Legacy  |
+| QDUOJ Backend        | cdut-oj-backend      | 8000      | 8000          | Active  |
+| QDUOJ Judge Server   | cdut-oj-judge        | -         | 8080          | Active  |
+| PostgreSQL           | cdut-oj-postgres     | -         | 5432          | Active  |
+| Redis                | cdut-oj-redis        | -         | 6379          | Active  |
+
+## Project Structure
 
 ```
 cdut_stu_agents/
-├── youtu-agent/              # youtu-agent 框架（子模块）
-├── qduoj/                    # QDUOJ 部署配置
-│   └── data/                 # OJ 数据持久化
-├── custom_agents/            # 自定义 AI Agent
-│   └── tools/
-│       └── qduoj_client.py   # OJ API 客户端
-├── data/                     # AI Agent 数据
-│   ├── submissions/          # 代码提交
-│   ├── training/             # 训练数据
-│   ├── chat_history/         # 对话记录
-│   └── problems/             # 题库数据
-├── specs/                    # 功能规格（speckit）
-│   └── 001-ai-tutor/         # AI 辅导系统规格
-├── docs/                     # 📚 文档中心（详见 docs/README.md）
-│   ├── README.md             # 文档索引
-│   ├── CDUT_OJ系统当前状态.md # 系统状态总览
-│   ├── reports/              # 项目报告
-│   ├── guides/               # 使用指南
-│   └── archive/              # 历史文档
-├── scripts/                  # 工具脚本
-│   ├── batch_add_test_cases.py      # 批量添加测试数据
-│   ├── add_test_cases.py            # 单题添加测试数据
-│   └── verify_new_test_cases.py     # 验证测试数据
-├── fps-problems/             # FPS题库（609题）
-├── docker-compose.yml        # 整合的 Docker Compose 配置
-├── .env                      # 环境变量
-├── migrate-to-integrated.ps1 # 迁移脚本
-└── test-integration.ps1      # 集成测试
++-- ai-agent-lite/              # Lightweight FastAPI AI agent (active)
+|   +-- app/main.py             # Core: /ws endpoint + /healthz + session + LLM
+|   +-- Dockerfile
+|   +-- requirements.txt
+|   +-- README.md
++-- frontend-vue-ai-chat/       # Vue 3 frontend (active)
+|   +-- src/
+|   |   +-- App.vue             # Main layout: chat + problem panel + OJ submit
+|   |   +-- composables/        # useChatSocket, useChatFeature, useSessions, ...
+|   |   +-- services/           # apiClient, OJ auth
+|   |   +-- components/         # CodeEditor, ...
+|   +-- vite.config.js          # /ws -> ai-agent-lite, /oj-api -> oj-backend
+|   +-- Dockerfile
++-- youtu-agent/                # Legacy AI agent (保留, deprecated)
++-- qduoj/                      # QDUOJ deployment config & persistent data
++-- fps-problems/               # FPS problem set (609 problems)
++-- custom_agents/              # Legacy custom agent configs
++-- scripts/                    # Utility scripts (test case import, etc.)
++-- specs/                      # Feature specifications
+|   +-- 001-ai-tutor/spec.md    # AI tutor feature spec
++-- docs/                       # Documentation center
+|   +-- README.md               # Doc index
+|   +-- guides/                 # Usage guides
+|   +-- reports/                # Phase completion reports
+|   +-- archive/                # Historical documents
++-- docker-compose.yml          # Unified service orchestration
++-- .env                        # Environment variables
 ```
 
-## 🚀 快速启动
+## Quick Start
 
-### 前置要求
+### Prerequisites
 
-- ✅ Docker Desktop (Windows 10+)
-- ✅ Docker Compose 
-- ✅ DeepSeek API Key（已配置）
-- ✅ 8GB+ 可用内存
-- ✅ 20GB+ 可用磁盘
+- Docker + Docker Compose (Linux)
+- DeepSeek API Key (configured in .env)
+- 8GB+ RAM, 20GB+ disk
 
-### 一键部署（推荐）
-
-如果你已有旧版本的服务在运行，使用迁移脚本：
-
-```powershell
-.\migrate-to-integrated.ps1
-```
-
-迁移脚本会自动：
-- 停止旧服务
-- 创建数据目录
-- 拉取镜像
-- 启动整合服务
-
-### 全新部署
-
-```powershell
-# 1. 拉取镜像
-docker-compose pull
-
-# 2. 启动服务
-docker-compose up -d
-
-# 3. 等待服务启动（约 30 秒）
-Start-Sleep -Seconds 30
-
-# 4. 验证部署
-.\test-integration.ps1
-```
-
-## 🌐 访问系统
-
-| 服务 | URL | 说明 |
-|------|-----|------|
-| **AI 辅导系统** | http://localhost:8848 | youtu-agent WebUI |
-| **OJ 主页** | http://localhost:8000 | QDUOJ 主页 |
-| **OJ 管理** | http://localhost:8000/admin | 管理员后台 |
-
-**默认管理员**: `root` / `rootroot`  
-⚠️ **首次登录后务必修改密码！**
-
-## 📚 文档导航
-
-**快速了解系统** → [docs/CDUT_OJ系统当前状态.md](./docs/CDUT_OJ系统当前状态.md)  
-**教学使用指南** → [docs/guides/题目推荐使用指南.md](./docs/guides/题目推荐使用指南.md)  
-**管理员手册** → [docs/guides/题目管理后台访问指南.md](./docs/guides/题目管理后台访问指南.md)  
-**完整文档索引** → [docs/README.md](./docs/README.md)
-
-## 🔧 常用命令
-
-### 查看服务状态
-
-```powershell
-# 查看所有服务
-docker-compose ps
-
-# 运行集成测试
-.\test-integration.ps1
-
-# 查看判题服务器日志
-docker-compose logs -f oj-judge-server
-```
-
-3. **访问系统**：
-
-- **AI 辅导系统**: http://localhost:8848
-- **QDUOJ 前端**: http://localhost:8080
-- **QDUOJ API**: http://localhost:8000/api
-
-4. **初始化 QDUOJ**：
-
-首次访问 http://localhost:8080 时：
-- 创建管理员账号
-- 配置系统基本信息
-- 开始导入题目或创建题目
-
-### 常用命令
-
-```powershell
-# 停止服务
-docker-compose down
-
-# 重启服务
-docker-compose restart
-
-# 进入容器 Shell
-docker-compose exec youtu-agent bash
-
-# 查看容器状态
-docker-compose ps
-```
-
-## 配置说明
-
-### 环境变量
-
-主要配置在 `.env` 文件中：
-
-- **LLM 配置**：DeepSeek API 配置（已设置）
-- **Web UI**：端口 8848
-- **数据目录**：所有数据持久化在 `./data/` 目录
-
-### 自定义 Agent
-
-在 `custom_agents/` 目录下创建自定义 Agent 配置文件。参考 `youtu-agent/configs/agents/` 中的示例。
-
-## 功能规划
-
-使用 speckit 工具进行功能规划和开发：
-
-### 创建功能规格
+### Deploy All Services
 
 ```bash
-# 示例：创建 AI 辅导对话系统规格
-/speckit.specify 开发AI辅导对话系统，支持学生提问、代码审查、算法讲解
+# Start everything
+docker compose up -d
+
+# Verify
+docker compose ps
+curl http://127.0.0.1:8850/healthz
+curl http://127.0.0.1:8000/api/health_check
 ```
 
-### 功能规划
+### Access
+
+| Service        | URL                       |
+|----------------|---------------------------|
+| AI Chat        | http://localhost:5173     |
+| OJ Backend API | http://localhost:8000/api |
+| OJ Admin       | http://localhost:8000/admin |
+| AI Agent Health| http://localhost:8850/healthz |
+
+Default admin: `root` / `rootroot` (change on first login)
+
+## Tech Stack
+
+### AI Agent
+- Backend: FastAPI + uvicorn (Python 3.11)
+- LLM: DeepSeek-V3 (via OpenAI-compatible API)
+- Protocol: WebSocket (raw/finish/error messages)
+
+### Frontend
+- Framework: Vue 3 + Vite
+- WebSocket client: native WebSocket in composables
+- OJ integration: REST API proxy via Vite dev server
+
+### Online Judge
+- System: QDUOJ (Qingdao University OJ) v1.6.1
+- Backend: Django + DRF
+- Judge: Docker-isolated container
+- Database: PostgreSQL 10
+- Cache: Redis 4
+
+### Infrastructure
+- All services: Docker Compose on bridge network
+- Data persistence: host-mounted volumes under ./qduoj/data and ./data
+
+## Development
+
+### Rebuild a single service
 
 ```bash
-# 基于规格创建实施计划
-/speckit.plan
+docker compose up -d --build ai-agent-lite
+docker compose up -d --build vue-ai-chat
 ```
 
-### 需求澄清
+### View logs
 
 ```bash
-# 对不明确的需求进行讨论
-/speckit.clarify
+docker compose logs -f ai-agent-lite
+docker compose logs -f vue-ai-chat
 ```
 
-## 系统架构
+### Shell into a container
 
-```
-┌─────────────────────────────────────────────────────────┐
-│                    学生端                                │
-│              (Web Browser / API Client)                  │
-└────────────┬───────────────────────┬────────────────────┘
-             │                       │
-             ▼                       ▼
-┌────────────────────────┐  ┌──────────────────────────┐
-│   AI 辅导对话系统       │  │   QDUOJ Online Judge     │
-│   (youtu-agent)        │  │   题目浏览 & 代码提交     │
-│   Port: 8848           │  │   Port: 8080             │
-└────────────┬───────────┘  └────────┬─────────────────┘
-             │                       │
-             │   API 调用            │
-             ▼                       ▼
-       ┌──────────────────────────────────────┐
-       │      QDUOJ Backend API               │
-       │      题目管理 & 判题调度              │
-       │      Port: 8000                      │
-       └──────────┬───────────────────────────┘
-                  │
-                  ▼
-       ┌──────────────────────────────────────┐
-       │      判题服务器 (Judge Server)        │
-       │      代码编译 & 运行 & 结果判定       │
-       └──────────────────────────────────────┘
+```bash
+docker compose exec ai-agent-lite sh
+docker compose exec oj-backend bash
 ```
 
-## 开发路线图
+## Development Roadmap
 
-### 第一阶段：AI Agent 基础功能 ✅
-- [x] Docker 环境配置
-- [x] youtu-agent 部署
-- [x] AI 辅导对话系统规格说明
-- [ ] 代码审查与建议
-- [ ] 算法概念讲解
+### Phase 1: Foundation (completed)
+- [x] Docker environment + QDUOJ deployment
+- [x] FPS problem import (609 problems, 24 with test data)
+- [x] AI chat WebSocket protocol (raw/finish/error)
+- [x] Vue 3 frontend with chat + problem panel + OJ submit
+- [x] ai-agent-lite replacing youtu-agent (coexisting migration)
 
-### 第二阶段：Online Judge 集成 🚀
-- [x] QDUOJ 系统部署
-- [x] API 客户端开发
-- [ ] 题目管理系统
-- [ ] 代码提交与评测
-- [ ] 评测结果反馈
-- [ ] AI + OJ 联动
+### Phase 2: Stability (in progress)
+- [ ] Persistent session and message storage (Postgres)
+- [ ] User identity binding from OJ auth
+- [ ] Unified error codes, timeout, retry logic
+- [ ] /readyz + Prometheus metrics endpoint
+- [ ] Context compression for long conversations
 
-### 第三阶段：智能训练系统
-- [ ] 个性化学习路径
-- [ ] 难度自适应推荐
-- [ ] 学习进度追踪
-- [ ] 薄弱点分析
-- [ ] 竞赛模拟系统
+### Phase 3: Intelligence
+- [ ] Problem-context prompt template
+- [ ] Structured code review output (issue type, severity, fix)
+- [ ] Auto-analysis of WA/RE/TLE judge results
+- [ ] Learning record + knowledge point tagging
 
-## 技术栈
+### Phase 4: Scale
+- [ ] Rate limiting per user/IP
+- [ ] Load testing (50+ concurrent)
+- [ ] Personalized learning path recommendation
+- [ ] Contest simulation mode
 
-### AI Agent 部分
-- **AI Framework**: youtu-agent (基于 openai-agents)
-- **LLM**: DeepSeek-V3
-- **Backend**: Python 3.12
-- **Frontend**: youtu-agent WebUI
+## License
 
-### Online Judge 部分
-- **OJ 系统**: QDUOJ (青岛大学开源 OJ)
-- **后端**: Python (Django + DRF)
-- **前端**: Vue.js
-- **判题**: Docker 容器隔离
-- **数据库**: PostgreSQL
-- **缓存**: Redis
-
-### 基础设施
-- **容器化**: Docker & Docker Compose
-- **反向代理**: Nginx (可选)
-- **监控**: Prometheus + Grafana (规划中)
-
-## 相关资源
-
-- [youtu-agent 文档](https://tencentcloudadp.github.io/youtu-agent/)
-- [youtu-agent GitHub](https://github.com/TencentCloudADP/youtu-agent)
-- [DeepSeek API 文档](https://platform.deepseek.com/docs)
-
-## 许可证
-
-MIT License
-#   c d u t _ s t u _ a g e n t s  
- 
+MIT
