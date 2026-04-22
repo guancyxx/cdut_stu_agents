@@ -9,9 +9,55 @@ const activeTab = ref('home')
 const rightPanelTab = ref('problem')
 const selectedProblemId = ref('')
 
-const submitLanguage = ref('C++')
-const submitCode = ref('')
-const submitState = ref({ type: '', message: '' })
+const createSubmitDraft = () => ({
+  language: 'C++',
+  code: '',
+  state: { type: '', message: '' }
+})
+
+const submitDraftBySessionId = ref({})
+
+const ensureSubmitDraftForSession = (sessionId) => {
+  if (!sessionId) {
+    return createSubmitDraft()
+  }
+
+  if (!submitDraftBySessionId.value[sessionId]) {
+    submitDraftBySessionId.value[sessionId] = createSubmitDraft()
+  }
+
+  return submitDraftBySessionId.value[sessionId]
+}
+
+const getActiveSubmitDraft = () => ensureSubmitDraftForSession(currentSessionId.value)
+
+const activeSubmitLanguage = computed({
+  get: () => getActiveSubmitDraft().language,
+  set: (value) => {
+    getActiveSubmitDraft().language = String(value || 'C++')
+  }
+})
+
+const activeSubmitCode = computed({
+  get: () => getActiveSubmitDraft().code,
+  set: (value) => {
+    getActiveSubmitDraft().code = String(value || '')
+  }
+})
+
+const activeSubmitState = computed({
+  get: () => getActiveSubmitDraft().state,
+  set: (value) => {
+    getActiveSubmitDraft().state = value && typeof value === 'object' ? value : { type: '', message: '' }
+  }
+})
+
+const pruneSubmitDrafts = () => {
+  const validSessionIds = new Set(sessions.value.map((session) => session.id))
+  submitDraftBySessionId.value = Object.fromEntries(
+    Object.entries(submitDraftBySessionId.value).filter(([sessionId]) => validSessionIds.has(sessionId))
+  )
+}
 
 const {
   input,
@@ -89,7 +135,7 @@ const handleGoToAuth = () => {
 
   activeTab.value = 'auth'
   rightPanelTab.value = 'problem'
-  submitState.value = { type: '', message: '' }
+  activeSubmitState.value = { type: '', message: '' }
 }
 
 const handleAuthSubmit = async () => {
@@ -119,8 +165,8 @@ const handleLogout = async () => {
   activeTab.value = 'auth'
   selectedProblemId.value = ''
   rightPanelTab.value = 'problem'
-  submitCode.value = ''
-  submitState.value = { type: '', message: '' }
+  activeSubmitCode.value = ''
+  activeSubmitState.value = { type: '', message: '' }
 }
 
 const switchRightPanelTab = (tab) => {
@@ -168,8 +214,8 @@ const handleClearAllSessions = () => {
   selectedProblemId.value = ''
   rightPanelTab.value = 'problem'
   activeTab.value = 'problemset'
-  submitCode.value = ''
-  submitState.value = { type: '', message: '' }
+  activeSubmitCode.value = ''
+  activeSubmitState.value = { type: '', message: '' }
 }
 
 const mapSubmissionLabelToUiMessage = (result) => {
@@ -209,44 +255,44 @@ const mapSubmissionLabelToUiMessage = (result) => {
 }
 
 const handleSubmitCode = async () => {
-  submitState.value = { type: '', message: '' }
+  activeSubmitState.value = { type: '', message: '' }
 
   if (!selectedProblem.value) {
-    submitState.value = { type: 'error', message: 'Please select a problem first.' }
+    activeSubmitState.value = { type: 'error', message: 'Please select a problem first.' }
     return
   }
 
-  const normalizedCode = sanitizeTextInput(submitCode.value, 20000)
-  submitCode.value = normalizedCode
+  const normalizedCode = sanitizeTextInput(activeSubmitCode.value, 20000)
+  activeSubmitCode.value = normalizedCode
 
   if (normalizedCode.length < 10) {
-    submitState.value = { type: 'error', message: 'Code must be at least 10 characters.' }
+    activeSubmitState.value = { type: 'error', message: 'Code must be at least 10 characters.' }
     return
   }
 
   const result = await submitSolution({
     problemId: selectedProblem.value.id,
     problemQueryId: selectedProblem.value._id,
-    language: submitLanguage.value,
+    language: activeSubmitLanguage.value,
     code: normalizedCode
   })
 
-  submitState.value = mapSubmissionLabelToUiMessage(result)
+  activeSubmitState.value = mapSubmissionLabelToUiMessage(result)
 }
 
 const handleSubmitCodeToAi = () => {
-  submitState.value = { type: '', message: '' }
+  activeSubmitState.value = { type: '', message: '' }
 
   if (!selectedProblem.value) {
-    submitState.value = { type: 'error', message: 'Please select a problem first.' }
+    activeSubmitState.value = { type: 'error', message: 'Please select a problem first.' }
     return
   }
 
-  const normalizedCode = sanitizeTextInput(submitCode.value, 20000)
-  submitCode.value = normalizedCode
+  const normalizedCode = sanitizeTextInput(activeSubmitCode.value, 20000)
+  activeSubmitCode.value = normalizedCode
 
   if (normalizedCode.length < 10) {
-    submitState.value = { type: 'error', message: 'Code must be at least 10 characters.' }
+    activeSubmitState.value = { type: 'error', message: 'Code must be at least 10 characters.' }
     return
   }
 
@@ -256,22 +302,28 @@ const handleSubmitCodeToAi = () => {
     'Problem description:',
     selectedProblemDescription.value,
     '',
-    `Language: ${submitLanguage.value}`,
+    `Language: ${activeSubmitLanguage.value}`,
     'Code:',
     normalizedCode
   ].join('\n')
 
   input.value = prompt
-  submitState.value = { type: 'info', message: 'Code has been sent to AI input box. Click 发送 to continue.' }
+  activeSubmitState.value = { type: 'info', message: 'Code has been sent to AI input box. Click 发送 to continue.' }
 }
 
 watch(
   [currentSessionId, sessions],
   ([sessionId, sessionList]) => {
+    pruneSubmitDrafts()
+
     if (!sessionId) {
       selectedProblemId.value = ''
+      rightPanelTab.value = 'problem'
+      activeSubmitState.value = { type: '', message: '' }
       return
     }
+
+    ensureSubmitDraftForSession(sessionId)
 
     const targetSession = sessionList.find((session) => session.id === sessionId)
     selectedProblemId.value = targetSession?.problemId ? String(targetSession.problemId) : ''
@@ -535,16 +587,16 @@ onBeforeUnmount(() => {
             <div class="submit-layout">
               <div class="submit-editor-area">
                 <div class="submit-form">
-                  <select v-model="submitLanguage">
+                  <select v-model="activeSubmitLanguage">
                     <option value="C++">C++</option>
                     <option value="C">C</option>
                     <option value="Java">Java</option>
                     <option value="Python3">Python3</option>
                   </select>
                   <CodeEditor
-                    v-model="submitCode"
+                    v-model="activeSubmitCode"
                     class="oj-code-editor"
-                    :language="submitLanguage"
+                    :language="activeSubmitLanguage"
                     placeholder="Enter your source code here"
                   />
                   <div class="submit-action-row">
@@ -554,7 +606,7 @@ onBeforeUnmount(() => {
                 </div>
               </div>
               <div class="submit-result-area">
-                <div class="empty" :class="submitState.type" v-if="submitState.message">{{ submitState.message }}</div>
+                <div class="empty" :class="activeSubmitState.type" v-if="activeSubmitState.message">{{ activeSubmitState.message }}</div>
                 <div class="empty" v-else>提交结果和错误信息将在此显示</div>
               </div>
             </div>

@@ -556,10 +556,17 @@ button:disabled {
 .problem-detail-middle {
   min-height: 0;
   overflow: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
   border: 1px solid var(--border-subtle);
   border-radius: 8px;
   background: var(--bg-soft);
   padding: 10px;
+}
+
+.problem-detail-middle::-webkit-scrollbar {
+  width: 0;
+  height: 0;
 }
 
 .problem-description {
@@ -651,6 +658,13 @@ button:disabled {
   border-radius: 8px;
   background: var(--bg-soft);
   overflow: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.submit-result-area::-webkit-scrollbar {
+  width: 0;
+  height: 0;
 }
 
 .submit-result-area .empty {
