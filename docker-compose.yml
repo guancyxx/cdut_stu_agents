@@ -29,6 +29,20 @@ services:
     networks:
       - cdut-network
 
+  # ==================== Vue AI Chat 前端 ====================
+  vue-ai-chat:
+    build:
+      context: ./frontend-vue-ai-chat
+      dockerfile: Dockerfile
+    container_name: cdut-vue-ai-chat
+    ports:
+      - "5173:5173"
+    restart: unless-stopped
+    depends_on:
+      - youtu-agent
+    networks:
+      - cdut-network
+
   # ==================== QDUOJ 后端服务 ====================
   oj-backend:
     image: registry.cn-hongkong.aliyuncs.com/oj-image/backend:1.6.1

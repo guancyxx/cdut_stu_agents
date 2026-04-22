@@ -1,0 +1,7 @@
+services:
+  vue-ai-chat:
+    build: .
+    container_name: cdut-vue-ai-chat
+    ports:
+      - "5173:5173"
+    restart: unless-stopped
