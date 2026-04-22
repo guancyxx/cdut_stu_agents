@@ -37,6 +37,12 @@ services:
     container_name: cdut-vue-ai-chat
     ports:
       - "5173:5173"
+    volumes:
+      # 开发热更新：将本地源代码挂载到容器中
+      - ./frontend-vue-ai-chat/src:/app/src
+      - ./frontend-vue-ai-chat/public:/app/public
+      - ./frontend-vue-ai-chat/index.html:/app/index.html
+    working_dir: /app
     restart: unless-stopped
     depends_on:
       - youtu-agent
