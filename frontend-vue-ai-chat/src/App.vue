@@ -68,6 +68,11 @@ const switchRightPanelTab = (tab) => {
   rightPanelTab.value = tab
 }
 
+const handleSelectSession = (sessionId) => {
+  selectSession(sessionId)
+  activeTab.value = 'home'
+}
+
     const selectProblemForRightPanel = (problem) => {
       if (!problem?._id) return
 
@@ -169,7 +174,7 @@ onBeforeUnmount(() => {
               :key="s.id"
               class="session-item"
               :class="{ active: s.id === currentSessionId }"
-              @click="selectSession(s.id)"
+              @click="handleSelectSession(s.id)"
             >
               <div class="session-main">
                 <div class="stitle">{{ s.title }}</div>
@@ -225,7 +230,7 @@ onBeforeUnmount(() => {
         <div class="error" v-if="problemError">{{ problemError }}</div>
       </section>
 
-      <aside class="right-sidebar" v-if="activeTab === 'home' || activeTab === 'problemset'">
+      <aside class="right-sidebar" v-if="activeTab === 'home'">
         <div class="card side-tab-card">
           <div class="switch-row side-tabs">
             <button :class="{ active: rightPanelTab === 'problem' }" @click="switchRightPanelTab('problem')">题目信息</button>

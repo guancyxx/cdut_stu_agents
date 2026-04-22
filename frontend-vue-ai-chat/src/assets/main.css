@@ -111,9 +111,9 @@ body {
   grid-template-columns: 260px minmax(0, 1fr);
 }
 
-/* .content-grid.problemset-mode .right-sidebar {
+.content-grid.problemset-mode .right-sidebar {
   display: none;
-} */
+}
 
 .left-sidebar,
 .right-sidebar {
