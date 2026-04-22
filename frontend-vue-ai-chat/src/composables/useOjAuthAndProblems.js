@@ -15,7 +15,7 @@ const PAGE_SIZE = 21
 
 const DEFAULT_PROBLEM_QUERY = {
   limit: String(PAGE_SIZE),
-  page: '1'
+  offset: '0'
 }
 
 const isBrowserEnvironment = typeof window !== 'undefined'
@@ -268,9 +268,10 @@ export function useOjAuthAndProblems() {
       const normalizedKeyword = sanitizeTextInput(keyword.value, 60)
       const normalizedDifficulty = validateDifficulty(difficulty.value)
 
+      const offset = Math.max(0, (currentPage.value - 1) * PAGE_SIZE)
       const params = {
         ...DEFAULT_PROBLEM_QUERY,
-        page: String(currentPage.value),
+        offset: String(offset),
         ...(normalizedKeyword ? { keyword: normalizedKeyword } : {}),
         ...(normalizedDifficulty ? { difficulty: normalizedDifficulty } : {})
       }

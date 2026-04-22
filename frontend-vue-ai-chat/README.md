@@ -6,6 +6,7 @@ Vue 3 + Vite frontend for the CDUT AI tutor system. Provides chat interface with
 
 - WebSocket chat with streaming AI responses (raw/finish/error protocol)
 - OJ problem browsing and selection with auto-session creation
+- Problem pagination with 21 items per page and numeric page buttons
 - Code editor with multi-language support (C++, Python, Java, C)
 - Direct OJ submission from chat interface
 - Problem detail display (description, samples, constraints)
@@ -49,7 +50,7 @@ npm run dev
 ## OJ Integration
 
 - Auth: Cookie-based login via /oj-api proxy
-- Problems: Fetch list + detail from QDUOJ backend API
+- Problems: Fetch list + detail from QDUOJ backend API (offset + limit pagination)
 - Submit: POST to /oj-api/submission with problem_id, language, code
 - Result: Poll submission status via /oj-api/submission
 
