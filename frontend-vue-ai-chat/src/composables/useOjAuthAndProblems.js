@@ -11,8 +11,10 @@ import {
 
 const AUTH_LAST_USERNAME_KEY = 'oj-auth-last-username'
 
+const PAGE_SIZE = 21
+
 const DEFAULT_PROBLEM_QUERY = {
-  limit: '100',
+  limit: String(PAGE_SIZE),
   page: '1'
 }
 
@@ -82,6 +84,22 @@ export function useOjAuthAndProblems() {
   const submitResult = ref(null)
   const keyword = ref('')
   const difficulty = ref('')
+
+  const currentPage = ref(1)
+  const totalCount = ref(0)
+  const totalPages = computed(() => Math.max(1, Math.ceil(totalCount.value / PAGE_SIZE)))
+
+  const goToPage = (page) => {
+    const target = Math.max(1, Math.min(page, totalPages.value))
+    if (target === currentPage.value) return
+    currentPage.value = target
+    fetchProblems()
+  }
+
+  const searchProblems = () => {
+    currentPage.value = 1
+    fetchProblems()
+  }
 
   const isLoginMode = computed(() => authMode.value === AUTH_MODES.LOGIN)
 
@@ -252,6 +270,7 @@ export function useOjAuthAndProblems() {
 
       const params = {
         ...DEFAULT_PROBLEM_QUERY,
+        page: String(currentPage.value),
         ...(normalizedKeyword ? { keyword: normalizedKeyword } : {}),
         ...(normalizedDifficulty ? { difficulty: normalizedDifficulty } : {})
       }
@@ -267,6 +286,11 @@ export function useOjAuthAndProblems() {
 
       const rows = Array.isArray(result.data?.results) ? result.data.results : []
       problems.value = rows
+      totalCount.value = Number(result.data?.total ?? rows.length)
+      const maxPage = Math.ceil(totalCount.value / PAGE_SIZE) || 1
+      if (currentPage.value > maxPage) {
+        currentPage.value = maxPage
+      }
     } catch (error) {
       problemError.value = error.message || String(error)
       problems.value = []
@@ -436,6 +460,12 @@ export function useOjAuthAndProblems() {
     submitResult,
     keyword,
     difficulty,
+    currentPage,
+    totalCount,
+    totalPages,
+    PAGE_SIZE,
+    goToPage,
+    searchProblems,
     isLoginMode,
     hydrateAuthSession,
     fetchUserProfile,

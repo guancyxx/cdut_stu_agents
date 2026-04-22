@@ -49,10 +49,13 @@ services:
       - LITE_LLM_API_KEY=${UTU_LLM_API_KEY}
       - LITE_LLM_MODEL=${UTU_LLM_MODEL}
       - LITE_LLM_TIMEOUT=30
+      - LITE_DATABASE_URL=postgresql+asyncpg://onlinejudge:${POSTGRES_PASSWORD:-onlinejudge}@oj-postgres:5432/onlinejudge
+      - LITE_DB_SCHEMA=ai_agent
     env_file:
       - .env
     depends_on:
       - oj-backend
+      - oj-postgres
     restart: unless-stopped
     networks:
       - cdut-network

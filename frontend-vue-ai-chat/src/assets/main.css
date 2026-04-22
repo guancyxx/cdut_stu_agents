@@ -475,6 +475,59 @@ button:disabled {
   color: var(--text-secondary);
 }
 
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 10px 12px 14px;
+  flex-wrap: wrap;
+}
+
+.page-btn {
+  min-width: 30px;
+  height: 30px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  padding: 0 6px;
+}
+
+.page-btn:not(:disabled):hover {
+  background: rgba(94, 106, 210, 0.15);
+  border-color: rgba(130, 143, 255, 0.4);
+  color: var(--text-primary);
+}
+
+.page-btn.active {
+  background: rgba(94, 106, 210, 0.3);
+  border-color: rgba(130, 143, 255, 0.6);
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.page-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.page-btn.page-ellipsis {
+  border: none;
+  background: none;
+  cursor: default;
+  opacity: 0.5;
+}
+
+.page-info {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  margin-left: 8px;
+}
+
 .card {
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 14px;

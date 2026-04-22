@@ -31,10 +31,29 @@ const ensureSubmitDraftForSession = (sessionId) => {
 
 const getActiveSubmitDraft = () => ensureSubmitDraftForSession(currentSessionId.value)
 
+const STARTER_CODE = {
+  'C++': '#include <iostream>\nusing namespace std;\n\nint main() {\n    \n    return 0;\n}\n',
+  'C': '#include <stdio.h>\n\nint main() {\n    \n    return 0;\n}\n',
+  'Java': 'import java.util.Scanner;\n\npublic class Main {\n    public static void main(String[] args) {\n        Scanner sc = new Scanner(System.in);\n        \n    }\n}\n',
+  'Python3': '# Read input\n# n = int(input())\n# Process\n# Print output\n'
+}
+
+const getStarterCode = (problem, language) => {
+  const tpl = problem?.template || {}
+  return tpl[language] || STARTER_CODE[language] || ''
+}
+
 const activeSubmitLanguage = computed({
   get: () => getActiveSubmitDraft().language,
   set: (value) => {
+    const oldLang = getActiveSubmitDraft().language
+    const currentCode = getActiveSubmitDraft().code
+    const oldStarter = getStarterCode(null, oldLang)
     getActiveSubmitDraft().language = String(value || 'C++')
+    // If current code is the old language's default starter, replace it
+    if (!currentCode || currentCode === oldStarter) {
+      getActiveSubmitDraft().code = getStarterCode(null, String(value || 'C++'))
+    }
   }
 })
 
@@ -88,6 +107,12 @@ const {
   submitResult,
   keyword,
   difficulty,
+  currentPage,
+  totalCount,
+  totalPages,
+  PAGE_SIZE,
+  goToPage,
+  searchProblems,
   isLoginMode,
   hydrateAuthSession,
   fetchUserProfile,
@@ -104,6 +129,22 @@ const isProfileTab = computed(() => activeTab.value === 'profile')
 const requiresAuth = computed(() => authReady.value && !ojUser.value.loggedIn)
 const sessionCount = computed(() => sessions.value.length)
 const hasSessions = computed(() => sessionCount.value > 0)
+
+const visiblePages = computed(() => {
+  const total = totalPages.value
+  const current = currentPage.value
+  const delta = 2
+  const pages = []
+
+  const start = Math.max(1, current - delta)
+  const end = Math.min(total, current + delta)
+
+  for (let i = start; i <= end; i++) {
+    pages.push(i)
+  }
+
+  return pages
+})
 const selectedProblem = computed(() => problems.value.find((item) => String(item._id) === selectedProblemId.value) || null)
 const hasSelectedProblem = computed(() => Boolean(selectedProblem.value))
 const selectedProblemDescription = computed(() => {
@@ -197,6 +238,14 @@ const selectProblemForRightPanel = async (problem) => {
   selectedProblemId.value = String(problem._id)
   rightPanelTab.value = 'problem'
   activeTab.value = 'home'
+
+  // Populate starter code from problem template or default skeleton
+  const draft = getActiveSubmitDraft()
+  const lang = draft.language || 'C++'
+  const templateCode = getStarterCode(problem, lang)
+  if (!activeSubmitCode.value) {
+    activeSubmitCode.value = templateCode
+  }
 
   ensureSessionMetadata(targetSession.id, {
     problemId: String(problem._id),
@@ -523,14 +572,14 @@ onBeforeUnmount(() => {
 
       <section class="main-panel problem-panel" v-else>
         <div class="problem-toolbar">
-          <input v-model="keyword" placeholder="关键词搜索题目" @keyup.enter="fetchProblems" />
-          <select v-model="difficulty" @change="fetchProblems">
+          <input v-model="keyword" placeholder="关键词搜索题目" @keyup.enter="searchProblems" />
+          <select v-model="difficulty" @change="searchProblems">
             <option :value="''">全部难度</option>
             <option v-for="level in OJ_DIFFICULTY_OPTIONS.filter((item) => item)" :key="level" :value="level">
               {{ level }}
             </option>
           </select>
-          <button @click="fetchProblems">刷新</button>
+          <button @click="searchProblems">刷新</button>
         </div>
 
         <div class="problem-list" v-if="!problemLoading">
@@ -547,6 +596,52 @@ onBeforeUnmount(() => {
         </div>
         <div class="empty" v-else>加载中...</div>
         <div class="error" v-if="problemError">{{ problemError }}</div>
+
+        <div class="pagination" v-if="!problemLoading && totalPages > 1">
+          <button
+            class="page-btn"
+            :disabled="currentPage === 1"
+            @click="goToPage(1)"
+          >&laquo;</button>
+          <button
+            class="page-btn"
+            :disabled="currentPage === 1"
+            @click="goToPage(currentPage - 1)"
+          >&lsaquo;</button>
+
+          <button
+            v-if="visiblePages[0] > 1"
+            class="page-btn page-ellipsis"
+            disabled
+          >...</button>
+
+          <button
+            v-for="page in visiblePages"
+            :key="page"
+            class="page-btn"
+            :class="{ active: page === currentPage }"
+            @click="goToPage(page)"
+          >{{ page }}</button>
+
+          <button
+            v-if="visiblePages[visiblePages.length - 1] < totalPages"
+            class="page-btn page-ellipsis"
+            disabled
+          >...</button>
+
+          <button
+            class="page-btn"
+            :disabled="currentPage === totalPages"
+            @click="goToPage(currentPage + 1)"
+          >&rsaquo;</button>
+          <button
+            class="page-btn"
+            :disabled="currentPage === totalPages"
+            @click="goToPage(totalPages)"
+          >&raquo;</button>
+
+          <span class="page-info">{{ currentPage }} / {{ totalPages }} ({{ totalCount }})</span>
+        </div>
       </section>
 
       <aside class="right-sidebar" v-if="activeTab === 'home'">

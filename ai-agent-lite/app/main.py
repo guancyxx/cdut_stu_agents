@@ -1,151 +1,283 @@
+"""
+ai-agent-lite: Lightweight FastAPI AI agent with persistent sessions.
+
+WebSocket protocol:
+  Client -> Server:  {"type":"query","content":{"query":"..."}, "session_id":"..."}
+  Server -> Client:  {"type":"init","data":{...}}
+  Server -> Client:  {"type":"raw","data":{"type":"text","delta":"...","inprogress":bool}}
+  Server -> Client:  {"type":"finish"}
+  Server -> Client:  {"type":"error","data":{"type":"error","code":"...","message":"..."}}
+"""
 import json
-import os
-from dataclasses import dataclass, field
-from typing import Dict, List
+import logging
+import uuid
+from contextlib import asynccontextmanager
+from datetime import datetime
+from typing import AsyncGenerator
 
-import httpx
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.audit import log_event
+from app.database import get_session, init_db, async_session
+from app.errors import AppError, ErrorCode
+from app.llm_client import LlmClient
+from app.metrics import ws_connections_active, ws_messages_total, llm_request_duration_seconds, llm_errors_total, db_operations_total, metrics_text
+from app.middleware import RequestMiddleware
+from app.repositories import session_repo, message_repo
 
-@dataclass
-class SessionState:
-    history: List[dict] = field(default_factory=list)
+logger = logging.getLogger("ai-agent-lite")
 
-
-class SessionStore:
-    def __init__(self) -> None:
-        self._sessions: Dict[str, SessionState] = {}
-
-    def get(self, session_id: str) -> SessionState:
-        if session_id not in self._sessions:
-            self._sessions[session_id] = SessionState()
-        return self._sessions[session_id]
-
-
-class LlmClient:
-    def __init__(self) -> None:
-        self.base_url = os.getenv('LITE_LLM_BASE_URL', '').strip()
-        self.api_key = os.getenv('LITE_LLM_API_KEY', '').strip()
-        self.model = os.getenv('LITE_LLM_MODEL', 'deepseek-chat').strip()
-        self.timeout_seconds = float(os.getenv('LITE_LLM_TIMEOUT', '30'))
-
-    @property
-    def enabled(self) -> bool:
-        return bool(self.base_url and self.api_key)
-
-    async def complete(self, messages: List[dict]) -> str:
-        if not self.enabled:
-            return self._fallback(messages)
-
-        endpoint = self.base_url.rstrip('/') + '/chat/completions'
-        payload = {
-            'model': self.model,
-            'messages': messages,
-            'temperature': 0.3,
-        }
-        headers = {
-            'Authorization': f'Bearer {self.api_key}',
-            'Content-Type': 'application/json',
-        }
-
-        try:
-            async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
-                response = await client.post(endpoint, headers=headers, json=payload)
-                response.raise_for_status()
-                data = response.json()
-                content = data['choices'][0]['message']['content']
-                return str(content).strip() or 'OK'
-        except Exception:
-            return self._fallback(messages)
-
-    @staticmethod
-    def _fallback(messages: List[dict]) -> str:
-        if not messages:
-            return 'Ready.'
-        last = next((m for m in reversed(messages) if m.get('role') == 'user'), None)
-        if not last:
-            return 'Ready.'
-        text = str(last.get('content', '')).strip()
-        if not text:
-            return 'Ready.'
-        return f'Received: {text[:200]}'
-
-
-app = FastAPI(title='ai-agent-lite')
-store = SessionStore()
 llm = LlmClient()
 
+# Max history messages to include in LLM context
+MAX_CONTEXT_MESSAGES = 60
 
-@app.get('/healthz')
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Initialize database tables on startup."""
+    logger.info("Initializing database...")
+    await init_db()
+    logger.info("Database initialized. LLM enabled=%s model=%s", llm.enabled, llm.model)
+    yield
+
+
+app = FastAPI(title="ai-agent-lite", lifespan=lifespan)
+app.add_middleware(RequestMiddleware)
+
+
+# ---------------------------------------------------------------------------
+# HTTP Endpoints
+# ---------------------------------------------------------------------------
+
+@app.get("/healthz")
 async def healthz() -> dict:
     return {
-        'ok': True,
-        'llm_enabled': llm.enabled,
-        'model': llm.model,
+        "ok": True,
+        "llm_enabled": llm.enabled,
+        "model": llm.model,
     }
 
 
-async def send_text_stream(websocket: WebSocket, content: str, chunk_size: int = 80) -> None:
-    content = content or ''
-    if not content:
-        await websocket.send_json({'type': 'raw', 'data': {'type': 'text', 'delta': '', 'inprogress': False}})
-        return
+@app.get("/readyz")
+async def readyz() -> dict:
+    """Readiness probe: check database connectivity."""
+    try:
+        async with async_session() as db:
+            from sqlalchemy import text
+            await db.execute(text("SELECT 1"))
+            await db.commit()
+        db_ok = True
+    except Exception as exc:
+        logger.error("Readiness DB check failed: %s", exc)
+        db_ok = False
 
+    return {
+        "ok": db_ok and llm.enabled,
+        "db": db_ok,
+        "llm": llm.enabled,
+        "model": llm.model,
+    }
+
+
+@app.get("/metrics")
+async def metrics() -> dict:
+    return {"content": metrics_text(), "media_type": "text/plain"}
+
+
+# ---------------------------------------------------------------------------
+# WebSocket Helpers
+# ---------------------------------------------------------------------------
+
+async def _get_or_create_session(
+    db: AsyncSession,
+    session_id_str: str,
+    user_id: str,
+) -> tuple:
+    """Load existing session or create a new one. Returns (session_id_uuid, is_new)."""
+    try:
+        sid = uuid.UUID(session_id_str)
+        existing = await session_repo.get_session(db, sid)
+        if existing and existing.user_id == user_id:
+            return existing.id, False
+    except (ValueError, AttributeError):
+        pass
+
+    new_session = await session_repo.create_session(db, user_id=user_id)
+    return new_session.id, True
+
+
+async def _load_context(db: AsyncSession, session_id: uuid.UUID) -> list[dict]:
+    """Load recent messages as LLM context dicts."""
+    msgs = await message_repo.list_messages_as_dicts(db, session_id, limit=MAX_CONTEXT_MESSAGES)
+    return msgs
+
+
+async def _stream_llm_response(
+    websocket: WebSocket,
+    db: AsyncSession,
+    session_id: uuid.UUID,
+    request_id: uuid.UUID,
+    user_id: str,
+    query_text: str,
+) -> str:
+    """Call LLM, stream tokens to client, persist the assistant response. Returns full text."""
+    ws_messages_total.labels(direction="in", msg_type="query").inc()
+
+    # Persist user message
+    await message_repo.create_message(db, session_id, role="user", content=query_text)
+    db_operations_total.labels(operation="insert", table="messages").inc()
+
+    # Build context
+    context = await _load_context(db, session_id)
+    # Include current message if not already in history
+    if not context or context[-1].get("content") != query_text:
+        context.append({"role": "user", "content": query_text})
+
+    # Call LLM
+    full_text = ""
+    start_time = __import__("time").monotonic()
+    try:
+        async for chunk in llm.stream(context):
+            full_text += chunk
+            await websocket.send_json({
+                "type": "raw",
+                "data": {"type": "text", "delta": chunk, "inprogress": True},
+            })
+    except AppError as exc:
+        llm_errors_total.labels(code=exc.code.value).inc()
+        # Fallback to non-streaming
+        await log_event(db, event_type="llm_stream_fallback", request_id=request_id,
+                        session_id=session_id, user_id=user_id, detail={"code": exc.code.value})
+        try:
+            full_text = await llm.complete(context)
+            await _send_text_stream(websocket, full_text)
+        except AppError as inner_exc:
+            await websocket.send_json(inner_exc.to_ws_dict())
+            await websocket.send_json({"type": "finish"})
+            await log_event(db, event_type="llm_error", request_id=request_id,
+                            session_id=session_id, user_id=user_id,
+                            detail={"code": inner_exc.code.value, "message": inner_exc.message})
+            return ""
+
+    duration = __import__("time").monotonic() - start_time
+    llm_request_duration_seconds.observe(duration)
+    ws_messages_total.labels(direction="out", msg_type="raw").inc()
+
+    # Persist assistant message
+    if full_text:
+        await message_repo.create_message(db, session_id, role="assistant", content=full_text)
+        db_operations_total.labels(operation="insert", table="messages").inc()
+
+    await log_event(db, event_type="llm_complete", request_id=request_id,
+                    session_id=session_id, user_id=user_id,
+                    detail={"duration_s": round(duration, 3), "chars": len(full_text)})
+
+    return full_text
+
+
+async def _send_text_stream(websocket: WebSocket, content: str, chunk_size: int = 80) -> None:
+    """Send a complete string as chunked streaming messages."""
+    if not content:
+        await websocket.send_json({"type": "raw", "data": {"type": "text", "delta": "", "inprogress": False}})
+        return
     start = 0
     total = len(content)
     while start < total:
         end = min(start + chunk_size, total)
         piece = content[start:end]
-        await websocket.send_json({'type': 'raw', 'data': {'type': 'text', 'delta': piece, 'inprogress': end < total}})
+        await websocket.send_json({
+            "type": "raw",
+            "data": {"type": "text", "delta": piece, "inprogress": end < total},
+        })
         start = end
 
 
-@app.websocket('/ws')
+# ---------------------------------------------------------------------------
+# WebSocket Handler
+# ---------------------------------------------------------------------------
+
+@app.websocket("/ws")
 async def ws_handler(websocket: WebSocket) -> None:
     await websocket.accept()
+    ws_connections_active.inc()
 
-    connection_session_id = websocket.query_params.get('session_id') or websocket.query_params.get('sid') or 'default'
-    state = store.get(connection_session_id)
+    session_id_str = websocket.query_params.get("session_id") or websocket.query_params.get("sid") or ""
+    user_id = websocket.query_params.get("user_id") or "anonymous"
 
-    await websocket.send_json(
-        {
-            'type': 'init',
-            'data': {
-                'type': 'init',
-                'default_agent': 'ai-agent-lite',
-                'agent_type': 'simple',
-                'sub_agents': None,
+    request_id = uuid.uuid4()
+
+    # Open DB session for this connection
+    async with async_session() as db:
+        # Resolve or create the session
+        session_id, is_new = await _get_or_create_session(db, session_id_str, user_id)
+        if is_new:
+            # Update session_id_str to the newly generated UUID
+            session_id_str = str(session_id)
+
+        await log_event(db, event_type="ws_connect", request_id=request_id,
+                        session_id=session_id, user_id=user_id,
+                        detail={"is_new": is_new})
+
+        # Send init
+        await websocket.send_json({
+            "type": "init",
+            "data": {
+                "type": "init",
+                "default_agent": "ai-agent-lite",
+                "agent_type": "simple",
+                "sub_agents": None,
+                "session_id": str(session_id),
             },
-        }
-    )
+        })
 
-    try:
-        while True:
-            raw_message = await websocket.receive_text()
-            request = json.loads(raw_message)
-            req_type = request.get('type')
+        try:
+            while True:
+                raw_message = await websocket.receive_text()
+                request_id = uuid.uuid4()
 
-            if req_type != 'query':
-                if req_type == 'list_agents':
-                    await websocket.send_json({'type': 'list_agents', 'data': {'type': 'list_agents', 'agents': ['ai-agent-lite']}})
+                try:
+                    request = json.loads(raw_message)
+                except json.JSONDecodeError:
+                    await websocket.send_json(AppError(ErrorCode.INVALID_INPUT, "Invalid JSON").to_ws_dict())
+                    await websocket.send_json({"type": "finish"})
                     continue
-                await websocket.send_json({'type': 'error', 'data': {'type': 'error', 'message': 'Unsupported request type'}})
-                await websocket.send_json({'type': 'finish'})
-                continue
 
-            content = request.get('content') or {}
-            query_text = str(content.get('query', '')).strip()
-            if not query_text:
-                await websocket.send_json({'type': 'error', 'data': {'type': 'error', 'message': 'Query cannot be empty'}})
-                await websocket.send_json({'type': 'finish'})
-                continue
+                req_type = request.get("type")
 
-            state.history.append({'role': 'user', 'content': query_text})
-            assistant_text = await llm.complete(state.history)
-            state.history.append({'role': 'assistant', 'content': assistant_text})
+                if req_type == "list_agents":
+                    await websocket.send_json({
+                        "type": "list_agents",
+                        "data": {"type": "list_agents", "agents": ["ai-agent-lite"]},
+                    })
+                    continue
 
-            await send_text_stream(websocket, assistant_text)
-            await websocket.send_json({'type': 'finish'})
+                if req_type != "query":
+                    await websocket.send_json(
+                        AppError(ErrorCode.INVALID_INPUT, f"Unsupported request type: {req_type}").to_ws_dict()
+                    )
+                    await websocket.send_json({"type": "finish"})
+                    continue
 
-    except WebSocketDisconnect:
-        return
+                content = request.get("content") or {}
+                query_text = str(content.get("query", "")).strip()
+                if not query_text:
+                    await websocket.send_json(
+                        AppError(ErrorCode.INVALID_INPUT, "Query cannot be empty").to_ws_dict()
+                    )
+                    await websocket.send_json({"type": "finish"})
+                    continue
+
+                await _stream_llm_response(websocket, db, session_id, request_id, user_id, query_text)
+                await websocket.send_json({"type": "finish"})
+
+        except WebSocketDisconnect:
+            await log_event(db, event_type="ws_disconnect", request_id=request_id,
+                            session_id=session_id, user_id=user_id)
+        except Exception as exc:
+            logger.exception("WS handler error: %s", exc)
+            await log_event(db, event_type="ws_error", request_id=request_id,
+                            session_id=session_id, user_id=user_id,
+                            detail={"error": str(exc)})
+    ws_connections_active.dec()
