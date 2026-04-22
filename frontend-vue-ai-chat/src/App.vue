@@ -1,10 +1,16 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useChatFeature } from './composables/useChatFeature'
-import { AUTH_MODES, OJ_DIFFICULTY_OPTIONS } from './utils/validators'
+import { AUTH_MODES, OJ_DIFFICULTY_OPTIONS, sanitizeTextInput } from './utils/validators'
 import { useOjAuthAndProblems } from './composables/useOjAuthAndProblems'
 
 const activeTab = ref('home')
+const rightPanelTab = ref('problem')
+const selectedProblemId = ref('')
+
+const submitLanguage = ref('C++')
+const submitCode = ref('')
+const submitState = ref({ type: '', message: '' })
 
 const {
   input,
@@ -40,6 +46,10 @@ const {
 } = useOjAuthAndProblems()
 
 const authActionText = computed(() => (ojUser.value.loggedIn ? ojUser.value.profileName : '登录 / 注册'))
+const sessionCount = computed(() => sessions.value.length)
+const problemCount = computed(() => problems.value.length)
+const selectedProblem = computed(() => problems.value.find((item) => String(item._id) === selectedProblemId.value) || null)
+const isProblemListMode = computed(() => activeTab.value === 'problemset' || !selectedProblem.value)
 
 const openAuth = async () => {
   await openAuthModal(nextTick)
@@ -53,6 +63,53 @@ const handleAuthSubmit = async () => {
   await register()
 }
 
+const switchRightPanelTab = (tab) => {
+  rightPanelTab.value = tab
+}
+
+const selectProblemForRightPanel = (problem) => {
+  if (!problem?._id) return
+
+  const nextProblemId = String(problem._id)
+  const shouldCreateNewSession = selectedProblemId.value !== nextProblemId
+
+  selectedProblemId.value = nextProblemId
+  rightPanelTab.value = 'problem'
+  activeTab.value = 'home'
+
+  if (shouldCreateNewSession) {
+    const title = `${problem._id} ${problem.title}`.slice(0, 24)
+    createSession(title)
+  }
+}
+
+const clearSelectedProblem = () => {
+  selectedProblemId.value = ''
+  activeTab.value = 'problemset'
+}
+
+const handleSubmitCode = () => {
+  submitState.value = { type: '', message: '' }
+
+  if (!selectedProblem.value) {
+    submitState.value = { type: 'error', message: 'Please select a problem first.' }
+    return
+  }
+
+  const normalizedCode = sanitizeTextInput(submitCode.value, 20000)
+  submitCode.value = normalizedCode
+
+  if (normalizedCode.length < 10) {
+    submitState.value = { type: 'error', message: 'Code must be at least 10 characters.' }
+    return
+  }
+
+  submitState.value = {
+    type: 'info',
+    message: 'Submission API is not integrated yet. UI and validation are ready.'
+  }
+}
+
 const handleGlobalKeydown = (event) => {
   if (event.key === 'Escape' && showAuthModal.value) {
     closeAuthModal()
@@ -61,6 +118,13 @@ const handleGlobalKeydown = (event) => {
 
 watch(showAuthModal, (visible) => {
   document.body.style.overflow = visible ? 'hidden' : ''
+})
+
+watch(problems, (items) => {
+  const targetExists = items.some((item) => String(item._id) === selectedProblemId.value)
+  if (!targetExists) {
+    selectedProblemId.value = ''
+  }
 })
 
 onMounted(async () => {
@@ -91,6 +155,27 @@ onBeforeUnmount(() => {
     </header>
 
     <div class="content-grid">
+      <aside class="left-sidebar">
+        <div class="card sessions-card">
+          <div class="session-count">{{ sessionCount }} 会话</div>
+          <div class="session-list">
+            <button
+              v-for="s in sessions"
+              :key="s.id"
+              class="session-item"
+              :class="{ active: s.id === currentSessionId }"
+              @click="selectSession(s.id)"
+            >
+              <div class="session-main">
+                <div class="stitle">{{ s.title }}</div>
+                <div class="session-dot" :class="{ active: s.id === currentSessionId }" />
+              </div>
+              <div class="smeta">{{ new Date(s.createdAt).toLocaleString() }}</div>
+            </button>
+          </div>
+        </div>
+      </aside>
+
       <section class="main-panel" v-if="activeTab === 'home'">
         <main class="chat-main" ref="listRef">
           <div v-for="(msg, idx) in messages" :key="idx" class="msg" :class="msg.role">
@@ -122,11 +207,11 @@ onBeforeUnmount(() => {
         </div>
 
         <div class="problem-list" v-if="!problemLoading">
-          <div class="problem-item" v-for="p in problems" :key="p._id">
+          <button class="problem-item" v-for="p in problems" :key="p._id" @click="selectProblemForRightPanel(p)">
             <div class="pid">{{ p._id }}</div>
             <div class="ptitle">{{ p.title }}</div>
             <div class="pdiff">{{ p.difficulty }}</div>
-          </div>
+          </button>
           <div v-if="!problems.length" class="empty">暂无题目</div>
         </div>
         <div class="empty" v-else>加载中...</div>
@@ -134,23 +219,85 @@ onBeforeUnmount(() => {
       </section>
 
       <aside class="right-sidebar">
-        <div class="card sessions-card">
-          <div class="sessions-head">
-            <div class="card-title">Sessions</div>
-            <button @click="createSession">新建</button>
+        <template v-if="!isProblemListMode">
+          <div class="card side-tab-card">
+            <div class="switch-row side-tabs">
+              <button :class="{ active: rightPanelTab === 'problem' }" @click="switchRightPanelTab('problem')">题目信息</button>
+              <button :class="{ active: rightPanelTab === 'submit' }" @click="switchRightPanelTab('submit')">OJ提交</button>
+            </div>
           </div>
-          <div class="session-list">
-            <button
-              v-for="s in sessions"
-              :key="s.id"
-              class="session-item"
-              :class="{ active: s.id === currentSessionId }"
-              @click="selectSession(s.id)"
-            >
-              <div class="stitle">{{ s.title }}</div>
-              <div class="smeta">{{ new Date(s.createdAt).toLocaleString() }}</div>
+
+          <div class="card side-content-card" v-if="rightPanelTab === 'problem'">
+            <div class="problem-detail">
+              <div class="detail-head">
+                <div>
+                  <div class="card-title">{{ selectedProblem.title }}</div>
+                  <div class="card-subtitle">Problem ID: {{ selectedProblem._id }}</div>
+                </div>
+                <button class="secondary-btn" @click="clearSelectedProblem">返回列表</button>
+              </div>
+
+              <div class="detail-grid">
+                <div class="detail-row"><span>难度</span><strong>{{ selectedProblem.difficulty || 'Unknown' }}</strong></div>
+                <div class="detail-row"><span>时间限制</span><strong>{{ selectedProblem.time_limit || '-' }}</strong></div>
+                <div class="detail-row"><span>内存限制</span><strong>{{ selectedProblem.memory_limit || '-' }}</strong></div>
+                <div class="detail-row"><span>提交数</span><strong>{{ selectedProblem.submission_number || 0 }}</strong></div>
+                <div class="detail-row"><span>通过数</span><strong>{{ selectedProblem.accepted_number || 0 }}</strong></div>
+                <div class="detail-row"><span>通过率</span><strong>{{ selectedProblem.submission_number ? `${Math.round((selectedProblem.accepted_number / selectedProblem.submission_number) * 100)}%` : '0%' }}</strong></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card side-content-card" v-else>
+            <div class="submit-head">
+              <div class="card-title">提交到: {{ selectedProblem.title }}</div>
+              <div class="submit-meta">Problem ID: {{ selectedProblem._id }}</div>
+            </div>
+            <div class="submit-form">
+              <select v-model="submitLanguage">
+                <option value="C++">C++</option>
+                <option value="C">C</option>
+                <option value="Java">Java</option>
+                <option value="Python3">Python3</option>
+              </select>
+              <textarea v-model="submitCode" placeholder="Enter your source code here" />
+              <button @click="handleSubmitCode">提交代码</button>
+            </div>
+            <div class="empty" :class="submitState.type" v-if="submitState.message">{{ submitState.message }}</div>
+          </div>
+        </template>
+
+        <div class="card side-content-card" v-else>
+          <div class="side-panel-header">
+            <div>
+              <div class="card-title">题目列表</div>
+              <div class="card-subtitle">{{ problemCount }} problems</div>
+            </div>
+          </div>
+
+          <div class="problem-toolbar compact-toolbar">
+            <input v-model="keyword" placeholder="关键词搜索题目" @keyup.enter="fetchProblems" />
+            <select v-model="difficulty" @change="fetchProblems">
+              <option :value="''">全部难度</option>
+              <option v-for="level in OJ_DIFFICULTY_OPTIONS.filter((item) => item)" :key="`side-${level}`" :value="level">
+                {{ level }}
+              </option>
+            </select>
+            <button @click="fetchProblems">刷新</button>
+          </div>
+
+          <div class="problem-list" v-if="!problemLoading">
+            <button class="problem-item" v-for="p in problems" :key="`side-problem-${p._id}`" @click="selectProblemForRightPanel(p)">
+              <div class="problem-item-main">
+                <div class="pid">{{ p._id }}</div>
+                <div class="pdiff">{{ p.difficulty }}</div>
+              </div>
+              <div class="ptitle">{{ p.title }}</div>
             </button>
+            <div v-if="!problems.length" class="empty">暂无题目</div>
           </div>
+          <div class="empty" v-else>加载中...</div>
+          <div class="error" v-if="problemError">{{ problemError }}</div>
         </div>
       </aside>
     </div>
