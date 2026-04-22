@@ -69,6 +69,7 @@ export function useChatFeature() {
     appendMessageToSession,
     upsertSessionHistory,
     updateSessionMeta,
+    clearAllSessions,
     createTimeLabel
   } = useSessions(STORAGE_KEY)
 
@@ -179,6 +180,16 @@ export function useChatFeature() {
     socketDriver.closeSocket()
   }
 
+  const clearAllConversationData = () => {
+    sessions.value.forEach((session) => {
+      if (session?.youtuSessionId) {
+        localStorage.removeItem(createHistoryStorageKey(session.youtuSessionId))
+      }
+    })
+
+    clearAllSessions()
+  }
+
   return {
     input,
     listRef,
@@ -192,6 +203,7 @@ export function useChatFeature() {
     selectOrCreateProblemSession,
     ensureSessionMetadata,
     sendMessage,
+    clearAllConversationData,
     closeSocket
   }
 }

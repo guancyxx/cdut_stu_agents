@@ -5,7 +5,25 @@ export function createApiClient(baseUrl = '/oj-api') {
       ...options
     })
 
-    const data = await response.json()
+    const rawText = await response.text()
+    let data = null
+
+    if (rawText) {
+      try {
+        data = JSON.parse(rawText)
+      } catch {
+        data = {
+          error: `Invalid JSON response (${response.status})`,
+          data: rawText
+        }
+      }
+    } else {
+      data = {
+        error: `Empty response (${response.status})`,
+        data: ''
+      }
+    }
+
     return {
       ok: response.ok,
       status: response.status,
@@ -39,6 +57,17 @@ export function createApiClient(baseUrl = '/oj-api') {
       body: JSON.stringify(payload)
     })
 
+  const logout = (csrfToken) =>
+    requestJson('/api/logout', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(csrfToken ? { 'X-CSRFToken': csrfToken } : {}),
+        Referer: window.location.origin
+      },
+      body: JSON.stringify({})
+    })
+
   const fetchProblems = (params) => {
     const query = new URLSearchParams(params)
     return requestJson(`/api/problem/?${query.toString()}`)
@@ -49,6 +78,7 @@ export function createApiClient(baseUrl = '/oj-api') {
     fetchCaptcha,
     login,
     register,
+    logout,
     fetchProblems
   }
 }

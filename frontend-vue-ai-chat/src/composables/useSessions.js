@@ -113,6 +113,12 @@ export function useSessions(storageKey) {
     return targetSession
   }
 
+  const clearAllSessions = () => {
+    sessions.value = []
+    currentSessionId.value = ''
+    saveSessions()
+  }
+
   return {
     sessions,
     currentSessionId,
@@ -128,6 +134,7 @@ export function useSessions(storageKey) {
     appendMessageToSession,
     upsertSessionHistory,
     updateSessionMeta,
+    clearAllSessions,
     createTimeLabel
   }
 }

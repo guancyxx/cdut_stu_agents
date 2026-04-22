@@ -9,26 +9,69 @@ import {
   validateRegisterPayload
 } from '../utils/validators'
 
+const AUTH_LAST_USERNAME_KEY = 'oj-auth-last-username'
+
 const DEFAULT_PROBLEM_QUERY = {
   limit: '100',
   page: '1'
+}
+
+const isBrowserEnvironment = typeof window !== 'undefined'
+
+const getStoredLastUsername = () => {
+  if (!isBrowserEnvironment) return ''
+  return window.localStorage.getItem(AUTH_LAST_USERNAME_KEY) || ''
+}
+
+const persistLastUsername = (username) => {
+  if (!isBrowserEnvironment) return
+
+  const normalized = sanitizeTextInput(username, 32)
+  if (!normalized) {
+    window.localStorage.removeItem(AUTH_LAST_USERNAME_KEY)
+    return
+  }
+
+  window.localStorage.setItem(AUTH_LAST_USERNAME_KEY, normalized)
+}
+
+const resolveUserProfile = (profileResponseData, fallbackUser = {}) => {
+  const payload = profileResponseData?.data ?? profileResponseData
+  const userNode = payload?.user || payload?.profile || payload || {}
+
+  return {
+    username: sanitizeTextInput(
+      userNode.username || userNode.profile_name || userNode.name || fallbackUser.username || fallbackUser.profileName,
+      32
+    ),
+    email: sanitizeTextInput(userNode.email || fallbackUser.email, 120),
+    avatar: sanitizeTextInput(userNode.avatar || userNode.avatar_url || fallbackUser.avatar, 500),
+    studentNumber: sanitizeTextInput(
+      userNode.student_number || userNode.studentNumber || userNode.student_id || fallbackUser.studentNumber,
+      64
+    ),
+    signature: sanitizeTextInput(userNode.signature || userNode.motto || fallbackUser.signature, 280)
+  }
 }
 
 export function useOjAuthAndProblems() {
   const apiClient = createApiClient('/oj-api')
 
   const authMode = ref(AUTH_MODES.LOGIN)
-  const showAuthModal = ref(false)
   const authUsernameRef = ref(null)
+  const authReady = ref(false)
 
   const ojUser = ref({
-    username: '',
+    username: getStoredLastUsername(),
     password: '',
     email: '',
     captcha: '',
     captchaSrc: '',
     loggedIn: false,
     profileName: '',
+    avatar: '',
+    studentNumber: '',
+    signature: '',
     error: ''
   })
 
@@ -44,6 +87,13 @@ export function useOjAuthAndProblems() {
     ojUser.value.error = ''
   }
 
+  const resetUserProfileFields = () => {
+    ojUser.value.avatar = ''
+    ojUser.value.studentNumber = ''
+    ojUser.value.signature = ''
+    ojUser.value.email = ''
+  }
+
   const refreshCaptcha = async () => {
     try {
       const response = await apiClient.fetchCaptcha()
@@ -55,25 +105,66 @@ export function useOjAuthAndProblems() {
   }
 
   const applyLoginSuccess = (usernameFromServer) => {
+    const normalizedUsername = sanitizeTextInput(
+      usernameFromServer || ojUser.value.username || ojUser.value.profileName,
+      32
+    )
+
     ojUser.value.loggedIn = true
-    ojUser.value.profileName = usernameFromServer || ojUser.value.username
+    ojUser.value.profileName = normalizedUsername
+    ojUser.value.username = normalizedUsername
     ojUser.value.password = ''
-    showAuthModal.value = false
+    ojUser.value.captcha = ''
+    ojUser.value.error = ''
+
+    persistLastUsername(normalizedUsername)
   }
 
-  const openAuthModal = async (nextTickCallback) => {
-    showAuthModal.value = true
+  const applyUserProfileData = (profileData) => {
+    const profile = resolveUserProfile(profileData, ojUser.value)
+
+    if (profile.username) {
+      applyLoginSuccess(profile.username)
+    }
+
+    ojUser.value.email = profile.email
+    ojUser.value.avatar = profile.avatar
+    ojUser.value.studentNumber = profile.studentNumber
+    ojUser.value.signature = profile.signature
+  }
+
+  const fetchUserProfile = async () => {
+    const response = await apiClient.fetchProfile()
+    const result = response.data
+
+    if (result?.error) {
+      throw new Error(typeof result.data === 'string' ? result.data : result.error)
+    }
+
+    applyUserProfileData(result)
+    return result
+  }
+
+  const hydrateAuthSession = async () => {
     resetAuthError()
-    await nextTickCallback()
-    authUsernameRef.value?.focus()
-  }
 
-  const closeAuthModal = () => {
-    showAuthModal.value = false
+    const fallbackUsername = getStoredLastUsername()
+    if (!ojUser.value.username && fallbackUsername) {
+      ojUser.value.username = fallbackUsername
+    }
+
+    try {
+      await fetchUserProfile()
+    } catch (error) {
+      console.warn('Failed to hydrate auth session.', error)
+    } finally {
+      authReady.value = true
+    }
   }
 
   const login = async () => {
     resetAuthError()
+
     const validation = validateLoginPayload(ojUser.value)
     if (!validation.valid) {
       ojUser.value.error = validation.message
@@ -84,16 +175,23 @@ export function useOjAuthAndProblems() {
     const response = await apiClient.login(validation.value, csrfToken)
     const result = response.data
 
-    if (result.error) {
+    if (result?.error) {
       ojUser.value.error = typeof result.data === 'string' ? result.data : result.error
       return
     }
 
     applyLoginSuccess(result.data?.username)
+
+    try {
+      await fetchUserProfile()
+    } catch (error) {
+      console.warn('Failed to fetch profile after login.', error)
+    }
   }
 
   const register = async () => {
     resetAuthError()
+
     const validation = validateRegisterPayload(ojUser.value)
     if (!validation.valid) {
       ojUser.value.error = validation.message
@@ -104,13 +202,42 @@ export function useOjAuthAndProblems() {
     const response = await apiClient.register(validation.value, csrfToken)
     const result = response.data
 
-    if (result.error) {
+    if (result?.error) {
       ojUser.value.error = typeof result.data === 'string' ? result.data : result.error
       await refreshCaptcha()
       return
     }
 
     applyLoginSuccess(validation.value.username)
+
+    try {
+      await fetchUserProfile()
+    } catch (error) {
+      console.warn('Failed to fetch profile after register.', error)
+    }
+  }
+
+  const clearAuthState = () => {
+    ojUser.value.loggedIn = false
+    ojUser.value.profileName = ''
+    ojUser.value.password = ''
+    ojUser.value.captcha = ''
+    ojUser.value.error = ''
+    persistLastUsername(ojUser.value.username)
+    resetUserProfileFields()
+  }
+
+  const logout = async () => {
+    resetAuthError()
+
+    try {
+      await apiClient.logout()
+    } catch (error) {
+      console.warn('Logout request failed, fallback to local sign out.', error)
+    }
+
+    clearAuthState()
+    return true
   }
 
   const fetchProblems = async () => {
@@ -129,7 +256,8 @@ export function useOjAuthAndProblems() {
 
       const response = await apiClient.fetchProblems(params)
       const result = response.data
-      if (result.error) {
+
+      if (result?.error) {
         problemError.value = typeof result.data === 'string' ? result.data : result.error
         problems.value = []
         return
@@ -148,8 +276,8 @@ export function useOjAuthAndProblems() {
   return {
     AUTH_MODES,
     authMode,
-    showAuthModal,
     authUsernameRef,
+    authReady,
     ojUser,
     problems,
     problemLoading,
@@ -157,11 +285,12 @@ export function useOjAuthAndProblems() {
     keyword,
     difficulty,
     isLoginMode,
-    openAuthModal,
-    closeAuthModal,
+    hydrateAuthSession,
+    fetchUserProfile,
     refreshCaptcha,
     login,
     register,
+    logout,
     fetchProblems
   }
 }
