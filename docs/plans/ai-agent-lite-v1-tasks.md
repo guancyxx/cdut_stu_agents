@@ -1,10 +1,20 @@
 # ai-agent-lite V1 Development Task List (P0 Stability Milestone)
 
 **Created**: 2026-04-22
-**Updated**: 2026-04-22
+**Updated**: 2026-04-23
 **Status**: Completed
 
 All 7 commits have been implemented and verified.
+
+## Post-V1 Next Action (executed on 2026-04-23)
+
+- Goal: complete frontend-to-backend identity/session binding to match V1 backend capability.
+- Action: frontend WebSocket now connects with `session_id` + `user_id` query params, and syncs server-returned UUID `session_id` from `init` event back into local session metadata.
+- Expected result:
+  - One frontend session maps to one backend persistent session.
+  - `user_id` is attached from OJ authenticated profile when available.
+  - Existing local history remains mapped after server session ID normalization.
+
 
 ## Implementation Summary
 

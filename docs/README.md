@@ -69,9 +69,10 @@ docs/
 - OK  System running
 - OK  Judge service normal
 - OK  AI agent (ai-agent-lite) active, LLM connected
+- OK  ai-agent-lite persistence enabled (PostgreSQL schema: ai_agent)
+- OK  ai-agent-lite readiness and metrics endpoints enabled
 - OK  609 problems imported, 24 with test data
 - OK  Frontend (vue-ai-chat) serving on port 5173
-- WARN  Session storage is in-memory (not yet persistent)
 - INFO  youtu-agent runs but frontend no longer routes to it
 
 ---
@@ -86,11 +87,11 @@ docs/
 - 24-problem test data
 - AI chat with WebSocket protocol
 
-### Phase 2: Stability (in progress)
-- Persistent session storage
-- User identity binding
-- Error handling hardening
-- Observability (metrics, structured logs)
+### Phase 2: Stability (completed)
+- Persistent session storage (PostgreSQL, ai_agent schema)
+- User identity binding support (`user_id` from ws query)
+- Error handling hardening (unified error payload + retries/fallback)
+- Observability (healthz, readyz, metrics, basic middleware)
 
 ### Phase 3: Intelligence (planned)
 - Problem-context prompt engineering

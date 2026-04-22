@@ -3,6 +3,8 @@ import { ref } from 'vue'
 export function useChatSocket({
   getSessionId,
   getSessionById,
+  getCurrentUserId,
+  updateSessionMeta,
   appendMessageToSession,
   saveSessions,
   scrollToBottom,
@@ -13,12 +15,24 @@ export function useChatSocket({
   const sending = ref(false)
 
   let socket = null
+  let socketBindingKey = ''
   let streamSessionId = ''
   let currentAssistantIndex = -1
 
-  const getWsUrl = () => {
+  const getWsUrl = (sessionMeta = {}) => {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    return `${protocol}//${window.location.host}/ws`
+    const wsUrl = new URL(`${protocol}//${window.location.host}/ws`)
+
+    if (sessionMeta.youtuSessionId) {
+      wsUrl.searchParams.set('session_id', String(sessionMeta.youtuSessionId))
+    }
+
+    const userId = sessionMeta.userId || getCurrentUserId?.()
+    if (userId) {
+      wsUrl.searchParams.set('user_id', String(userId))
+    }
+
+    return wsUrl.toString()
   }
 
   const resetStreamState = () => {
@@ -27,12 +41,23 @@ export function useChatSocket({
     currentAssistantIndex = -1
   }
 
-  const ensureSocket = () => {
+  const ensureSocket = (sessionMeta = {}) => {
+    const bindingSessionId = String(sessionMeta.youtuSessionId || '')
+    const bindingUserId = String(sessionMeta.userId || getCurrentUserId?.() || '')
+    const nextBindingKey = `${bindingSessionId}::${bindingUserId}`
+
+    if (socket && socket.readyState === WebSocket.OPEN && socketBindingKey && socketBindingKey !== nextBindingKey) {
+      socket.close()
+      socket = null
+      socketBindingKey = ''
+    }
+
     if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) {
       return socket
     }
 
-    socket = new WebSocket(getWsUrl())
+    socketBindingKey = nextBindingKey
+    socket = new WebSocket(getWsUrl(sessionMeta))
 
     socket.onmessage = async (eventPayload) => {
       let eventData
@@ -46,6 +71,17 @@ export function useChatSocket({
       const targetSessionId = streamSessionId || getSessionId()
       const targetSession = getSessionById(targetSessionId)
       if (!targetSession) return
+
+      if (eventData.type === 'init') {
+        const serverSessionId = eventData.data?.session_id
+        if (serverSessionId && targetSession?.id) {
+          updateSessionMeta?.(targetSession.id, {
+            youtuSessionId: String(serverSessionId)
+          })
+          saveSessions()
+        }
+        return
+      }
 
       if (eventData.type === 'raw' && eventData.data?.type === 'text') {
         if (currentAssistantIndex === -1) {
@@ -92,6 +128,7 @@ export function useChatSocket({
     }
 
     socket.onclose = () => {
+      socketBindingKey = ''
       resetStreamState()
     }
 
@@ -129,7 +166,10 @@ export function useChatSocket({
     setSending(true)
 
     try {
-      const activeSocket = ensureSocket()
+      const activeSocket = ensureSocket({
+        youtuSessionId: targetSession.youtuSessionId,
+        userId: targetSession.userId || getCurrentUserId?.()
+      })
       await waitForOpen(activeSocket)
       activeSocket.send(
         JSON.stringify({
@@ -155,6 +195,7 @@ export function useChatSocket({
     if (socket && socket.readyState === WebSocket.OPEN) {
       socket.close()
     }
+    socketBindingKey = ''
   }
 
   return {

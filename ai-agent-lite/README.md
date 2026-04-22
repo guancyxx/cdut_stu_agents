@@ -26,40 +26,47 @@ uvicorn app.main:app --port 8848
 
 ### HTTP
 - `GET /healthz` - Liveness check. Returns `{"ok":true,"llm_enabled":bool,"model":"..."}`
-- `GET /readyz` - Readiness check (dependency verification). *(planned)*
-- `GET /metrics` - Prometheus metrics. *(planned)*
+- `GET /readyz` - Readiness check (DB + LLM dependency verification)
+- `GET /metrics` - Prometheus metrics endpoint
 
 ### WebSocket
-- `WS /ws?session_id={sessionId}` - Chat endpoint
+- `WS /ws?session_id={sessionId}&user_id={userId}` - Chat endpoint
+  - `session_id` is optional. When invalid/missing, server creates a new UUID session.
+  - `user_id` is optional. Defaults to `anonymous`.
 
 ## WebSocket Protocol
 
 ### Client -> Server
 
 ```json
-{"type": "raw", "content": "user message text", "session_id": "abc123"}
+{"type": "query", "content": {"query": "user message text"}}
+```
+
+Optional:
+```json
+{"type": "list_agents"}
 ```
 
 ### Server -> Client
 
 Init:
 ```json
-{"type": "init", "content": {"default_agent": "ai-agent-lite"}}
+{"type":"init","data":{"type":"init","default_agent":"ai-agent-lite","agent_type":"simple","sub_agents":null,"session_id":"<uuid>"}}
 ```
 
 Stream token:
 ```json
-{"type": "raw", "content": "token text here"}
+{"type":"raw","data":{"type":"text","delta":"token text here","inprogress":true}}
 ```
 
 Finish:
 ```json
-{"type": "finish"}
+{"type":"finish"}
 ```
 
 Error:
 ```json
-{"type": "error", "content": "error description"}
+{"type":"error","data":{"type":"error","code":"INVALID_INPUT","message":"error description"}}
 ```
 
 ## Environment Variables
@@ -82,8 +89,14 @@ In docker-compose, these are mapped from .env UTU_LLM_* vars:
 
 ## Session Storage
 
-Current: in-memory dict (lost on container restart).
-Planned: PostgreSQL-backed persistent storage.
+Current: PostgreSQL-backed persistent storage in `ai_agent` schema.
+
+Tables:
+- `ai_agent.sessions`
+- `ai_agent.messages`
+- `ai_agent.audit_log`
+
+`LITE_DATABASE_URL` defaults to the shared QDUOJ postgres container (`oj-postgres`) with logical isolation by schema.
 
 ## Port Mapping
 

@@ -120,8 +120,6 @@
 
 ## Known Limitations
 
-- Session storage is in-memory in ai-agent-lite (lost on restart)
-- No user identity binding yet (sessions identified by client-generated session_id)
 - No rate limiting or abuse prevention
 - Only 24 of 609 problems have test data (4%)
 - No structured code review output from AI
@@ -131,11 +129,12 @@
 
 ## Next Steps
 
-### Short-term (current sprint)
+### Short-term (completed)
 - Persistent session + message storage (Postgres)
 - User identity binding from OJ auth
 - Unified error codes + timeout/retry
 - Basic observability (metrics, healthz/readyz)
+- Frontend -> backend WebSocket session/user binding (`session_id` + `user_id` query)
 
 ### Medium-term
 - Problem-context prompt template

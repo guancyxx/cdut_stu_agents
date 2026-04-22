@@ -100,6 +100,11 @@ export function useChatFeature() {
   const socketDriver = useChatSocket({
     getSessionId: () => currentSessionId.value,
     getSessionById,
+    getCurrentUserId: () => {
+      const current = currentSession.value
+      return current?.userId || ''
+    },
+    updateSessionMeta,
     appendMessageToSession,
     saveSessions,
     scrollToBottom,

@@ -41,13 +41,18 @@ Key endpoints used:
 
 ### 2. AI Chat (Frontend -> ai-agent-lite)
 
-WebSocket connection via `/ws?session_id=X`.
+WebSocket connection via `/ws`.
 
-Messages:
-- Send: `{type:"raw", content:"...", session_id:"..."}`
-- Receive stream: `{type:"raw", content:"token"}`
+Request/response contract:
+- Send: `{type:"query", content:{query:"..."}}`
+- Receive init: `{type:"init", data:{..., session_id:"<uuid>"}}`
+- Receive stream: `{type:"raw", data:{type:"text", delta:"...", inprogress:true|false}}`
 - End: `{type:"finish"}`
-- Error: `{type:"error", content:"..."}`
+- Error: `{type:"error", data:{type:"error", code:"...", message:"..."}}`
+
+Connection query params:
+- `session_id` optional
+- `user_id` optional (recommended; defaults to `anonymous`)
 
 ### 3. AI Agent -> OJ API (Planned)
 
@@ -91,8 +96,10 @@ UTU_LLM_MODEL=deepseek-chat
 
 Mapped in docker-compose:
 - LITE_LLM_BASE_URL=${UTU_LLM_BASE_URL}
-- LITE_LLM_API_KEY=${UTU_LLM_API_KEY}
+- LITE_LLM_API_KEY=${UTU_...KEY}
 - LITE_LLM_MODEL=${UTU_LLM_MODEL}
+- LITE_DATABASE_URL=postgresql+asyncpg://onlinejudge:${POSTGRES_PASSWORD:-onlinejudge}@oj-postgres:5432/onlinejudge
+- LITE_DB_SCHEMA=ai_agent
 
 ## Planned Enhancements
 

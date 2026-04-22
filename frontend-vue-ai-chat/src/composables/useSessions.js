@@ -9,6 +9,7 @@ const createSessionEntity = (title = '新会话', metadata = {}) => ({
   problemId: metadata.problemId || '',
   problemTitle: metadata.problemTitle || '',
   youtuSessionId: metadata.youtuSessionId || '',
+  userId: metadata.userId || '',
   messages: []
 })
 
@@ -41,6 +42,7 @@ export function useSessions(storageKey) {
           youtuSessionId: String(session.youtuSessionId || session.id || ''),
           problemId: session.problemId || '',
           problemTitle: session.problemTitle || '',
+          userId: session.userId || '',
           messages: Array.isArray(session.messages) ? session.messages : []
         }))
         currentSessionId.value = sessions.value[0].id
@@ -100,6 +102,7 @@ export function useSessions(storageKey) {
     targetSession.problemId = partialMeta.problemId ?? targetSession.problemId
     targetSession.problemTitle = partialMeta.problemTitle ?? targetSession.problemTitle
     targetSession.youtuSessionId = partialMeta.youtuSessionId ?? targetSession.youtuSessionId
+    targetSession.userId = partialMeta.userId ?? targetSession.userId
 
     saveSessions()
     return targetSession

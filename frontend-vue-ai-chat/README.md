@@ -5,6 +5,8 @@ Vue 3 + Vite frontend for the CDUT AI tutor system. Provides chat interface with
 ## Features
 
 - WebSocket chat with streaming AI responses (raw/finish/error protocol)
+- WebSocket identity/session binding (`session_id` + `user_id` query params)
+- Server session UUID sync from `init` event to frontend local metadata
 - OJ problem browsing and selection with auto-session creation
 - Problem pagination with 21 items per page and numeric page buttons
 - Code editor with multi-language support (C++, Python, Java, C)

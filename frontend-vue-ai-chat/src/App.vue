@@ -189,6 +189,7 @@ const handleAuthSubmit = async () => {
   if (ojUser.value.loggedIn) {
     await fetchProblems()
     activeTab.value = 'home'
+    syncCurrentSessionUserId(ojUser.value.profileName || ojUser.value.username)
   }
 }
 
@@ -235,6 +236,8 @@ const selectProblemForRightPanel = async (problem) => {
   const targetSession = selectOrCreateProblemSession(problem)
   if (!targetSession) return
 
+  const resolvedUserId = sanitizeTextInput(ojUser.value.profileName || ojUser.value.username, 32)
+
   selectedProblemId.value = String(problem._id)
   rightPanelTab.value = 'problem'
   activeTab.value = 'home'
@@ -250,7 +253,8 @@ const selectProblemForRightPanel = async (problem) => {
   ensureSessionMetadata(targetSession.id, {
     problemId: String(problem._id),
     problemTitle: problem.title,
-    youtuSessionId: `problem_${problem._id}`
+    youtuSessionId: `problem_${problem._id}`,
+    userId: resolvedUserId
   })
 
   if (targetSession.messages.length === 0) {
@@ -265,6 +269,15 @@ const handleClearAllSessions = () => {
   activeTab.value = 'problemset'
   activeSubmitCode.value = ''
   activeSubmitState.value = { type: '', message: '' }
+}
+
+const syncCurrentSessionUserId = (userId) => {
+  const sessionId = currentSessionId.value
+  if (!sessionId || !userId) return
+
+  ensureSessionMetadata(sessionId, {
+    userId
+  })
 }
 
 const mapSubmissionLabelToUiMessage = (result) => {
@@ -396,6 +409,8 @@ watch(
       activeTab.value = 'auth'
       return
     }
+
+    syncCurrentSessionUserId(ojUser.value.profileName || ojUser.value.username)
 
     if (activeTab.value === 'auth') {
       activeTab.value = 'home'
