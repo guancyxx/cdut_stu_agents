@@ -234,7 +234,7 @@ onBeforeUnmount(() => {
         </div>
 
         <div class="card side-content-card" v-if="rightPanelTab === 'problem'">
-          <div class="problem-detail">
+          <div class="problem-detail" v-if="hasSelectedProblem">
             <div class="detail-head">
               <div>
                 <div class="card-title">{{ selectedProblem.title }}</div>
@@ -252,24 +252,28 @@ onBeforeUnmount(() => {
               <div class="detail-row"><span>通过率</span><strong>{{ selectedProblem.submission_number ? `${Math.round((selectedProblem.accepted_number / selectedProblem.submission_number) * 100)}%` : '0%' }}</strong></div>
             </div>
           </div>
+          <div class="empty" v-else>请先在题库中选择一道题目</div>
         </div>
 
         <div class="card side-content-card" v-else>
-          <div class="submit-head">
-            <div class="card-title">提交到: {{ selectedProblem.title }}</div>
-            <div class="submit-meta">Problem ID: {{ selectedProblem._id }}</div>
-          </div>
-          <div class="submit-form">
-            <select v-model="submitLanguage">
-              <option value="C++">C++</option>
-              <option value="C">C</option>
-              <option value="Java">Java</option>
-              <option value="Python3">Python3</option>
-            </select>
-            <textarea v-model="submitCode" placeholder="Enter your source code here" />
-            <button @click="handleSubmitCode">提交代码</button>
-          </div>
-          <div class="empty" :class="submitState.type" v-if="submitState.message">{{ submitState.message }}</div>
+          <template v-if="hasSelectedProblem">
+            <div class="submit-head">
+              <div class="card-title">提交到: {{ selectedProblem.title }}</div>
+              <div class="submit-meta">Problem ID: {{ selectedProblem._id }}</div>
+            </div>
+            <div class="submit-form">
+              <select v-model="submitLanguage">
+                <option value="C++">C++</option>
+                <option value="C">C</option>
+                <option value="Java">Java</option>
+                <option value="Python3">Python3</option>
+              </select>
+              <textarea v-model="submitCode" placeholder="Enter your source code here" />
+              <button @click="handleSubmitCode">提交代码</button>
+            </div>
+            <div class="empty" :class="submitState.type" v-if="submitState.message">{{ submitState.message }}</div>
+          </template>
+          <div class="empty" v-else>请先选择题目后再提交代码</div>
         </div>
       </aside>
     </div>

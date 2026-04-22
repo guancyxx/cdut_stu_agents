@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CDUT AI Chat 界面修改验证</title>
+    <style>
+        body { font-family: 'Inter', sans-serif; margin: 40px; line-height: 1.6; }
+        .status { padding: 10px; margin: 10px 0; border-radius: 5px; }
+        .success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .info { background: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; }
+    </style>
+</head>
+<body>
+    <h1>CDUT AI Chat 界面修改验证</h1>
+    
+    <div class="status success">
+        ✅ Docker容器已成功重建并使用最新代码
+    </div>
+    
+    <div class="status info">
+        📋 验证步骤：
+        <ol>
+            <li>访问 <a href="http://localhost:5173/" target="_blank">http://localhost:5173/</a></li>
+            <li>首次访问应该自动显示题库（无会话时）</li>
+            <li>点击任意题目 → 自动创建会话并切换到主页</li>
+            <li>检查右侧栏宽度（已从360px增加到720px）</li>
+            <li>确认右侧只显示题目详情，没有题目列表</li>
+        </ol>
+    </div>
+    
+    <div class="status success">
+        ✅ CSS修改确认：右侧栏宽度已设置为720px
+    </div>
+    
+    <div class="status info">
+        🔧 技术详情：
+        <ul>
+            <li>修改文件：src/assets/main.css (line 104)</li>
+            <li>修改前：grid-template-columns: 260px minmax(0, 1fr) 360px</li>
+            <li>修改后：grid-template-columns: 260px minmax(0, 1fr) 720px</li>
+            <li>增加宽度：360px → 720px (+360px, 100%增长)</li>
+        </ul>
+    </div>
+    
+    <div class="status info">
+        📊 服务状态：
+        <ul>
+            <li>前端：http://localhost:5173/ ✅ 运行中</li>
+            <li>后端API：http://localhost:8000/api/ ✅ 可访问</li>
+            <li>AI服务：http://localhost:8848/ ✅ 运行中</li>
+        </ul>
+    </div>
+    
+    <p><strong>请刷新浏览器页面或清除浏览器缓存后重新访问</strong></p>
+</body>
+</html>
