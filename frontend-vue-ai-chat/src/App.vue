@@ -47,9 +47,10 @@ const {
 
 const authActionText = computed(() => (ojUser.value.loggedIn ? ojUser.value.profileName : '登录 / 注册'))
 const sessionCount = computed(() => sessions.value.length)
+const hasSessions = computed(() => sessionCount.value > 0)
 const problemCount = computed(() => problems.value.length)
 const selectedProblem = computed(() => problems.value.find((item) => String(item._id) === selectedProblemId.value) || null)
-const isProblemListMode = computed(() => activeTab.value === 'problemset' || !selectedProblem.value)
+const hasSelectedProblem = computed(() => Boolean(selectedProblem.value))
 
 const openAuth = async () => {
   await openAuthModal(nextTick)
@@ -67,21 +68,20 @@ const switchRightPanelTab = (tab) => {
   rightPanelTab.value = tab
 }
 
-const selectProblemForRightPanel = (problem) => {
-  if (!problem?._id) return
+    const selectProblemForRightPanel = (problem) => {
+      if (!problem?._id) return
 
-  const nextProblemId = String(problem._id)
-  const shouldCreateNewSession = selectedProblemId.value !== nextProblemId
+      const nextProblemId = String(problem._id)
+      const shouldCreateNewSession = selectedProblemId.value !== nextProblemId
 
-  selectedProblemId.value = nextProblemId
-  rightPanelTab.value = 'problem'
-  activeTab.value = 'home'
-
-  if (shouldCreateNewSession) {
-    const title = `${problem._id} ${problem.title}`.slice(0, 24)
-    createSession(title)
-  }
-}
+      selectedProblemId.value = nextProblemId
+      rightPanelTab.value = 'problem'
+      // Removed forced switch to 'home' to allow viewing details while in problemset
+      if (shouldCreateNewSession) {
+        const title = `${problem._id} ${problem.title}`.slice(0, 24)
+        createSession(title)
+      }
+    }
 
 const clearSelectedProblem = () => {
   selectedProblemId.value = ''
@@ -132,6 +132,11 @@ onMounted(async () => {
   await refreshCaptcha()
   await fetchProblems()
   window.addEventListener('keydown', handleGlobalKeydown)
+  
+  // 如果没有会话，自动显示题库
+  if (!hasSessions.value) {
+    activeTab.value = 'problemset'
+  }
 })
 
 onBeforeUnmount(() => {
@@ -154,7 +159,7 @@ onBeforeUnmount(() => {
       </div>
     </header>
 
-    <div class="content-grid">
+    <div class="content-grid" :class="{ 'problemset-mode': activeTab === 'problemset' || !hasSessions }">
       <aside class="left-sidebar">
         <div class="card sessions-card">
           <div class="session-count">{{ sessionCount }} 会话</div>
@@ -208,9 +213,11 @@ onBeforeUnmount(() => {
 
         <div class="problem-list" v-if="!problemLoading">
           <button class="problem-item" v-for="p in problems" :key="p._id" @click="selectProblemForRightPanel(p)">
-            <div class="pid">{{ p._id }}</div>
+            <div class="problem-item-main">
+              <div class="pid">{{ p._id }}</div>
+              <div class="pdiff">{{ p.difficulty || 'Unknown' }}</div>
+            </div>
             <div class="ptitle">{{ p.title }}</div>
-            <div class="pdiff">{{ p.difficulty }}</div>
           </button>
           <div v-if="!problems.length" class="empty">暂无题目</div>
         </div>
@@ -218,86 +225,51 @@ onBeforeUnmount(() => {
         <div class="error" v-if="problemError">{{ problemError }}</div>
       </section>
 
-      <aside class="right-sidebar">
-        <template v-if="!isProblemListMode">
-          <div class="card side-tab-card">
-            <div class="switch-row side-tabs">
-              <button :class="{ active: rightPanelTab === 'problem' }" @click="switchRightPanelTab('problem')">题目信息</button>
-              <button :class="{ active: rightPanelTab === 'submit' }" @click="switchRightPanelTab('submit')">OJ提交</button>
-            </div>
+      <aside class="right-sidebar" v-if="activeTab === 'home' || activeTab === 'problemset'">
+        <div class="card side-tab-card">
+          <div class="switch-row side-tabs">
+            <button :class="{ active: rightPanelTab === 'problem' }" @click="switchRightPanelTab('problem')">题目信息</button>
+            <button :class="{ active: rightPanelTab === 'submit' }" @click="switchRightPanelTab('submit')">OJ提交</button>
           </div>
+        </div>
 
-          <div class="card side-content-card" v-if="rightPanelTab === 'problem'">
-            <div class="problem-detail">
-              <div class="detail-head">
-                <div>
-                  <div class="card-title">{{ selectedProblem.title }}</div>
-                  <div class="card-subtitle">Problem ID: {{ selectedProblem._id }}</div>
-                </div>
-                <button class="secondary-btn" @click="clearSelectedProblem">返回列表</button>
+        <div class="card side-content-card" v-if="rightPanelTab === 'problem'">
+          <div class="problem-detail">
+            <div class="detail-head">
+              <div>
+                <div class="card-title">{{ selectedProblem.title }}</div>
+                <div class="card-subtitle">Problem ID: {{ selectedProblem._id }}</div>
               </div>
+              <button class="secondary-btn" @click="clearSelectedProblem">返回题库</button>
+            </div>
 
-              <div class="detail-grid">
-                <div class="detail-row"><span>难度</span><strong>{{ selectedProblem.difficulty || 'Unknown' }}</strong></div>
-                <div class="detail-row"><span>时间限制</span><strong>{{ selectedProblem.time_limit || '-' }}</strong></div>
-                <div class="detail-row"><span>内存限制</span><strong>{{ selectedProblem.memory_limit || '-' }}</strong></div>
-                <div class="detail-row"><span>提交数</span><strong>{{ selectedProblem.submission_number || 0 }}</strong></div>
-                <div class="detail-row"><span>通过数</span><strong>{{ selectedProblem.accepted_number || 0 }}</strong></div>
-                <div class="detail-row"><span>通过率</span><strong>{{ selectedProblem.submission_number ? `${Math.round((selectedProblem.accepted_number / selectedProblem.submission_number) * 100)}%` : '0%' }}</strong></div>
-              </div>
+            <div class="detail-grid">
+              <div class="detail-row"><span>难度</span><strong>{{ selectedProblem.difficulty || 'Unknown' }}</strong></div>
+              <div class="detail-row"><span>时间限制</span><strong>{{ selectedProblem.time_limit || '-' }}</strong></div>
+              <div class="detail-row"><span>内存限制</span><strong>{{ selectedProblem.memory_limit || '-' }}</strong></div>
+              <div class="detail-row"><span>提交数</span><strong>{{ selectedProblem.submission_number || 0 }}</strong></div>
+              <div class="detail-row"><span>通过数</span><strong>{{ selectedProblem.accepted_number || 0 }}</strong></div>
+              <div class="detail-row"><span>通过率</span><strong>{{ selectedProblem.submission_number ? `${Math.round((selectedProblem.accepted_number / selectedProblem.submission_number) * 100)}%` : '0%' }}</strong></div>
             </div>
           </div>
-
-          <div class="card side-content-card" v-else>
-            <div class="submit-head">
-              <div class="card-title">提交到: {{ selectedProblem.title }}</div>
-              <div class="submit-meta">Problem ID: {{ selectedProblem._id }}</div>
-            </div>
-            <div class="submit-form">
-              <select v-model="submitLanguage">
-                <option value="C++">C++</option>
-                <option value="C">C</option>
-                <option value="Java">Java</option>
-                <option value="Python3">Python3</option>
-              </select>
-              <textarea v-model="submitCode" placeholder="Enter your source code here" />
-              <button @click="handleSubmitCode">提交代码</button>
-            </div>
-            <div class="empty" :class="submitState.type" v-if="submitState.message">{{ submitState.message }}</div>
-          </div>
-        </template>
+        </div>
 
         <div class="card side-content-card" v-else>
-          <div class="side-panel-header">
-            <div>
-              <div class="card-title">题目列表</div>
-              <div class="card-subtitle">{{ problemCount }} problems</div>
-            </div>
+          <div class="submit-head">
+            <div class="card-title">提交到: {{ selectedProblem.title }}</div>
+            <div class="submit-meta">Problem ID: {{ selectedProblem._id }}</div>
           </div>
-
-          <div class="problem-toolbar compact-toolbar">
-            <input v-model="keyword" placeholder="关键词搜索题目" @keyup.enter="fetchProblems" />
-            <select v-model="difficulty" @change="fetchProblems">
-              <option :value="''">全部难度</option>
-              <option v-for="level in OJ_DIFFICULTY_OPTIONS.filter((item) => item)" :key="`side-${level}`" :value="level">
-                {{ level }}
-              </option>
+          <div class="submit-form">
+            <select v-model="submitLanguage">
+              <option value="C++">C++</option>
+              <option value="C">C</option>
+              <option value="Java">Java</option>
+              <option value="Python3">Python3</option>
             </select>
-            <button @click="fetchProblems">刷新</button>
+            <textarea v-model="submitCode" placeholder="Enter your source code here" />
+            <button @click="handleSubmitCode">提交代码</button>
           </div>
-
-          <div class="problem-list" v-if="!problemLoading">
-            <button class="problem-item" v-for="p in problems" :key="`side-problem-${p._id}`" @click="selectProblemForRightPanel(p)">
-              <div class="problem-item-main">
-                <div class="pid">{{ p._id }}</div>
-                <div class="pdiff">{{ p.difficulty }}</div>
-              </div>
-              <div class="ptitle">{{ p.title }}</div>
-            </button>
-            <div v-if="!problems.length" class="empty">暂无题目</div>
-          </div>
-          <div class="empty" v-else>加载中...</div>
-          <div class="error" v-if="problemError">{{ problemError }}</div>
+          <div class="empty" :class="submitState.type" v-if="submitState.message">{{ submitState.message }}</div>
         </div>
       </aside>
     </div>

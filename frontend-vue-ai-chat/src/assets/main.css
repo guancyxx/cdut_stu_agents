@@ -45,9 +45,10 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 16px;
+  padding: 0 20px;
   border-bottom: 1px solid var(--border-subtle);
-  background: var(--bg-soft);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.03) 0%, rgba(255, 255, 255, 0.015) 100%);
+  backdrop-filter: blur(4px);
 }
 
 .tabs {
@@ -56,12 +57,17 @@ body {
 }
 
 .tabs button {
-  background: transparent;
-  border: 1px solid var(--border-subtle);
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   color: var(--text-secondary);
-  border-radius: 6px;
-  padding: 8px 12px;
+  border-radius: 8px;
+  padding: 8px 14px;
   cursor: pointer;
+  transition: background 0.16s ease, border-color 0.16s ease;
+}
+
+.tabs button:hover {
+  border-color: rgba(130, 143, 255, 0.35);
 }
 
 .tabs button.active {
@@ -83,19 +89,31 @@ body {
 }
 
 .top-status {
-  color: var(--success);
-  font-size: 13px;
+  color: #34d399;
+  font-size: 12px;
+  border: 1px solid rgba(52, 211, 153, 0.35);
+  background: rgba(16, 185, 129, 0.1);
+  border-radius: 999px;
+  padding: 5px 10px;
 }
 
 .content-grid {
   width: 100%;
   height: 100%;
   display: grid;
-  grid-template-columns: 280px 1fr 340px;
-  gap: 12px;
-  padding: 12px;
+  grid-template-columns: 260px minmax(0, 1fr) 720px;
+  gap: 14px;
+  padding: 14px;
   min-height: 0;
 }
+
+.content-grid.problemset-mode {
+  grid-template-columns: 260px minmax(0, 1fr);
+}
+
+/* .content-grid.problemset-mode .right-sidebar {
+  display: none;
+} */
 
 .left-sidebar,
 .right-sidebar {
@@ -113,13 +131,14 @@ body {
 }
 
 .main-panel {
-  border: 1px solid var(--border-subtle);
-  border-radius: 12px;
-  background: var(--bg-panel);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(15, 16, 17, 0.95) 0%, rgba(15, 16, 17, 0.88) 100%);
   display: grid;
   grid-template-rows: 1fr auto;
   min-height: 0;
   overflow: hidden;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.24);
 }
 
 .chat-main {
@@ -280,11 +299,12 @@ button:disabled {
 }
 
 .card {
-  border: 1px solid var(--border-subtle);
-  border-radius: 12px;
-  background: var(--bg-panel);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(15, 16, 17, 0.96) 0%, rgba(15, 16, 17, 0.9) 100%);
   padding: 12px;
   min-height: 0;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.22);
 }
 
 .card-title {
@@ -363,8 +383,9 @@ button:disabled {
 }
 
 .detail-row {
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
   gap: 8px;
   border: 1px solid var(--border-subtle);
   border-radius: 8px;
@@ -373,11 +394,21 @@ button:disabled {
   color: var(--text-secondary);
 }
 
+.detail-row span {
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+.detail-row strong {
+  justify-self: end;
+}
+
 .problem-item-main {
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 10px;
+  margin-bottom: 4px;
 }
 
 .submit-head {
@@ -450,12 +481,12 @@ button:disabled {
 .session-item {
   height: auto;
   text-align: left;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.04) 0%, rgba(255, 255, 255, 0.016) 100%);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.045) 0%, rgba(255, 255, 255, 0.018) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 10px;
-  padding: 8px 10px;
+  padding: 7px 10px;
   color: var(--text-secondary);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 5px 16px rgba(0, 0, 0, 0.2);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 5px 14px rgba(0, 0, 0, 0.18);
   transition: transform 0.16s ease, border-color 0.16s ease, background 0.16s ease;
 }
 
@@ -492,7 +523,8 @@ button:disabled {
   font-size: 13px;
   font-weight: 540;
   color: var(--text-primary);
-  margin-bottom: 3px;
+  margin-bottom: 2px;
+  line-height: 1.2;
 }
 
 .smeta {
@@ -544,7 +576,8 @@ button:disabled {
 }
 
 @media (max-width: 1280px) {
-  .content-grid {
+  .content-grid,
+  .content-grid.problemset-mode {
     grid-template-columns: 1fr;
   }
 
