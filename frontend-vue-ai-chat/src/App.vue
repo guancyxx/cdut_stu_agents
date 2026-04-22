@@ -25,6 +25,7 @@ const {
   selectOrCreateProblemSession,
   ensureSessionMetadata,
   sendMessage,
+  sendProblemContextToAi,
   clearAllConversationData,
   closeSocket
 } = useChatFeature()
@@ -136,7 +137,7 @@ const getSessionTag = (session) => {
   return String(session?.id || 'chat').slice(-4)
 }
 
-const selectProblemForRightPanel = (problem) => {
+const selectProblemForRightPanel = async (problem) => {
   if (!problem?._id) return
 
   const targetSession = selectOrCreateProblemSession(problem)
@@ -151,6 +152,10 @@ const selectProblemForRightPanel = (problem) => {
     problemTitle: problem.title,
     youtuSessionId: `problem_${problem._id}`
   })
+
+  if (targetSession.messages.length === 0) {
+    await sendProblemContextToAi(problem, { targetSessionId: targetSession.id })
+  }
 }
 
 const handleClearAllSessions = () => {

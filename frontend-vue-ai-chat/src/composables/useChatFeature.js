@@ -147,6 +147,39 @@ export function useChatFeature() {
     return created
   }
 
+  const sendProblemContextToAi = async (problem, options = {}) => {
+    if (!problem?._id) return
+
+    const fallbackSessionId = currentSessionId.value
+    const targetSessionId = options.targetSessionId || fallbackSessionId
+    const targetSession = getSessionById(targetSessionId)
+    if (!targetSession) return
+
+    const normalizedDescription = String(
+      problem.description ||
+      problem.content ||
+      problem.desc ||
+      problem.problem_description ||
+      ''
+    ).trim()
+
+    const structuredPrompt = [
+      'SYSTEM CONTEXT: OJ problem has been selected.',
+      `Problem ID: ${problem._id}`,
+      `Title: ${problem.title || 'Untitled'}`,
+      `Difficulty: ${problem.difficulty || 'Unknown'}`,
+      '',
+      'Task requirement:',
+      '- Do not provide explanation or solution before the user gives explicit request.',
+      '- First, only acknowledge that problem context is loaded.',
+      '',
+      'Problem statement:',
+      normalizedDescription || 'No statement provided.'
+    ].join('\n')
+
+    await socketDriver.sendQuery(structuredPrompt, { targetSessionId })
+  }
+
   const sendMessage = async () => {
     if (sending.value || !currentSession.value) return
 
@@ -203,6 +236,7 @@ export function useChatFeature() {
     selectOrCreateProblemSession,
     ensureSessionMetadata,
     sendMessage,
+    sendProblemContextToAi,
     clearAllConversationData,
     closeSocket
   }

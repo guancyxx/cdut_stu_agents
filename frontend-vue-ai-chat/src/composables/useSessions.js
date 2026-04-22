@@ -1,7 +1,5 @@
 import { computed, ref } from 'vue'
 
-const DEFAULT_WELCOME_MESSAGE = '你好，我是 CDUT AI 助手。现在已接入 youtu-agent 实时回复。'
-
 const createTimeLabel = () => new Date().toLocaleTimeString()
 
 const createSessionEntity = (title = '新会话', metadata = {}) => ({
@@ -11,13 +9,7 @@ const createSessionEntity = (title = '新会话', metadata = {}) => ({
   problemId: metadata.problemId || '',
   problemTitle: metadata.problemTitle || '',
   youtuSessionId: metadata.youtuSessionId || '',
-  messages: [
-    {
-      role: 'assistant',
-      content: DEFAULT_WELCOME_MESSAGE,
-      time: createTimeLabel()
-    }
-  ]
+  messages: []
 })
 
 export function useSessions(storageKey) {
