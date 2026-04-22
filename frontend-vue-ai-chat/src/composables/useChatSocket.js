@@ -7,7 +7,8 @@ export function useChatSocket({
   saveSessions,
   scrollToBottom,
   setSending,
-  createTimeLabel
+  createTimeLabel,
+  onAfterMessageAppended
 }) {
   const sending = ref(false)
 
@@ -65,6 +66,7 @@ export function useChatSocket({
         }
 
         saveSessions()
+        onAfterMessageAppended?.(targetSessionId)
         await scrollToBottom()
         return
       }
@@ -77,6 +79,7 @@ export function useChatSocket({
         })
         resetStreamState()
         saveSessions()
+        onAfterMessageAppended?.(targetSessionId)
         await scrollToBottom()
         return
       }
@@ -112,9 +115,16 @@ export function useChatSocket({
     })
   }
 
-  const sendQuery = async (query) => {
-    const sessionId = getSessionId()
-    streamSessionId = sessionId
+  const sendQuery = async (query, options = {}) => {
+    const fallbackSessionId = getSessionId()
+    const targetSessionId = options.targetSessionId || fallbackSessionId
+    const targetSession = getSessionById(targetSessionId)
+
+    if (!targetSession) {
+      throw new Error('Target chat session does not exist')
+    }
+
+    streamSessionId = targetSessionId
     sending.value = true
     setSending(true)
 
@@ -124,15 +134,18 @@ export function useChatSocket({
       activeSocket.send(
         JSON.stringify({
           type: 'query',
-          content: { query }
+          content: {
+            query
+          }
         })
       )
     } catch (error) {
-      appendMessageToSession(sessionId, {
+      appendMessageToSession(targetSessionId, {
         role: 'assistant',
         content: `Connection failed: ${error.message || String(error)}`,
         time: createTimeLabel()
       })
+      onAfterMessageAppended?.(targetSessionId)
       resetStreamState()
       await scrollToBottom()
     }

@@ -10,6 +10,7 @@ const createSessionEntity = (title = '新会话', metadata = {}) => ({
   createdAt: Date.now(),
   problemId: metadata.problemId || '',
   problemTitle: metadata.problemTitle || '',
+  youtuSessionId: metadata.youtuSessionId || '',
   messages: [
     {
       role: 'assistant',
@@ -43,8 +44,14 @@ export function useSessions(storageKey) {
       const raw = localStorage.getItem(storageKey)
       const parsed = raw ? JSON.parse(raw) : []
       if (Array.isArray(parsed) && parsed.length > 0) {
-        sessions.value = parsed
-        currentSessionId.value = parsed[0].id
+        sessions.value = parsed.map((session) => ({
+          ...session,
+          youtuSessionId: String(session.youtuSessionId || session.id || ''),
+          problemId: session.problemId || '',
+          problemTitle: session.problemTitle || '',
+          messages: Array.isArray(session.messages) ? session.messages : []
+        }))
+        currentSessionId.value = sessions.value[0].id
         return
       }
     } catch (error) {
@@ -66,6 +73,9 @@ export function useSessions(storageKey) {
   const findSessionByProblemId = (problemId) =>
     sessions.value.find((session) => String(session.problemId || '') === String(problemId || ''))
 
+  const findSessionByYoutuSessionId = (youtuSessionId) =>
+    sessions.value.find((session) => String(session.youtuSessionId || '') === String(youtuSessionId || ''))
+
   const getSessionById = (sessionId) => sessions.value.find((item) => item.id === sessionId)
 
   const appendMessageToSession = (sessionId, message) => {
@@ -80,6 +90,29 @@ export function useSessions(storageKey) {
     saveSessions()
   }
 
+  const upsertSessionHistory = (sessionId, messagesPayload = []) => {
+    const targetSession = getSessionById(sessionId)
+    if (!targetSession) return
+
+    targetSession.messages = Array.isArray(messagesPayload)
+      ? messagesPayload.filter((message) => message && (message.role === 'user' || message.role === 'assistant'))
+      : []
+
+    saveSessions()
+  }
+
+  const updateSessionMeta = (sessionId, partialMeta = {}) => {
+    const targetSession = getSessionById(sessionId)
+    if (!targetSession) return null
+
+    targetSession.problemId = partialMeta.problemId ?? targetSession.problemId
+    targetSession.problemTitle = partialMeta.problemTitle ?? targetSession.problemTitle
+    targetSession.youtuSessionId = partialMeta.youtuSessionId ?? targetSession.youtuSessionId
+
+    saveSessions()
+    return targetSession
+  }
+
   return {
     sessions,
     currentSessionId,
@@ -90,8 +123,11 @@ export function useSessions(storageKey) {
     loadSessions,
     selectSession,
     findSessionByProblemId,
+    findSessionByYoutuSessionId,
     getSessionById,
     appendMessageToSession,
+    upsertSessionHistory,
+    updateSessionMeta,
     createTimeLabel
   }
 }

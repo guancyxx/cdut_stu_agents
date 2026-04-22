@@ -101,6 +101,12 @@ class JudgeDispatcher(DispatcherBase):
         else:
             self.problem = Problem.objects.get(id=problem_id)
 
+    def _mark_system_error(self, message, resp=None):
+        self.submission.result = JudgeStatus.SYSTEM_ERROR
+        self.submission.info = resp or {}
+        self.submission.statistic_info["score"] = 0
+        self.submission.statistic_info["err_info"] = message
+
     def _compute_statistic_info(self, resp_data):
         # 用时和内存占用保存为多个测试点中最长的那个
         self.submission.statistic_info["time_cost"] = max([x["cpu_time"] for x in resp_data])
@@ -169,18 +175,22 @@ class JudgeDispatcher(DispatcherBase):
             self.submission.statistic_info["err_info"] = resp["data"]
             self.submission.statistic_info["score"] = 0
         else:
-            resp["data"].sort(key=lambda x: int(x["test_case"]))
-            self.submission.info = resp
-            self._compute_statistic_info(resp["data"])
-            error_test_case = list(filter(lambda case: case["result"] != 0, resp["data"]))
-            # ACM模式下,多个测试点全部正确则AC，否则取第一个错误的测试点的状态
-            # OI模式下, 若多个测试点全部正确则AC， 若全部错误则取第一个错误测试点状态，否则为部分正确
-            if not error_test_case:
-                self.submission.result = JudgeStatus.ACCEPTED
-            elif self.problem.rule_type == ProblemRuleType.ACM or len(error_test_case) == len(resp["data"]):
-                self.submission.result = error_test_case[0]["result"]
+            test_case_results = resp.get("data")
+            if not isinstance(test_case_results, list) or not test_case_results:
+                self._mark_system_error("Judge server returned empty test case results.", resp=resp)
             else:
-                self.submission.result = JudgeStatus.PARTIALLY_ACCEPTED
+                test_case_results.sort(key=lambda x: int(x["test_case"]))
+                self.submission.info = resp
+                self._compute_statistic_info(test_case_results)
+                error_test_case = list(filter(lambda case: case["result"] != 0, test_case_results))
+                # ACM模式下,多个测试点全部正确则AC，否则取第一个错误的测试点的状态
+                # OI模式下, 若多个测试点全部正确则AC， 若全部错误则取第一个错误测试点状态，否则为部分正确
+                if not error_test_case:
+                    self.submission.result = JudgeStatus.ACCEPTED
+                elif self.problem.rule_type == ProblemRuleType.ACM or len(error_test_case) == len(test_case_results):
+                    self.submission.result = error_test_case[0]["result"]
+                else:
+                    self.submission.result = JudgeStatus.PARTIALLY_ACCEPTED
         self.submission.save()
 
         if self.contest_id:

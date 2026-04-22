@@ -22,6 +22,8 @@ const {
   createSession,
   loadSessions,
   selectSession,
+  selectOrCreateProblemSession,
+  ensureSessionMetadata,
   sendMessage,
   closeSocket
 } = useChatFeature()
@@ -70,27 +72,30 @@ const switchRightPanelTab = (tab) => {
 
 const handleSelectSession = (sessionId) => {
   selectSession(sessionId)
+  const targetSession = sessions.value.find((session) => session.id === sessionId)
+  selectedProblemId.value = targetSession?.problemId ? String(targetSession.problemId) : ''
   activeTab.value = 'home'
 }
 
     const selectProblemForRightPanel = (problem) => {
       if (!problem?._id) return
 
-      const nextProblemId = String(problem._id)
-      const shouldCreateNewSession = selectedProblemId.value !== nextProblemId
+      const targetSession = selectOrCreateProblemSession(problem)
+      if (!targetSession) return
 
-      selectedProblemId.value = nextProblemId
+      selectedProblemId.value = String(problem._id)
       rightPanelTab.value = 'problem'
-      // Removed forced switch to 'home' to allow viewing details while in problemset
-      if (shouldCreateNewSession) {
-        const title = `${problem._id} ${problem.title}`.slice(0, 24)
-        createSession(title)
-      }
+      activeTab.value = 'home'
+
+      ensureSessionMetadata(targetSession.id, {
+        problemId: String(problem._id),
+        problemTitle: problem.title,
+        youtuSessionId: `problem_${problem._id}`
+      })
     }
 
 const clearSelectedProblem = () => {
   selectedProblemId.value = ''
-  activeTab.value = 'problemset'
 }
 
 const handleSubmitCode = () => {
