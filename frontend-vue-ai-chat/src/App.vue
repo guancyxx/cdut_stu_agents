@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import CodeEditor from './components/CodeEditor.vue'
+import MessageBubble from './components/MessageBubble.vue'
 import { useChatFeature } from './composables/useChatFeature'
 import { AUTH_MODES, OJ_DIFFICULTY_OPTIONS, sanitizeHtmlContent, sanitizeTextInput } from './utils/validators'
 import { useOjAuthAndProblems } from './composables/useOjAuthAndProblems'
@@ -90,6 +91,7 @@ const {
   addPendingAttachment,
   removePendingAttachment,
   clearPendingAttachments,
+  pruneOrphanAttachments,
   loadSessions,
   selectSession,
   selectOrCreateProblemSession,
@@ -274,6 +276,7 @@ const handleClearAllSessions = () => {
   activeTab.value = 'problemset'
   activeSubmitCode.value = ''
   activeSubmitState.value = { type: '', message: '' }
+  pruneOrphanAttachments()
 }
 
 const syncCurrentSessionUserId = (userId) => {
@@ -398,6 +401,7 @@ watch(
   [currentSessionId, sessions],
   ([sessionId, sessionList]) => {
     pruneSubmitDrafts()
+    pruneOrphanAttachments()
 
     if (!sessionId) {
       selectedProblemId.value = ''
@@ -486,9 +490,15 @@ onBeforeUnmount(() => {
         </button>
         <div class="top-status">{{ sending ? 'AI 思考中...' : '在线' }}</div>
       </div>
-    </header>
+        </header>
 
-    <section class="auth-screen" v-if="requiresAuth || activeTab === 'auth'">
+        <!-- Agent Status Indicator -->
+        <div v-if="currentAgent" class="agent-status-indicator" :style="{ backgroundColor: currentAgent.color }">
+          <span class="agent-status-icon">{{ currentAgent.icon }}</span>
+          <span class="agent-status-text">{{ currentAgent.name }} 正在处理中...</span>
+        </div>
+
+        <main class="chat-main" ref="listRef">
       <div class="auth-page card">
         <div class="auth-page-header">
           <h2>OJ 登录注册</h2>
@@ -589,11 +599,19 @@ onBeforeUnmount(() => {
       </aside>
 
       <section class="main-panel" v-if="activeTab === 'home'">
+        <!-- Agent Status Indicator -->
+        <div v-if="currentAgent" class="agent-status-indicator" :style="{ backgroundColor: currentAgent.color }">
+          <span class="agent-status-icon">{{ currentAgent.icon }}</span>
+          <span class="agent-status-text">{{ currentAgent.name }} 正在处理中...</span>
+        </div>
+
         <main class="chat-main" ref="listRef">
-          <div v-for="(msg, idx) in messages" :key="idx" class="msg" :class="msg.role">
-            <div class="meta">{{ msg.role === 'user' ? '你' : 'AI' }} · {{ msg.time }}</div>
-            <div class="bubble" v-html="renderMessageHtml(msg.content)" />
-          </div>
+          <MessageBubble 
+            v-for="(msg, idx) in messages" 
+            :key="idx" 
+            :message="msg" 
+            :is-last="idx === messages.length - 1"
+          />
         </main>
 
         <footer class="chat-input-area">
@@ -760,4 +778,34 @@ onBeforeUnmount(() => {
       </aside>
     </div>
   </div>
+
+  <style>
+  /* Agent Status Indicator */
+  .agent-status-indicator {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    border-radius: 8px;
+    margin: 0 16px 12px;
+    color: white;
+    font-size: 13px;
+    font-weight: 500;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    animation: pulse 1.5s infinite;
+  }
+
+  .agent-status-icon {
+    font-size: 16px;
+  }
+
+  .agent-status-text {
+    flex: 1;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 0.95; }
+    50% { opacity: 1; }
+  }
+  </style>
 </template>

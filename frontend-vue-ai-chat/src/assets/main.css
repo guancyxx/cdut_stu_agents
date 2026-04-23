@@ -314,6 +314,12 @@ body {
 .chat-main {
   padding: 16px;
   overflow-y: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.chat-main::-webkit-scrollbar {
+  display: none;
 }
 
 .msg {

@@ -126,11 +126,22 @@ async def _load_context(db: AsyncSession, session_id: uuid.UUID) -> list[dict]:
     return msgs
 
 
-async def _send_text_stream(websocket: WebSocket, content: str, chunk_size: int = 80) -> None:
-    """Send a complete string as chunked streaming messages."""
+async def _send_text_stream(websocket: WebSocket, content: str, agent_type: AgentType = None, chunk_size: int = 80) -> None:
+    """Send a complete string as chunked streaming messages with optional agent info."""
     if not content:
         await websocket.send_json({"type": "raw", "data": {"type": "text", "delta": "", "inprogress": False}})
         return
+    
+    # Send agent info at the beginning if available
+    if agent_type:
+        await websocket.send_json({
+            "type": "agent_info",
+            "data": {
+                "agent_type": agent_type.value,
+                "agent_name": agent_type.value.replace('_', ' ').title()
+            }
+        })
+    
     start = 0
     total = len(content)
     while start < total:
@@ -247,7 +258,7 @@ async def ws_handler(websocket: WebSocket) -> None:
                     full_response += f"• {action['title']}: {action['reason']}\n"
                 
                 # Send response
-                await _send_text_stream(websocket, full_response)
+                await _send_text_stream(websocket, full_response, agent_type)
                 
                 # Persist assistant message
                 if full_response:

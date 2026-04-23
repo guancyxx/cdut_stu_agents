@@ -1,4 +1,5 @@
 import { ref } from 'vue'
+import { AGENT_TYPES, getAgentInfo } from '../utils/agents'
 
 export function useChatSocket({
   getSessionId,
@@ -104,6 +105,29 @@ export function useChatSocket({
         saveSessions()
         onAfterMessageAppended?.(targetSessionId)
         await scrollToBottom()
+        return
+      }
+
+      // Handle agent information
+      if (eventData.type === 'agent_info') {
+        const agentType = eventData.data?.agent_type
+        const agentInfo = getAgentInfo(agentType)
+        
+        // Store agent info in the current assistant message
+        if (currentAssistantIndex !== -1) {
+          targetSession.messages[currentAssistantIndex].agent = agentInfo
+        } else {
+          // Create a new message with agent info
+          targetSession.messages.push({
+            role: 'assistant',
+            content: '',
+            time: createTimeLabel(),
+            agent: agentInfo
+          })
+          currentAssistantIndex = targetSession.messages.length - 1
+        }
+        
+        saveSessions()
         return
       }
 

@@ -68,31 +68,58 @@ export function useChatFeature() {
   const input = ref('')
   const listRef = ref(null)
   const sending = ref(false)
-  const pendingAttachments = ref([])
+
+  // Per-session attachment storage — same pattern as submitDraftBySessionId
+  const attachmentsBySessionId = ref({})
+  const PRUNE_KEY = Symbol('prune')
+
+  const ensureAttachmentsForSession = (sessionId) => {
+    if (!sessionId) return []
+    if (!attachmentsBySessionId.value[sessionId]) {
+      attachmentsBySessionId.value[sessionId] = []
+    }
+    return attachmentsBySessionId.value[sessionId]
+  }
+
+  // Reactive view of attachments for the current session
+  const pendingAttachments = computed({
+    get: () => ensureAttachmentsForSession(currentSessionId.value),
+    set: () => { /* read-only via helpers */ }
+  })
 
   const addPendingAttachment = (attachment) => {
     if (!attachment || !attachment.filename || !attachment.content) return
+    if (!currentSessionId.value) return
 
     const type = attachment.type || 'code'
-    const existing = pendingAttachments.value.find(
-      (item) => item.filename === attachment.filename
-    )
+    const list = ensureAttachmentsForSession(currentSessionId.value)
+    const existing = list.find((item) => item.filename === attachment.filename)
     if (existing) {
       existing.content = attachment.content
       existing.type = type
       return
     }
-    pendingAttachments.value.push({ ...attachment, type })
+    list.push({ ...attachment, type })
   }
 
   const removePendingAttachment = (index) => {
-    if (index >= 0 && index < pendingAttachments.value.length) {
-      pendingAttachments.value.splice(index, 1)
+    if (!currentSessionId.value) return
+    const list = attachmentsBySessionId.value[currentSessionId.value]
+    if (list && index >= 0 && index < list.length) {
+      list.splice(index, 1)
     }
   }
 
   const clearPendingAttachments = () => {
-    pendingAttachments.value = []
+    if (!currentSessionId.value) return
+    attachmentsBySessionId.value[currentSessionId.value] = []
+  }
+
+  const pruneOrphanAttachments = () => {
+    const validSessionIds = new Set(sessions.value.map((s) => s.id))
+    attachmentsBySessionId.value = Object.fromEntries(
+      Object.entries(attachmentsBySessionId.value).filter(([sid]) => validSessionIds.has(sid))
+    )
   }
 
   const hasPendingAttachments = computed(() => pendingAttachments.value.length > 0)
@@ -314,6 +341,7 @@ export function useChatFeature() {
     addPendingAttachment,
     removePendingAttachment,
     clearPendingAttachments,
+    pruneOrphanAttachments,
     createSession: createMappedSession,
     loadSessions,
     selectSession: selectSessionAndRestore,
