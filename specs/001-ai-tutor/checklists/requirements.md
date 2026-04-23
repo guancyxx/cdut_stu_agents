@@ -33,7 +33,7 @@
 
 ### ✅ Passed Items
 
-1. **Content Quality**: 规格说明专注于用户需求和业务价值，没有涉及具体的技术实现细节（除了必要的 youtu-agent 框架提及）
+1. **Content Quality**: Specification focuses on user needs and business value, no unnecessary implementation details
 2. **User Stories**: 5 个用户故事按优先级排序（P1-P4），每个都可独立测试和交付
 3. **Functional Requirements**: 15 个功能需求明确、可测试、无歧义
 4. **Success Criteria**: 10 个成功标准均为可量化指标，且不涉及技术实现

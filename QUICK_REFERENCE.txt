@@ -1,87 +1,71 @@
 ╔════════════════════════════════════════════════════════════════╗
-║           CDUT 竞赛训练系统 - 快速参考卡片                      ║
+║           CDUT Contest Training System - Quick Reference       ║
 ╠════════════════════════════════════════════════════════════════╣
 ║                                                                ║
-║  🌐 访问地址                                                   ║
+║  🌐 Access URLs                                                ║
 ║  ┌──────────────────────────────────────────────────────┐     ║
-║  │ AI 辅导系统:  http://localhost:8848                  │     ║
-║  │ OJ 评测系统:  http://localhost:8000                  │     ║
-║  │ OJ 管理后台:  http://localhost:8000/admin            │     ║
+║  │ AI Chat Frontend:  http://localhost:5173             │     ║
+║  │ AI Agent Health:   http://localhost:8850/healthz     │     ║
+║  │ OJ Backend API:    http://localhost:8000/api         │     ║
+║  │ OJ Admin:          http://localhost:8000/admin       │     ║
 ║  └──────────────────────────────────────────────────────┘     ║
 ║                                                                ║
-║  🔑 默认凭据                                                   ║
+║  🔑 Default Credentials                                        ║
 ║  ┌──────────────────────────────────────────────────────┐     ║
-║  │ 用户名: root                                          │     ║
-║  │ 密码:   rootroot                                      │     ║
-║  │ ⚠️  首次登录后务必修改密码！                          │     ║
+║  │ Username: root                                         │     ║
+║  │ Password: rootroot                                    │     ║
+║  │ ⚠️  Change password on first login!                   │     ║
 ║  └──────────────────────────────────────────────────────┘     ║
 ║                                                                ║
-║  ⚡ 快速命令                                                   ║
+║  ⚡ Quick Commands                                              ║
 ║  ┌──────────────────────────────────────────────────────┐     ║
-║  │ # 启动所有服务                                        │     ║
-║  │ docker-compose up -d                                  │     ║
+║  │ # Start all services                                  │     ║
+║  │ docker compose up -d                                  │     ║
 ║  │                                                        │     ║
-║  │ # 停止所有服务                                        │     ║
-║  │ docker-compose down                                   │     ║
+║  │ # Stop all services                                   │     ║
+║  │ docker compose down                                   │     ║
 ║  │                                                        │     ║
-║  │ # 查看服务状态                                        │     ║
-║  │ docker-compose ps                                     │     ║
+║  │ # Check service status                                │     ║
+║  │ docker compose ps                                     │     ║
 ║  │                                                        │     ║
-║  │ # 查看日志                                            │     ║
-║  │ docker-compose logs -f [服务名]                       │     ║
-║  │                                                        │     ║
-║  │ # 运行集成测试                                        │     ║
-║  │ .\test-integration.ps1                                │     ║
-║  │                                                        │     ║
-║  │ # 从旧版本迁移                                        │     ║
-║  │ .\migrate-to-integrated.ps1                           │     ║
+║  │ # View logs                                           │     ║
+║  │ docker compose logs -f [service]                      │     ║
 ║  └──────────────────────────────────────────────────────┘     ║
 ║                                                                ║
-║  📊 服务列表                                                   ║
+║  📊 Service List                                               ║
 ║  ┌──────────────────────────────────────────────────────┐     ║
-║  │ ✅ cdut-youtu-agent   - AI 辅导系统                   │     ║
-║  │ ✅ cdut-oj-backend    - OJ 后端 (Port: 8000)          │     ║
-║  │ ✅ cdut-oj-judge      - 判题服务器                    │     ║
+║  │ ✅ cdut-vue-ai-chat   - AI Chat Frontend (5173)      │     ║
+║  │ ✅ cdut-ai-agent-lite - AI Agent (8850→8848)         │     ║
+║  │ ✅ cdut-oj-backend    - OJ Backend (8000)             │     ║
+║  │ ✅ cdut-oj-judge      - Judge Server                  │     ║
 ║  │ ✅ cdut-oj-postgres   - PostgreSQL                    │     ║
 ║  │ ✅ cdut-oj-redis      - Redis                         │     ║
 ║  └──────────────────────────────────────────────────────┘     ║
 ║                                                                ║
-║  📚 帮助文档                                                   ║
+║  🔧 Troubleshooting                                            ║
 ║  ┌──────────────────────────────────────────────────────┐     ║
-║  │ INTEGRATION_SUCCESS.md      - 快速参考指南            │     ║
-║  │ INTEGRATED_DEPLOYMENT.md    - 完整部署文档            │     ║
-║  │ INTEGRATION_SUMMARY.md      - 整合完成总结            │     ║
-║  │ INTEGRATION_VERIFICATION.md - 验证报告                │     ║
-║  │ README.md                   - 项目主文档              │     ║
+║  │ Issue: Port in use                                    │     ║
+║  │ Fix:   Edit port mappings in docker-compose.yml       │     ║
+║  │                                                        │     ║
+║  │ Issue: Service won't start                            │     ║
+║  │ Fix:   docker compose logs [service]                  │     ║
+║  │                                                        │     ║
+║  │ Issue: OJ not accessible                             │     ║
+║  │ Fix:   Wait 30s for full startup                     │     ║
+║  │                                                        │     ║
+║  │ Issue: AI Agent can't reach OJ                        │     ║
+║  │ Fix:   docker network inspect cdut-network           │     ║
 ║  └──────────────────────────────────────────────────────┘     ║
 ║                                                                ║
-║  🔧 故障排查                                                   ║
+║  ✨ Key Features                                               ║
 ║  ┌──────────────────────────────────────────────────────┐     ║
-║  │ 问题: 端口被占用                                      │     ║
-║  │ 解决: 修改 docker-compose.yml 中的端口映射            │     ║
-║  │                                                        │     ║
-║  │ 问题: 服务无法启动                                    │     ║
-║  │ 解决: docker-compose logs [服务名] 查看日志           │     ║
-║  │                                                        │     ║
-║  │ 问题: OJ 无法访问                                     │     ║
-║  │ 解决: 等待 30 秒服务完全启动                          │     ║
-║  │                                                        │     ║
-║  │ 问题: AI Agent 连接 OJ 失败                           │     ║
-║  │ 解决: 检查网络 docker network inspect cdut-network    │     ║
-║  └──────────────────────────────────────────────────────┘     ║
-║                                                                ║
-║  ✨ 关键特性                                                   ║
-║  ┌──────────────────────────────────────────────────────┐     ║
-║  │ ✅ 避免使用 80 端口 (改用 8000)                       │     ║
-║  │ ✅ 统一 docker-compose 管理                           │     ║
-║  │ ✅ 自动网络配置                                       │     ║
-║  │ ✅ 数据持久化                                         │     ║
-║  │ ✅ 健康检查                                           │     ║
-║  │ ✅ 一键启动/停止                                      │     ║
+║  │ ✅ Unified docker compose management                  │     ║
+║  │ ✅ Automatic network configuration                    │     ║
+║  │ ✅ Data persistence                                   │     ║
+║  │ ✅ Health check endpoints                             │     ║
+║  │ ✅ One-click start/stop                               │     ║
 ║  └──────────────────────────────────────────────────────┘     ║
 ║                                                                ║
 ╚════════════════════════════════════════════════════════════════╝
 
-打印此卡片或保存到桌面以便快速参考！
-
-版本: v1.0.0 | 更新: 2025-12-02 | 状态: ✅ 生产就绪
+Version: v2.0.0 | Updated: 2026-04-23 | Status: ✅ Production Ready

@@ -1,3 +1,4 @@
+<!-- ARCHIVED: youtu-agent has been removed. References updated to ai-agent-lite. -->
 # ✅ QDUOJ 部署成功总结
 
 ## 🎉 部署状态
@@ -138,7 +139,7 @@ result = client.submit_code(
 ```
 学生
   ↓
-AI 辅导系统 (youtu-agent, Port: 8848)
+AI 辅导系统 (ai-agent-lite, Port: 8848)
   ↓
 QDUOJ API (Port: 80)
   ↓

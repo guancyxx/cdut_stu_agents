@@ -1,3 +1,4 @@
+<!-- ARCHIVED: youtu-agent has been removed. References updated to ai-agent-lite. -->
 # 🎉 整合部署成功！
 
 ## ✅ 当前状态
@@ -10,7 +11,7 @@
 
 | 服务 | URL | 说明 |
 |------|-----|------|
-| **AI 辅导系统** | http://localhost:8848 | youtu-agent WebUI |
+| **AI 辅导系统** | http://localhost:8848 | ai-agent-lite WebUI |
 | **OJ 评测系统** | http://localhost:8000 | QDUOJ 主页 |
 | **OJ 管理后台** | http://localhost:8000/admin | 管理员面板 |
 
@@ -20,7 +21,7 @@
 ## 📊 服务状态
 
 ```
-✅ cdut-youtu-agent  - AI 辅导系统 (Port: 8848)
+✅ cdut-ai-agent-lite  - AI 辅导系统 (Port: 8848)
 ✅ cdut-oj-backend   - OJ 后端服务 (Port: 8000)
 ✅ cdut-oj-judge     - 判题服务器
 ✅ cdut-oj-postgres  - PostgreSQL 数据库
@@ -37,7 +38,7 @@ docker-compose ps
 ### 查看日志
 ```powershell
 # AI Agent 日志
-docker-compose logs -f youtu-agent
+docker-compose logs -f ai-agent-lite
 
 # OJ 后端日志
 docker-compose logs -f oj-backend
@@ -55,7 +56,7 @@ docker-compose logs -f
 docker-compose restart
 
 # 重启单个服务
-docker-compose restart youtu-agent
+docker-compose restart ai-agent-lite
 docker-compose restart oj-backend
 ```
 
@@ -161,7 +162,7 @@ print(f"Judge Result: {status['data']['result']}")
 
 | 服务 | 镜像 | 端口映射 |
 |------|------|---------|
-| youtu-agent | 本地构建 | 8848:8848 |
+| ai-agent-lite | 本地构建 | 8848:8848 |
 | oj-backend | registry.cn-hongkong.aliyuncs.com/oj-image/backend:1.6.1 | 8000:8000 |
 | oj-judge | registry.cn-hongkong.aliyuncs.com/oj-image/judge:1.6.1 | - |
 | oj-postgres | postgres:10-alpine | - |
@@ -212,7 +213,7 @@ Remove-Item -Recurse -Force .\data\*, .\qduoj\data\*
 检查网络连通性：
 ```powershell
 # 测试内部连接
-docker exec cdut-youtu-agent curl http://oj-backend:8000/api/website
+docker exec cdut-ai-agent-lite curl http://oj-backend:8000/api/website
 
 # 查看网络配置
 docker network inspect cdut_stu_agents_cdut-network

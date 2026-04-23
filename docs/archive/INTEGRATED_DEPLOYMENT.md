@@ -1,3 +1,4 @@
+<!-- ARCHIVED: youtu-agent has been removed. References updated to ai-agent-lite. -->
 # 🚀 CDUT 竞赛训练系统 - 整合部署指南
 
 ## 📋 系统架构
@@ -11,7 +12,7 @@
 │                                                          │
 │  ┌──────────────────┐         ┌──────────────────┐     │
 │  │  AI 辅导系统      │◄───────►│  OJ 评测系统      │     │
-│  │  (youtu-agent)   │         │  (QDUOJ)         │     │
+│  │  (ai-agent-lite)   │         │  (QDUOJ)         │     │
 │  │  Port: 8848      │         │  Port: 8000      │     │
 │  └──────────────────┘         └──────────────────┘     │
 │         │                              │                │
@@ -35,7 +36,7 @@
 
 | 服务名称 | 容器名称 | 端口 | 描述 |
 |---------|---------|------|------|
-| youtu-agent | cdut-youtu-agent | 8848 | AI 辅导对话系统 |
+| ai-agent-lite | cdut-ai-agent-lite | 8848 | AI 辅导对话系统 |
 | oj-backend | cdut-oj-backend | 8000 | OJ 后端 API + Web 界面 |
 | oj-judge | cdut-oj-judge | - | 判题服务器（内部） |
 | oj-postgres | cdut-oj-postgres | - | PostgreSQL 数据库 |
@@ -110,14 +111,14 @@ docker-compose down
 docker-compose restart
 
 # 重启单个服务
-docker-compose restart youtu-agent
+docker-compose restart ai-agent-lite
 docker-compose restart oj-backend
 
 # 查看服务状态
 docker-compose ps
 
 # 查看服务日志
-docker-compose logs -f youtu-agent
+docker-compose logs -f ai-agent-lite
 docker-compose logs -f oj-backend
 docker-compose logs -f oj-judge
 ```
@@ -161,14 +162,14 @@ docker-compose restart oj-judge
 docker stats
 
 # 查看特定服务的资源使用
-docker stats cdut-youtu-agent cdut-oj-backend cdut-oj-judge
+docker stats cdut-ai-agent-lite cdut-oj-backend cdut-oj-judge
 ```
 
 ### 查看详细日志
 
 ```powershell
 # AI Agent 日志
-docker-compose logs -f --tail=100 youtu-agent
+docker-compose logs -f --tail=100 ai-agent-lite
 
 # OJ 后端日志
 docker-compose logs -f --tail=100 oj-backend
@@ -187,7 +188,7 @@ docker-compose logs -f
 
 ```powershell
 # 进入 AI Agent 容器
-docker exec -it cdut-youtu-agent /bin/bash
+docker exec -it cdut-ai-agent-lite /bin/bash
 
 # 进入 OJ 后端容器
 docker exec -it cdut-oj-backend /bin/sh
@@ -328,16 +329,16 @@ docker-compose restart oj-judge
 **检查**:
 ```powershell
 # 1. 检查网络连通性
-docker exec cdut-youtu-agent ping -c 3 oj-backend
+docker exec cdut-ai-agent-lite ping -c 3 oj-backend
 
 # 2. 测试 API 访问
-docker exec cdut-youtu-agent curl http://oj-backend:8000/api/website
+docker exec cdut-ai-agent-lite curl http://oj-backend:8000/api/website
 
 # 3. 检查 .env 配置
 cat .env | Select-String "OJ_API_URL"
 
 # 4. 查看 AI Agent 日志
-docker-compose logs youtu-agent | Select-String "OJ"
+docker-compose logs ai-agent-lite | Select-String "OJ"
 ```
 
 ## 🔐 安全建议
@@ -385,7 +386,7 @@ cdut_stu_agents/
 ├── custom_agents/              # 自定义 AI Agent
 │   └── tools/
 │       └── qduoj_client.py     # OJ API 客户端
-└── youtu-agent/                # Youtu-agent 源码
+└── ai-agent-lite/                # ai-agent-lite 源码
 ```
 
 ## 🎓 后续开发
@@ -426,7 +427,7 @@ cdut_stu_agents/
 3. 检查 GitHub Issues
 4. 查阅官方文档：
    - [QDUOJ 文档](http://opensource.qduoj.com/)
-   - [Youtu-agent 文档](https://github.com/tencent/youtu-agent)
+   - [ai-agent-lite 文档](https://github.com/tencent/ai-agent-lite)
 
 ---
 

@@ -1,3 +1,4 @@
+<!-- ARCHIVED: youtu-agent has been removed. References updated to ai-agent-lite. -->
 # 🎉 集成部署完成总结
 
 ## ✅ 完成状态
@@ -16,7 +17,7 @@
 
 **现在的架构**:
 - **统一的 `docker-compose.yml`** - 包含所有服务
-  - youtu-agent (AI Agent)
+  - ai-agent-lite (AI Agent)
   - oj-backend (QDUOJ 后端)
   - oj-judge (判题服务器)
   - oj-postgres (数据库)
@@ -149,7 +150,7 @@ JUDGE_SERVER_TOKEN=cdut-secure-token-2024      # 判题令牌
 
 ```yaml
 services:
-  youtu-agent:    # AI Agent (Port: 8848)
+  ai-agent-lite:    # AI Agent (Port: 8848)
   oj-backend:     # OJ 后端 (Port: 8000, 原 80)
   oj-judge:       # 判题服务器
   oj-postgres:    # PostgreSQL 10
@@ -160,7 +161,7 @@ services:
 
 ```
 NAME                STATUS
-cdut-youtu-agent    Up (healthy)
+cdut-ai-agent-lite    Up (healthy)
 cdut-oj-backend     Up (healthy)
 cdut-oj-judge       Up (healthy)
 cdut-oj-postgres    Up

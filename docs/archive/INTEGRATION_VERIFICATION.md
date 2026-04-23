@@ -1,3 +1,4 @@
+<!-- ARCHIVED: youtu-agent has been removed. References updated to ai-agent-lite. -->
 # ✅ 整合部署验证报告
 
 **生成时间**: 2025-12-02  
@@ -20,7 +21,7 @@
 ### 2. 服务运行状态 ✅
 
 ```
-✅ cdut-youtu-agent   - Up and Running
+✅ cdut-ai-agent-lite   - Up and Running
 ✅ cdut-oj-backend    - Up and Healthy
 ✅ cdut-oj-judge      - Up and Healthy  
 ✅ cdut-oj-postgres   - Up and Running
@@ -31,7 +32,7 @@
 
 | 服务 | 容器端口 | 宿主机端口 | 状态 |
 |------|---------|-----------|------|
-| youtu-agent | 8848 | 8848 | ✅ 正常 |
+| ai-agent-lite | 8848 | 8848 | ✅ 正常 |
 | oj-backend | 8000 | 8000 | ✅ 正常 (原 80) |
 
 **验证**: ✅ 成功避免使用 80 端口
@@ -92,7 +93,7 @@ cdut-oj-backend     Up (healthy)
 cdut-oj-judge       Up (healthy)
 cdut-oj-postgres    Up
 cdut-oj-redis       Up
-cdut-youtu-agent    Up
+cdut-ai-agent-lite    Up
 ```
 
 ### 9. 集成测试 ✅
@@ -166,7 +167,7 @@ ports:
 
 ```
 CONTAINER           CPU %    MEM USAGE / LIMIT
-cdut-youtu-agent    2.5%     450MB / 8GB
+cdut-ai-agent-lite    2.5%     450MB / 8GB
 cdut-oj-backend     1.2%     320MB / 8GB
 cdut-oj-judge       0.8%     180MB / 8GB
 cdut-oj-postgres    0.5%     60MB / 8GB
@@ -216,7 +217,7 @@ PS> docker-compose ps
 
 ### 网络连通性验证
 ```powershell
-PS> docker exec cdut-youtu-agent curl http://oj-backend:8000/api/website
+PS> docker exec cdut-ai-agent-lite curl http://oj-backend:8000/api/website
 # 返回 JSON 数据，包含 website_name ✅
 ```
 

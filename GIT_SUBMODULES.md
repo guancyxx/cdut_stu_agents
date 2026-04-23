@@ -1,148 +1,143 @@
-# Git 子模块使用指南
+# Git Submodule Usage Guide
 
-本项目使用Git子模块管理三个主要组件。
+This project uses Git submodules to manage two external components.
 
-## 📦 子模块列表
+## Submodule List
 
-| 子模块 | 仓库地址 | 用途 |
-|--------|---------|------|
-| youtu-agent | https://github.com/TencentCloudADP/youtu-agent.git | AI Agent框架 |
-| qduoj | https://github.com/QingdaoU/OnlineJudgeDeploy.git | OJ系统部署配置 |
-| fps-problems | https://github.com/zhblue/freeproblemset.git | FPS题库（609题） |
+| Submodule | Repository | Purpose |
+|-----------|-----------|---------|
+| qduoj | https://github.com/QingdaoU/OnlineJudgeDeploy.git | OJ system deployment config |
+| fps-problems | https://github.com/zhblue/freeproblemset.git | FPS problem set (609 problems) |
 
-## 🚀 首次克隆项目
+## Initial Clone
 
 ```bash
-# 克隆主仓库及所有子模块
+# Clone with all submodules
 git clone --recursive git@github.com:guancyxx/cdut_stu_agents.git
 
-# 或者，如果已经克隆了主仓库
+# Or, if already cloned
 git clone git@github.com:guancyxx/cdut_stu_agents.git
 cd cdut_stu_agents
 git submodule update --init --recursive
 ```
 
-## 🔄 更新子模块
+## Update Submodules
 
-### 更新所有子模块到最新版本
+### Update all submodules to latest
 
 ```bash
 git submodule update --remote --merge
 ```
 
-### 更新特定子模块
+### Update a specific submodule
 
 ```bash
-# 更新youtu-agent到最新
-git submodule update --remote youtu-agent
-
-# 更新qduoj到最新
+# Update qduoj
 git submodule update --remote qduoj
 
-# 更新fps-problems到最新
+# Update fps-problems
 git submodule update --remote fps-problems
 ```
 
-### 拉取主仓库和子模块的更新
+### Pull updates for main repo and submodules
 
 ```bash
-# 拉取主仓库更新
+# Pull main repo updates
 git pull
 
-# 同步子模块到主仓库指定的提交
+# Sync submodules to the commit specified by main repo
 git submodule update --init --recursive
 ```
 
-## 📝 查看子模块状态
+## Check Submodule Status
 
 ```bash
-# 查看所有子模块状态
+# View all submodule statuses
 git submodule status
 
-# 查看子模块的具体提交信息
+# View latest commit for each submodule
 git submodule foreach git log --oneline -1
 ```
 
-## ⚠️ 注意事项
+## Notes
 
-### 1. 子模块工作目录是独立的
-- 进入子模块目录后，它是一个独立的git仓库
-- 在子模块内的修改不会自动影响主仓库
+### 1. Submodule working directories are independent
+- Once inside a submodule directory, it is an independent git repo
+- Changes inside a submodule do not automatically affect the main repo
 
-### 2. 修改子模块内容
+### 2. Modifying submodule content
 
 ```bash
-# 进入子模块
-cd youtu-agent
+# Enter the submodule
+cd qduoj
 
-# 查看当前分支（通常处于detached HEAD状态）
+# Check current branch (usually detached HEAD)
 git branch
 
-# 切换到主分支进行开发
+# Switch to main branch for development
 git checkout main
 
-# 进行修改、提交
+# Make changes, commit
 git add .
-git commit -m "修改说明"
+git commit -m "description of changes"
 
-# 回到主仓库
+# Return to main repo
 cd ..
 
-# 更新主仓库的子模块引用
-git add youtu-agent
-git commit -m "更新youtu-agent子模块引用"
+# Update the submodule reference in main repo
+git add qduoj
+git commit -m "update qduoj submodule reference"
 ```
 
-### 3. 切换分支时同步子模块
+### 3. Sync submodules when switching branches
 
 ```bash
-# 切换分支
+# Switch branch
 git checkout <branch-name>
 
-# 同步子模块（重要！）
+# Sync submodules (important!)
 git submodule update --init --recursive
 ```
 
-## 🔧 常见问题
+## Common Issues
 
-### 问题1：子模块目录为空
+### Issue: Submodule directory is empty
 
 ```bash
-# 初始化并更新所有子模块
+# Initialize and update all submodules
 git submodule update --init --recursive
 ```
 
-### 问题2：子模块处于detached HEAD状态
+### Issue: Submodule in detached HEAD state
 
-这是正常的。子模块默认指向特定的提交，而不是分支。如需修改：
+This is normal. Submodules default to pointing at a specific commit, not a branch. To modify:
 
 ```bash
 cd <submodule-directory>
-git checkout main  # 或其他分支
+git checkout main  # or other branch
 ```
 
-### 问题3：删除子模块
+### Issue: Remove a submodule
 
 ```bash
-# 1. 从.gitmodules删除配置
+# 1. Remove from .gitmodules
 git config -f .gitmodules --remove-section submodule.<submodule-name>
 
-# 2. 从.git/config删除配置
+# 2. Remove from .git/config
 git config -f .git/config --remove-section submodule.<submodule-name>
 
-# 3. 从暂存区删除
+# 3. Remove from staging
 git rm --cached <submodule-path>
 
-# 4. 删除物理目录
+# 4. Delete the physical directory
 rm -rf <submodule-path>
 rm -rf .git/modules/<submodule-name>
 
-# 5. 提交更改
-git commit -m "删除子模块 <submodule-name>"
+# 5. Commit the change
+git commit -m "remove submodule <submodule-name>"
 ```
 
-## 📚 更多资源
+## References
 
-- [Git子模块官方文档](https://git-scm.com/book/zh/v2/Git-%E5%B7%A5%E5%85%B7-%E5%AD%90%E6%A8%A1%E5%9D%97)
-- [youtu-agent文档](https://github.com/TencentCloudADP/youtu-agent)
-- [QDUOJ文档](https://github.com/QingdaoU/OnlineJudge)
+- [Git Submodules Official Documentation](https://git-scm.com/book/en/v2/Git-Tools-Submodules)
+- [QDUOJ Documentation](https://github.com/QingdaoU/OnlineJudge)
