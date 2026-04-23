@@ -1,14 +1,19 @@
 import { fileURLToPath, URL } from 'node:url'
-
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
-import vueDevTools from 'vite-plugin-vue-devtools'
 
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [
-    vue(),
-    vueDevTools(),
+    vue({
+      // Disable vue inspector to avoid template parsing errors
+      template: {
+        compilerOptions: {
+          // Disable某些可能导致问题的特性
+          whitespace: 'preserve'
+        }
+      }
+    }),
   ],
   resolve: {
     alias: {

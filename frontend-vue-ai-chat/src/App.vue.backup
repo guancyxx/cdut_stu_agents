@@ -526,6 +526,7 @@ onBeforeUnmount(() => {
           <div class="error" v-if="ojUser.error">{{ ojUser.error }}</div>
         </div>
       </div>
+    </section>
 
     <section class="profile-screen" v-else-if="isProfileTab">
       <div class="profile-page card">
