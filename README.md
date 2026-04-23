@@ -29,9 +29,6 @@ AI-powered programming contest training platform built on a lightweight FastAPI 
 +---+----+ +----+---+
 | Postgres| | Redis  |
 +---------+ +--------+
-
-Legacy: youtu-agent (Port 8848) still runs in docker-compose
-        but frontend no longer routes to it.
 ```
 
 ## Services
@@ -40,7 +37,6 @@ Legacy: youtu-agent (Port 8848) still runs in docker-compose
 |----------------------|----------------------|-----------|---------------|---------|
 | frontend-vue-ai-chat | cdut-vue-ai-chat     | 5173      | 5173          | Active  |
 | ai-agent-lite        | cdut-ai-agent-lite   | 8850      | 8848          | Active  |
-| youtu-agent          | cdut-youtu-agent     | 8848      | 8848          | Legacy  |
 | QDUOJ Backend        | cdut-oj-backend      | 8000      | 8000          | Active  |
 | QDUOJ Judge Server   | cdut-oj-judge        | -         | 8080          | Active  |
 | PostgreSQL           | cdut-oj-postgres     | -         | 5432          | Active  |
@@ -63,10 +59,9 @@ cdut_stu_agents/
 |   |   +-- components/         # CodeEditor, ...
 |   +-- vite.config.js          # /ws -> ai-agent-lite, /oj-api -> oj-backend
 |   +-- Dockerfile
-+-- youtu-agent/                # Legacy AI agent (保留, deprecated)
 +-- qduoj/                      # QDUOJ deployment config & persistent data
 +-- fps-problems/               # FPS problem set (609 problems)
-+-- custom_agents/              # Legacy custom agent configs
++-- custom_agents/              # Custom agent configs
 +-- scripts/                    # Utility scripts (test case import, etc.)
 +-- specs/                      # Feature specifications
 |   +-- 001-ai-tutor/spec.md    # AI tutor feature spec
@@ -116,6 +111,7 @@ Default admin: `root` / `rootroot` (change on first login)
 - Backend: FastAPI + uvicorn (Python 3.11)
 - LLM: DeepSeek-V3 (via OpenAI-compatible API)
 - Protocol: WebSocket (raw/finish/error messages)
+- Persistence: PostgreSQL (ai_agent schema)
 
 ### Frontend
 - Framework: Vue 3 + Vite
@@ -163,7 +159,7 @@ docker compose exec oj-backend bash
 - [x] FPS problem import (609 problems, 24 with test data)
 - [x] AI chat WebSocket protocol (raw/finish/error)
 - [x] Vue 3 frontend with chat + problem panel + OJ submit
-- [x] ai-agent-lite replacing youtu-agent (coexisting migration)
+- [x] ai-agent-lite service operational
 
 ### Phase 2: Stability (in progress)
 - [ ] Persistent session and message storage (Postgres)

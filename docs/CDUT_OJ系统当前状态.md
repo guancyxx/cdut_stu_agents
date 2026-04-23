@@ -21,7 +21,6 @@
 |----------------------|-------------------|--------|
 | cdut-vue-ai-chat     | Frontend          | Active |
 | cdut-ai-agent-lite   | AI Agent          | Active |
-| cdut-youtu-agent     | Legacy AI Agent   | Running (unused by frontend) |
 | cdut-oj-backend      | OJ Backend        | Active |
 | cdut-oj-judge        | Judge Server      | Active |
 | cdut-oj-postgres     | PostgreSQL        | Active |
@@ -71,7 +70,7 @@
 - [x] Multi test-case support
 
 ### 6. AI Chat System
-- [x] ai-agent-lite (FastAPI) replacing youtu-agent
+- [x] ai-agent-lite (FastAPI) as the sole AI agent
 - [x] Vue 3 frontend with chat + problem panel
 - [x] WebSocket streaming (raw/finish/error)
 - [x] OJ problem browsing + code submission in chat UI

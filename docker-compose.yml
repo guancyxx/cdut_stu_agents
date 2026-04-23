@@ -1,34 +1,5 @@
 services:
   # ==================== AI Agent 服务 ====================
-  youtu-agent:
-    build:
-      context: .
-      dockerfile: Dockerfile.youtu-agent
-    container_name: cdut-youtu-agent
-    ports:
-      - "8848:8848"
-    volumes:
-      # 环境配置文件
-      - ./.env:/youtu-agent/.env
-      # 数据持久化目录
-      - ./data/submissions:/youtu-agent/data/submissions
-      - ./data/training:/youtu-agent/data/training
-      - ./data/chat_history:/youtu-agent/data/chat_history
-      - ./data/problems:/youtu-agent/data/problems
-      # 自定义配置和代码
-      - ./youtu-agent/configs:/youtu-agent/configs
-      - ./custom_agents:/youtu-agent/custom_agents
-    environment:
-      - TZ=Asia/Shanghai
-      - OJ_API_URL=http://oj-backend:8000
-    env_file:
-      - .env
-    depends_on:
-      - oj-backend
-    restart: unless-stopped
-    networks:
-      - cdut-network
-
   ai-agent-lite:
     build:
       context: ./ai-agent-lite

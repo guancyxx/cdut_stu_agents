@@ -1,6 +1,6 @@
 # ai-agent-lite
 
-Lightweight FastAPI AI agent replacing youtu-agent. Streams LLM responses over WebSocket, compatible with the frontend-vue-ai-chat composable protocol.
+Lightweight FastAPI AI agent powering the CDUT Student Training System. Streams LLM responses over WebSocket, compatible with the frontend-vue-ai-chat composable protocol.
 
 ## Quick Start (Docker)
 
@@ -17,7 +17,7 @@ curl http://127.0.0.1:8850/healthz
 ```bash
 pip install -r requirements.txt
 LITE_LLM_BASE_URL=https://api.deepseek.com/v1 \
-LITE_LLM_API_KEY=your-key \
+LITE_LLM_API_KEY=*** \
 LITE_LLM_MODEL=deepseek-chat \
 uvicorn app.main:app --port 8848
 ```
@@ -84,7 +84,7 @@ Otherwise the agent runs in mock mode (echo responses).
 
 In docker-compose, these are mapped from .env UTU_LLM_* vars:
 - LITE_LLM_BASE_URL=${UTU_LLM_BASE_URL}
-- LITE_LLM_API_KEY=${UTU_LLM_API_KEY}
+- LITE_LLM_API_KEY=${UTU_...KEY}
 - LITE_LLM_MODEL=${UTU_LLM_MODEL}
 
 ## Session Storage

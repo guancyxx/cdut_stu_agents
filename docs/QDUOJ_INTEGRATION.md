@@ -24,8 +24,6 @@ QDUOJ Backend (Django, port 8000)
   +-- Redis (port 6379 internal)
 ```
 
-Legacy: youtu-agent (port 8848) runs in docker-compose but frontend no longer routes to it.
-
 ## Integration Points
 
 ### 1. OJ API (Backend -> Frontend)

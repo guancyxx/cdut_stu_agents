@@ -207,8 +207,8 @@ python test_qduoj_api.py
 
 ```yaml
 services:
-  youtu-agent:
-    # ... 现有配置 ...
+  ai-agent-lite:
+    # ... existing config ...
     environment:
       - OJ_API_URL=http://host.docker.internal
     extra_hosts:

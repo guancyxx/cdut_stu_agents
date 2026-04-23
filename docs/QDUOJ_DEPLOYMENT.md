@@ -73,21 +73,21 @@ docker build -t qduoj-frontend:local .
 先专注于 AI Agent 开发，OJ 集成后续添加：
 
 ```powershell
-# 只启动 AI Agent
-docker-compose up -d youtu-agent
+# Only start the AI agent
+docker-compose up -d ai-agent-lite
 
-# 访问 AI 辅导系统
-# http://localhost:8848
+# Access AI tutoring system
+# http://localhost:8850/healthz
 ```
 
 ## 推荐方案
 
 ### 现阶段（开发 AI 功能）
 
-1. **先启动 AI Agent**：
+1. **Start AI Agent service**:
    ```powershell
-   # 修改 docker-compose.yml，注释掉 OJ 相关服务
-   docker-compose up -d youtu-agent
+   # Comment out OJ services in docker-compose.yml if needed
+   docker-compose up -d ai-agent-lite
    ```
 
 2. **完成 AI 辅导系统的核心功能**：

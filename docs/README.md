@@ -73,7 +73,7 @@ docs/
 - OK  ai-agent-lite readiness and metrics endpoints enabled
 - OK  609 problems imported, 24 with test data
 - OK  Frontend (vue-ai-chat) serving on port 5173
-- INFO  youtu-agent runs but frontend no longer routes to it
+- INFO  ai-agent-lite is the sole AI agent service
 
 ---
 
