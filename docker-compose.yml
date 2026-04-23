@@ -9,6 +9,7 @@ services:
       - "8850:8848"
     volumes:
       - ./.env:/app/.env
+      - ./ai-agent-lite/app:/app/app  # 热更新源代码
       - ./data/submissions:/app/data/submissions
       - ./data/training:/app/data/training
       - ./data/chat_history:/app/data/chat_history

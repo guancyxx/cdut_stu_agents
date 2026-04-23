@@ -13,6 +13,7 @@ Vue 3 + Vite frontend for the CDUT AI tutor system. Provides chat interface with
 - Direct OJ submission from chat interface
 - Problem detail display (description, samples, constraints)
 - Per-session OJ submit drafts (language + code + state preserved across session switches)
+- Staged attachment flow: "发给AI" button stages code and submission results as attachment chips above chat input; user reviews and clicks 发送 to deliver
 
 ## Architecture
 
@@ -48,6 +49,23 @@ npm run dev
 | useChatFeature | Chat logic: send message, handle streaming response |
 | useSessions | Session list CRUD, current session tracking |
 | useOjAuthAndProblems | OJ login, problem fetch, problem detail |
+
+## Staged Attachment Flow
+
+The "发给AI" button in the OJ submission panel does **not** send immediately. Instead:
+
+1. Clicking "发给AI" builds one or more attachment objects and adds them to `pendingAttachments`.
+2. Attachments appear as removable chips above the chat input textarea.
+3. The 发送 button becomes active when there are pending attachments (with or without text).
+4. On send, attachments are encoded into the user message as `[Attachment] filename` headers with fenced code blocks, then cleared.
+5. If a previous submission result (success/error) exists, it is also staged as an attachment alongside the code.
+
+Attachment object shape:
+```js
+{ filename: string, content: string, type: 'code' | 'result' }
+```
+
+This flow gives users a chance to review before sending and allows combining code + result in a single message.
 
 ## OJ Integration
 

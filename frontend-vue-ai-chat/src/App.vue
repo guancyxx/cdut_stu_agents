@@ -85,6 +85,11 @@ const {
   sessions,
   currentSessionId,
   messages,
+  pendingAttachments,
+  hasPendingAttachments,
+  addPendingAttachment,
+  removePendingAttachment,
+  clearPendingAttachments,
   loadSessions,
   selectSession,
   selectOrCreateProblemSession,
@@ -340,11 +345,18 @@ const handleSubmitCode = async () => {
   })
 
   activeSubmitState.value = mapSubmissionLabelToUiMessage(result)
+
+  // Auto-stage submission result as attachment when a result is available
+  if (activeSubmitState.value.message) {
+    addPendingAttachment({
+      filename: 'submit-result.txt',
+      content: `[${activeSubmitState.value.type?.toUpperCase() || 'INFO'}] ${activeSubmitState.value.message}`,
+      type: 'result'
+    })
+  }
 }
 
 const handleSubmitCodeToAi = () => {
-  activeSubmitState.value = { type: '', message: '' }
-
   if (!selectedProblem.value) {
     activeSubmitState.value = { type: 'error', message: 'Please select a problem first.' }
     return
@@ -358,19 +370,28 @@ const handleSubmitCodeToAi = () => {
     return
   }
 
-  const prompt = [
-    `Please review and improve this OJ solution for problem ${selectedProblem.value._id} ${selectedProblem.value.title}.`,
-    '',
-    'Problem description:',
-    selectedProblemDescription.value,
-    '',
-    `Language: ${activeSubmitLanguage.value}`,
-    'Code:',
-    normalizedCode
-  ].join('\n')
+  // Capture previous submit state BEFORE resetting
+  const previousResult = activeSubmitState.value
 
-  input.value = prompt
-  activeSubmitState.value = { type: 'info', message: 'Code has been sent to AI input box. Click 发送 to continue.' }
+  // Stage code as attachment
+  const language = activeSubmitLanguage.value
+  const codeFilename = `${language.toLowerCase().replace('3', '')}_${selectedProblem.value._id}.${language === 'C++' ? 'cpp' : language === 'C' ? 'c' : language === 'Java' ? 'java' : 'py'}`
+  addPendingAttachment({
+    filename: codeFilename,
+    content: normalizedCode,
+    type: 'code'
+  })
+
+  // If there is a submission result (success or error), stage it as attachment too
+  if (previousResult && previousResult.message) {
+    addPendingAttachment({
+      filename: 'submit-result.txt',
+      content: `[${previousResult.type?.toUpperCase() || 'INFO'}] ${previousResult.message}`,
+      type: 'result'
+    })
+  }
+
+  activeSubmitState.value = { type: 'info', message: 'Attachment staged. Click 发送 in chat when ready.' }
 }
 
 watch(
@@ -576,12 +597,25 @@ onBeforeUnmount(() => {
         </main>
 
         <footer class="chat-input-area">
-          <textarea
-            v-model="input"
-            placeholder="请输入你的问题，Enter发送，Shift+Enter换行"
-            @keydown.enter.exact.prevent="sendMessage"
-          />
-          <button :disabled="sending || !input.trim()" @click="sendMessage">发送</button>
+          <div class="pending-attachments" v-if="pendingAttachments.length">
+            <div
+              v-for="(att, idx) in pendingAttachments"
+              :key="idx"
+              class="attachment-chip"
+              :class="att.type"
+            >
+              <span class="chip-filename">{{ att.filename }}</span>
+              <button class="chip-remove" type="button" @click="removePendingAttachment(idx)">&times;</button>
+            </div>
+          </div>
+          <div class="chat-input-row">
+            <textarea
+              v-model="input"
+              placeholder="请输入你的问题，Enter发送，Shift+Enter换行"
+              @keydown.enter.exact.prevent="sendMessage"
+            />
+            <button :disabled="sending || (!input.trim() && !hasPendingAttachments)" @click="sendMessage">发送</button>
+          </div>
         </footer>
       </section>
 

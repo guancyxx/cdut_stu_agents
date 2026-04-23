@@ -1,4 +1,4 @@
-import { nextTick, ref } from 'vue'
+import { computed, nextTick, ref } from 'vue'
 import { useSessions } from './useSessions'
 import { useChatSocket } from './useChatSocket'
 import { validateChatInput } from '../utils/validators'
@@ -50,10 +50,52 @@ const saveHistoryToLocalStorage = (youtuSessionId, messages = []) => {
   localStorage.setItem(createHistoryStorageKey(youtuSessionId), JSON.stringify(sanitized))
 }
 
+const LANGUAGE_EXTENSIONS = {
+  'C++': 'cpp',
+  'C': 'c',
+  'Java': 'java',
+  'Python3': 'py'
+}
+
+const buildCodeFilename = (language) => {
+  const ext = LANGUAGE_EXTENSIONS[language] || 'txt'
+  return `solution.${ext}`
+}
+
+const buildResultFilename = () => 'submit-result.txt'
+
 export function useChatFeature() {
   const input = ref('')
   const listRef = ref(null)
   const sending = ref(false)
+  const pendingAttachments = ref([])
+
+  const addPendingAttachment = (attachment) => {
+    if (!attachment || !attachment.filename || !attachment.content) return
+
+    const type = attachment.type || 'code'
+    const existing = pendingAttachments.value.find(
+      (item) => item.filename === attachment.filename
+    )
+    if (existing) {
+      existing.content = attachment.content
+      existing.type = type
+      return
+    }
+    pendingAttachments.value.push({ ...attachment, type })
+  }
+
+  const removePendingAttachment = (index) => {
+    if (index >= 0 && index < pendingAttachments.value.length) {
+      pendingAttachments.value.splice(index, 1)
+    }
+  }
+
+  const clearPendingAttachments = () => {
+    pendingAttachments.value = []
+  }
+
+  const hasPendingAttachments = computed(() => pendingAttachments.value.length > 0)
 
   const {
     sessions,
@@ -185,22 +227,54 @@ export function useChatFeature() {
     await socketDriver.sendQuery(structuredPrompt, { targetSessionId })
   }
 
+  const encodeAttachmentsAsText = (attachments, textBody = '') => {
+    const parts = []
+
+    if (textBody.trim()) {
+      parts.push(textBody.trim())
+    }
+
+    for (const attachment of attachments) {
+      const label = attachment.type === 'result' ? 'Submission Result' : 'Code'
+      parts.push(`[Attachment] ${attachment.filename}`)
+      parts.push(`\`\`\`${attachment.filename.split('.').pop()}`)
+      parts.push(attachment.content)
+      parts.push('```')
+      parts.push('')
+    }
+
+    return parts.join('\n')
+  }
+
   const sendMessage = async () => {
     if (sending.value || !currentSession.value) return
 
-    const validation = validateChatInput(input.value)
-    if (!validation.valid) return
+    const hasText = input.value.trim().length > 0
+    if (!hasText && !hasPendingAttachments.value) return
+
+    const attachments = [...pendingAttachments.value]
+    const textBody = input.value.trim()
+
+    let finalContent = ''
+    if (attachments.length > 0) {
+      finalContent = encodeAttachmentsAsText(attachments, textBody)
+    } else {
+      const validation = validateChatInput(textBody)
+      if (!validation.valid) return
+      finalContent = validation.value
+    }
 
     appendMessageToSession(currentSessionId.value, {
       role: 'user',
-      content: validation.value,
+      content: finalContent,
       time: createTimeLabel()
     })
     syncSessionHistoryCache(currentSessionId.value)
 
     input.value = ''
+    clearPendingAttachments()
     await scrollToBottom()
-    await socketDriver.sendQuery(validation.value)
+    await socketDriver.sendQuery(finalContent)
   }
 
   const ensureSessionMetadata = (sessionId, partialMeta = {}) => {
@@ -235,6 +309,11 @@ export function useChatFeature() {
     sessions,
     currentSessionId,
     messages,
+    pendingAttachments,
+    hasPendingAttachments,
+    addPendingAttachment,
+    removePendingAttachment,
+    clearPendingAttachments,
     createSession: createMappedSession,
     loadSessions,
     selectSession: selectSessionAndRestore,

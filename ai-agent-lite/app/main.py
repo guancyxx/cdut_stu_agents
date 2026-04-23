@@ -25,13 +25,19 @@ from app.llm_client import LlmClient
 from app.metrics import ws_connections_active, ws_messages_total, llm_request_duration_seconds, llm_errors_total, db_operations_total, metrics_text
 from app.middleware import RequestMiddleware
 from app.repositories import session_repo, message_repo
+from app.supervisor import Supervisor, AgentType
+from app.workers import CodeReviewerAgent, ProblemAnalyzerAgent, ContestCoachAgent, LearningPartnerAgent, LearningManagerAgent
+from app.state_manager import state_manager
 
 logger = logging.getLogger("ai-agent-lite")
 
 llm = LlmClient()
 
-# Max history messages to include in LLM context
-MAX_CONTEXT_MESSAGES = 60
+# Supervisor configuration
+SUPERVISOR_ENABLED = True
+MAX_CONTEXT_MESSAGES = 20
+STATE_PERSISTENCE_INTERVAL = 60  # seconds
+EMOTION_ANALYSIS_ENABLED = True
 
 
 @asynccontextmanager
@@ -220,16 +226,21 @@ async def ws_handler(websocket: WebSocket) -> None:
                         session_id=session_id, user_id=user_id,
                         detail={"is_new": is_new})
 
-        # Send init
-        await websocket.send_json({
-            "type": "init",
-            "data": {
-                "type": "init",
-                "default_agent": "ai-agent-lite",
-                "agent_type": "simple",
-                "sub_agents": None,
-                "session_id": str(session_id),
-            },
+        # Initialize supervisor and workers
+        supervisor = Supervisor(llm)
+        workers = {
+            AgentType.CODE_REVIEWER: CodeReviewerAgent(llm),
+            AgentType.PROBLEM_ANALYZER: ProblemAnalyzerAgent(llm),
+            AgentType.CONTEST_COACH: ContestCoachAgent(llm),
+            AgentType.LEARNING_PARTNER: LearningPartnerAgent(llm),
+            AgentType.LEARNING_MANAGER: LearningManagerAgent(llm)
+        }
+        
+        # Load or initialize state
+        current_state = await state_manager.load_state(str(session_id))
+        state_manager.update_from_context(current_state, {
+            "problem_id": websocket.query_params.get("problem_id"),
+            "user_id": user_id
         })
 
         try:
@@ -269,7 +280,41 @@ async def ws_handler(websocket: WebSocket) -> None:
                     await websocket.send_json({"type": "finish"})
                     continue
 
-                await _stream_llm_response(websocket, db, session_id, request_id, user_id, query_text)
+                # Use supervisor pattern for advanced routing
+                agent_type = await supervisor.route_request(query_text, {
+                    "message_history": context,
+                    "problem_id": current_state.get("current_problem_id"),
+                    "submitted_code": current_state.get("submitted_code"),
+                    "user_id": user_id
+                })
+                
+                # Dispatch to specialized worker
+                selected_worker = workers[agent_type]
+                agent_response = await selected_worker.process(query_text, current_state)
+                
+                # Generate next actions
+                next_actions = await supervisor.get_next_actions(agent_response.content, agent_type)
+                
+                # Combine response with next actions
+                full_response = f"{agent_response.content}\n\n---\n\n**下一步建议:**\n"
+                for action in next_actions:
+                    full_response += f"• {action['title']}: {action['reason']}\n"
+                
+                # Send response
+                await _send_text_stream(websocket, full_response)
+                
+                # Persist assistant message
+                if full_response:
+                    await message_repo.create_message(db, session_id, role="assistant", content=full_response)
+                    db_operations_total.labels(operation="insert", table="messages").inc()
+                
+                # Update state with this interaction
+                await state_manager.save_state(str(session_id), current_state)
+                
+                await log_event(db, event_type="supervisor_complete", request_id=request_id,
+                                session_id=session_id, user_id=user_id,
+                                detail={"agent_type": agent_type.value, "next_actions_count": len(next_actions)})
+                
                 await websocket.send_json({"type": "finish"})
 
         except WebSocketDisconnect:

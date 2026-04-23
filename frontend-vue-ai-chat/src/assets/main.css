@@ -361,10 +361,91 @@ body {
 .chat-input-area {
   border-top: 1px solid var(--border-subtle);
   padding: 12px;
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
   background: var(--bg-soft);
+}
+
+.chat-input-area textarea {
+  width: 100%;
+}
+
+.chat-input-area .send-row {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.pending-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.attachment-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 16px;
+  font-size: 12px;
+  line-height: 1.4;
+  font-weight: 500;
+  border: 1px solid var(--border-standard, #4a5568);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-secondary);
+}
+
+.attachment-chip.code {
+  border-color: #5a9fd4;
+  background: rgba(90, 159, 212, 0.1);
+  color: #5a9fd4;
+}
+
+.attachment-chip.result {
+  border-color: #d4a05a;
+  background: rgba(212, 160, 90, 0.1);
+  color: #d4a05a;
+}
+
+.attachment-chip.result.success {
+  border-color: #5ad47a;
+  background: rgba(90, 212, 122, 0.1);
+  color: #5ad47a;
+}
+
+.attachment-chip.result.error {
+  border-color: #d45a5a;
+  background: rgba(212, 90, 90, 0.1);
+  color: #d45a5a;
+}
+
+.chip-filename {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 140px;
+}
+
+.chip-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  color: inherit;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.chip-remove:hover {
+  background: rgba(255, 255, 255, 0.2);
 }
 
 textarea,
