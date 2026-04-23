@@ -223,6 +223,9 @@ async def ws_handler(websocket: WebSocket) -> None:
                     await websocket.send_json({"type": "finish"})
                     continue
 
+                # Load message history context
+                context = await _load_context(db, session_id)
+                
                 # Use supervisor pattern for advanced routing
                 agent_type = await supervisor.route_request(query_text, {
                     "message_history": context,
