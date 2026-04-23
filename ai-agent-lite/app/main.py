@@ -120,12 +120,6 @@ async def _load_context(db: AsyncSession, session_id: uuid.UUID) -> list[dict]:
     return msgs
 
 
-async def _load_context(db: AsyncSession, session_id: uuid.UUID) -> list[dict]:
-    """Load recent messages as LLM context dicts."""
-    msgs = await message_repo.list_messages_as_dicts(db, session_id, limit=MAX_CONTEXT_MESSAGES)
-    return msgs
-
-
 async def _send_text_stream(websocket: WebSocket, content: str, agent_type: AgentType = None, chunk_size: int = 80) -> None:
     """Send a complete string as chunked streaming messages with optional agent info."""
     if not content:
@@ -293,29 +287,21 @@ async def ws_handler(websocket: WebSocket) -> None:
                 # Dispatch to specialized worker
                 selected_worker = workers[agent_type]
                 agent_response = await selected_worker.process(query_text, current_state)
-                
-                # Generate next actions
-                next_actions = await supervisor.get_next_actions(agent_response.content, agent_type)
-                
-                # Combine response with next actions
-                full_response = f"{agent_response.content}\n\n---\n\n**下一步建议:**\n"
-                for action in next_actions:
-                    full_response += f"• {action['title']}: {action['reason']}\n"
-                
-                # Send response
-                await _send_text_stream(websocket, full_response, agent_type)
-                
+
+                # Send response (no next-step suggestions - removed to reduce LLM call overhead)
+                await _send_text_stream(websocket, agent_response.content, agent_type)
+
                 # Persist assistant message
-                if full_response:
-                    await message_repo.create_message(db, session_id, role="assistant", content=full_response)
+                if agent_response.content:
+                    await message_repo.create_message(db, session_id, role="assistant", content=agent_response.content)
                     db_operations_total.labels(operation="insert", table="messages").inc()
-                
+
                 # Update state with this interaction
                 await state_manager.save_state(str(session_id), current_state)
-                
+
                 await log_event(db, event_type="supervisor_complete", request_id=request_id,
-                                session_id=session_id, user_id=user_id,
-                                detail={"agent_type": agent_type.value, "next_actions_count": len(next_actions)})
+                    session_id=session_id, user_id=user_id,
+                    detail={"agent_type": agent_type.value})
                 
                 await websocket.send_json({"type": "finish"})
 

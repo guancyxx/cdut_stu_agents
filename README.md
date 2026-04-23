@@ -162,17 +162,24 @@ docker compose exec oj-backend bash
 - [x] ai-agent-lite service operational
 
 ### Phase 2: Stability (in progress)
-- [ ] Persistent session and message storage (Postgres)
+- [x] Persistent session and message storage (Postgres)
 - [ ] User identity binding from OJ auth
 - [ ] Unified error codes, timeout, retry logic
-- [ ] /readyz + Prometheus metrics endpoint
+- [x] /readyz + Prometheus metrics endpoint
 - [ ] Context compression for long conversations
+- [x] Remove hardcoded next-step suggestions (reduces 3x LLM calls to 2x)
+- [x] Chinese-only language policy enforced across all user-facing prompts
 
-### Phase 3: Intelligence
-- [ ] Problem-context prompt template
-- [ ] Structured code review output (issue type, severity, fix)
-- [ ] Auto-analysis of WA/RE/TLE judge results
-- [ ] Learning record + knowledge point tagging
+### Phase 3: Intelligence — Optimization Backlog
+- [ ] **[P0]** Reduce per-request LLM calls from 2x to 1x (merge intent + response)
+- [ ] **[P0]** Enable LLM streaming in workers.py (llm_client supports it but unused)
+- [ ] **[P1]** Fix Supervisor re-instantiation per WS connection (state overhead)
+- [ ] **[P1]** Add race-condition guards in state_manager.py (active_states dict)
+- [ ] **[P1]** Problem-context prompt template (inject OJ problem into system prompt)
+- [ ] **[P2]** Structured code review output (issue type, severity, fix)
+- [ ] **[P2]** Auto-analysis of WA/RE/TLE judge results
+- [ ] **[P2]** Learning record + knowledge point tagging
+- [ ] **[P2]** Frontend: use agent_info events instead of regex fallback in useChatSocket
 
 ### Phase 4: Scale
 - [ ] Rate limiting per user/IP

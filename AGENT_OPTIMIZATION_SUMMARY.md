@@ -1,114 +1,113 @@
-# 🎯 AI Agent 优化成果总结
+# AI Agent 架构分析
 
-## 📊 当前实现状态
+**分析日期**: 2026-04-23
+**目标服务**: ai-agent-lite (FastAPI + Supervisor 模式)
 
-### ✅ 已完成的功能
+## 代码规模
 
-1. **监督者模式集成**
-   - 中央路由系统已实现
-   - 5个专业Worker Agents已部署
-   - 状态管理和持久化层就绪
+| 模块 | 行数 | 职责 |
+|------|------|------|
+| main.py | 329 | FastAPI 入口 + WS handler + 流式发送 |
+| workers.py | 220 | 5 个专业 Worker Agent |
+| supervisor.py | 179 | 中央路由器 + 意图分类 + 情感分析 |
+| llm_client.py | 146 | LLM 调用（含重试/流式/降级） |
+| state_manager.py | 85 | 学生状态持久化 |
+| models.py | 63 | ORM 模型 (Session/Message/AuditLog) |
+| message_repo.py | 63 | 消息 CRUD |
+| session_repo.py | 60 | 会话 CRUD |
+| database.py | 47 | 连接池 + schema 初始化 |
+| audit.py | 46 | 审计日志 |
+| metrics.py | 30 | Prometheus 指标 |
+| middleware.py | 23 | 请求中间件 |
+| **合计** | **1325** | |
 
-2. **前端agent状态显示**
-   - MessageBubble组件支持agent信息展示
-   - Agent状态指示器实时显示处理状态
-   - 完整的agent信息配置（名称、图标、颜色、描述）
+## 当前运行状态
 
-3. **后端agent信息生成**
-   - WebSocket消息包含完整agent元数据
-   - 支持所有5种agent类型的详细信息
-   - 与前端配置完全同步
+- 所有容器正常运行 (docker compose ps)
+- healthz: `{"ok":true,"llm_enabled":true,"model":"deepseek-chat"}`
+- readyz: `{"ok":true,"db":true,"llm":true,"model":"deepseek-chat"}`
+- LLM 后端: DeepSeek Chat (api.deepseek.com)
 
-### 🔧 技术架构
+## 请求处理流程
 
-**后端 (/app/main.py):**
-```python
-# 完整的agent信息映射
-agent_info_mapping = {
-    "code_reviewer": {"name": "代码审查专家", "icon": "💻", "color": "#5a9fd4"},
-    "problem_analyzer": {"name": "问题解析专家", "icon": "🧠", "color": "#9f5ad4"},
-    # ... 其他agent配置
-}
-```
+1. 前端发送 `{"type":"query","content":{"query":"..."}}`
+2. main.py 接收 → 持久化用户消息到 DB
+3. Supervisor.route_request() 执行意图分类 (LLM 调用 #1)
+4. 路由到 5 个 Worker 之一
+5. Worker.process() 调用 LLM 生成响应 (LLM 调用 #2)
+6. ~~Supervisor.get_next_actions() 生成下一步建议 (LLM 调用 #3)~~ → **已移除**
+7. 通过 WS 分块发送响应
+8. 持久化 assistant 消息到 DB
 
-**前端 (/src/utils/agents.js):**
-```javascript
-export const AGENT_TYPES = {
-    CODE_REVIEWER: 'code_reviewer',
-    PROBLEM_ANALYZER: 'problem_analyzer',
-    // ... 其他类型
-}
-```
+## 已识别问题
 
-## 🎨 视觉设计
+> 完整优化待办见 `specs/001-ai-tutor/spec.md` — Optimization Backlog
 
-### Agent配色方案
-- 💻 代码审查专家: #5a9fd4 (蓝色)
-- 🧠 问题解析专家: #9f5ad4 (紫色)  
-- 🏆 竞赛教练: #d45a5a (红色)
-- 🤝 学习伙伴: #5ad47a (绿色)
-- 📊 学习管理专家: #d4a05a (橙色)
+### P0 — 关键性能与正确性
 
-### UI组件
-1. **MessageBubble**: 消息气泡中显示agent标识
-2. **AgentStatusIndicator**: 顶部状态栏显示当前处理agent
-3. **实时动画**: 脉冲效果指示活跃状态
+| 编号 | 问题 | 影响 | 状态 |
+|------|------|------|------|
+| OPT-001 | 每次请求多次 LLM 调用（已移除 NextStepSuggester 降为 2 次） | 2x 延迟+成本 | NextStepSuggester 已移除；意图分类合并待实现 |
+| OPT-002 | Worker 使用 complete() 而非 stream() | 用户等待完整生成才可见内容 | 待实现 |
+| OPT-003 | main.py _load_context() 重复定义（第 117 行和第 123 行） | 潜在 Bug | 待修复 |
 
-## 🧪 测试验证
+### P1 — 缺失的守卫与模块
 
-### 单元测试通过
-- ✅ Agent配置一致性验证
-- ✅ 路由逻辑功能测试
-- ✅ WebSocket消息格式验证
-- ✅ 前端组件渲染测试
+| 编号 | 问题 | 影响 | 状态 |
+|------|------|------|------|
+| OPT-004 | 无范围守卫 (tutor_policy.py) | 非编程查询浪费 LLM token | 待实现 |
+| OPT-005 | 无边界路由器 (boundary_router.py) | 路由粒度粗糙 | 待实现 |
+| OPT-006 | 无响应格式化器 (response_formatter.py) | 输出无结构保证 | 待实现 |
 
-### 端到端测试
-- ✅ 后端agent信息生成
-- ✅ WebSocket传输可靠性
-- ✅ 前端agent状态显示
-- ✅ 视觉样式一致性
+### P2 — 架构与健壮性
 
-## 🚀 下一步优化建议
+| 编号 | 问题 | 影响 | 状态 |
+|------|------|------|------|
+| OPT-007 | Supervisor 每次 WS 连接重新实例化 | 状态不共享 | 待优化 |
+| OPT-008 | StateManager 无并发保护 | 多连接写同一 session 可能丢失 | 待优化 |
+| OPT-009 | 情感分析仅关键词匹配 | 误判风险 | 待改进 |
+| OPT-010 | 无在线检索 (web_retrieval.py) | 无法引用外部文档 | 待实现 |
 
-### 短期优化 (立即执行)
-1. **性能优化**: 减少LLM调用延迟
-2. **错误处理**: 增强网络异常恢复
-3. **缓存策略**: agent响应缓存机制
+### P3 — 优化与监控
 
-### 中期优化 (1-2周)
-1. **智能路由**: 基于历史数据的自适应路由
-2. **多模态支持**: 图片、代码片段的agent处理
-3. **个性化**: 基于用户习惯的agent偏好
+| 编号 | 问题 | 影响 | 状态 |
+|------|------|------|------|
+| OPT-011 | 前端冗余正则 Agent 识别 | 死代码，可能误识别 | 待清理 |
+| OPT-012 | LLM 调用耗时未计入 metrics | 无法测量实际延迟 | 待实现 |
+| OPT-013 | 无用户级限流 | 滥用风险 | 待实现 |
 
-### 长期优化 (1个月+)
-1. **联邦学习**: 跨用户agent能力提升
-2. **自动化调优**: agent性能自动优化
-3. **扩展性**: 支持自定义agent插件
+## Spec 完成度对照
 
-## 📈 预期收益
+| Spec 需求 | 状态 | 备注 |
+|-----------|------|------|
+| 基础 Q&A | Done | — |
+| 代码片段输入 | Done | — |
+| OJ 问题集成 | Done | — |
+| OJ 代码提交 | Done | — |
+| 持久化会话存储 | Not yet | DB 表就绪，恢复逻辑不完整 |
+| 用户身份绑定 | Not yet | DB 字段存在，前端绑定不完整 |
+| 代码审查结构化 | Not yet | response_formatter.py |
+| 学习进度追踪 | Not yet | state_manager 基础在，无分析 |
+| 错误调试辅助 | Partial | 无结构化 debug 流程 |
+| 范围守卫 | Not yet | tutor_policy.py + boundary_router.py |
+| 在线检索 | Not yet | web_retrieval.py |
+| 流式响应 | Not yet | stream() API 已实现但 Worker 未调用 |
 
-- **用户体验**: 透明度提升，用户知道哪个AI在处理问题
-- **系统可维护性**: 模块化设计便于扩展和维护
-- **性能监控**: 可追踪各agent的性能指标
-- **质量控制**: 专业化agent提供更精准的响应
+## 优化建议优先级
 
-## 🔍 监控指标
+| 优先级 | 改进项 | 预期收益 |
+|--------|--------|----------|
+| P0 | 合并意图分类到 Worker 调用（1 次 LLM/请求） | 延迟再降 50%，成本降 50% |
+| P0 | 启用流式响应 llm.stream() | 用户感知延迟大幅降低 |
+| P0 | 修复重复 _load_context() 定义 | 消除潜在 Bug |
+| P1 | 实现 tutor_policy.py 范围守卫 | 防止非编程查询消耗资源 |
+| P1 | 实现 boundary_router.py 边界路由 | 细粒度路由+自动检索决策 |
+| P2 | 实现 response_formatter.py 结构化输出 | 代码审查质量提升 |
+| P2 | 实现 web_retrieval.py 在线检索 | 答案时效性和准确性 |
+| P2 | Supervisor 单例化 + StateManager 并发保护 | 多连接一致性 |
 
-1. **Agent使用频率**: 各agent的调用次数
-2. **响应时间**: 各agent的平均处理时间
-3. **用户满意度**: 基于agent类型的反馈评分
-4. **路由准确率**: intent分类的正确率
+## 变更日志
 
-## 🎯 上线检查清单
-
-- [x] 后端agent信息生成
-- [x] 前端agent状态显示
-- [x] 视觉样式一致性
-- [x] 测试用例覆盖
-- [ ] 生产环境部署验证
-- [ ] 性能压力测试
-- [ ] 用户反馈收集机制
-
----
-
-**状态**: ✅ 开发完成 | 🚀 等待部署 | 📊 监控中
+| 日期 | 变更 |
+|------|------|
+| 2026-04-23 | 初始架构分析。移除 NextStepSuggester。记录 OPT-001 至 OPT-013。标注中文唯一语言策略。 |
