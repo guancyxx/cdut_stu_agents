@@ -1,6 +1,3 @@
-[submodule "youtu-agent"]
-	path = youtu-agent
-	url = https://github.com/guancyxx/youtu-agent.git
 [submodule "qduoj"]
 	path = qduoj
 	url = https://github.com/guancyxx/OnlineJudgeDeploy.git
