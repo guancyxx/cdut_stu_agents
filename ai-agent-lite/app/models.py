@@ -26,6 +26,7 @@ class Session(Base):
     problem_id = Column(String(32), nullable=True, index=True)
     title = Column(String(256), nullable=True)
     status = Column(String(16), nullable=False, default="active")
+    supervisor_state = Column(JSONB, nullable=True)  # For supervisor state storage
     created_at = Column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
     updated_at = Column(
         DateTime(timezone=True), nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow

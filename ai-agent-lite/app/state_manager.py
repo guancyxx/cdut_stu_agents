@@ -26,8 +26,8 @@ class StateManager:
         # Load from database
         async with async_session() as db:
             session_data = await session_repo.get_session(db, uuid.UUID(session_id))
-            if session_data and session_data.metadata:
-                state_data = session_data.metadata.get("supervisor_state", {})
+            if session_data and session_data.supervisor_state:
+                state_data = session_data.supervisor_state
                 # Convert back to StudentState object if needed
                 return state_data
         
@@ -45,10 +45,8 @@ class StateManager:
         async with async_session() as db:
             session_obj = await session_repo.get_session(db, uuid.UUID(session_id))
             if session_obj:
-                # Update metadata with state
-                if not session_obj.metadata:
-                    session_obj.metadata = {}
-                session_obj.metadata["supervisor_state"] = state
+                # Update supervisor state directly
+                session_obj.supervisor_state = state
                 session_obj.updated_at = datetime.utcnow()
                 await db.commit()
     
