@@ -490,16 +490,10 @@ onBeforeUnmount(() => {
         </button>
         <div class="top-status">{{ sending ? 'AI 思考中...' : '在线' }}</div>
       </div>
-        </header>
+    </header>
 
-        <!-- Agent Status Indicator -->
-        <div v-if="currentAgent" class="agent-status-indicator" :style="{ backgroundColor: currentAgent.color }">
-          <span class="agent-status-icon">{{ currentAgent.icon }}</span>
-          <span class="agent-status-text">{{ currentAgent.name }} 正在处理中...</span>
-        </div>
-
-        <main class="chat-main" ref="listRef">
-      <div class="auth-page card">
+      <!-- Auth Screen -->
+      <div class="auth-page card" v-if="requiresAuth">
         <div class="auth-page-header">
           <h2>OJ 登录注册</h2>
           <p>请先完成登录或注册后继续使用题库和聊天功能</p>
@@ -777,8 +771,9 @@ onBeforeUnmount(() => {
       </aside>
     </div>
   </div>
+</template>
 
-  <style>
+<style>
   /* Agent Status Indicator */
   .agent-status-indicator {
     display: flex;
@@ -807,4 +802,3 @@ onBeforeUnmount(() => {
     50% { opacity: 1; }
   }
   </style>
-</template>
