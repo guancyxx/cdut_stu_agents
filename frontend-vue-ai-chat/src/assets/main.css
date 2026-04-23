@@ -371,6 +371,12 @@ body {
   width: 100%;
 }
 
+.chat-input-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+}
+
 .chat-input-area .send-row {
   display: flex;
   justify-content: flex-end;

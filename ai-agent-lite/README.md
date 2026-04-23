@@ -1,6 +1,45 @@
 # ai-agent-lite
 
-Lightweight FastAPI AI agent powering the CDUT Student Training System. Streams LLM responses over WebSocket, compatible with the frontend-vue-ai-chat composable protocol.
+Lightweight FastAPI AI agent powering the CDUT Student Training System. Features a Supervisor pattern with specialized worker agents for programming competition training. Streams LLM responses over WebSocket, compatible with the frontend-vue-ai-chat composable protocol.
+
+## Architecture Overview
+
+The system now uses a **Supervisor Pattern** with specialized worker agents:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                     Supervisor Pattern                      │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  User Input → Supervisor → Intelligent Routing → Worker     │
+│                                                             │
+│  ┌──────────┐    ┌─────────────────┐    ┌────────────────┐  │
+│  │          │    │                 │    │                │  │
+│  │  Input   │───►│   Supervisor    │───►│   CodeReviewer │  │
+│  │          │    │                 │    │                │  │
+│  └──────────┘    └─────────────────┘    └────────────────┘  │
+│                                 │          ┌────────────────┐
+│                                 │          │ProblemAnalyzer │
+│                                 │          └────────────────┘
+│                                 │          ┌────────────────┐
+│                                 └─────────►│ ContestCoach   │
+│                                            └────────────────┘
+│                                            ┌────────────────┐
+│                                            │LearningPartner │
+│                                            └────────────────┘
+│                                            ┌────────────────┐
+│                                            │LearningManager │
+│                                            └────────────────┘
+└─────────────────────────────────────────────────────────────┘
+```
+
+## Worker Agents
+
+1. **Code Reviewer** - Code quality, efficiency, and style evaluation
+2. **Problem Analyzer** - Algorithm explanation and problem breakdown
+3. **Contest Coach** - Competition strategy and performance optimization
+4. **Learning Partner** - Emotional support and motivational guidance
+5. **Learning Manager** - Personalized learning path recommendations
 
 ## Quick Start (Docker)
 
@@ -51,7 +90,7 @@ Optional:
 
 Init:
 ```json
-{"type":"init","data":{"type":"init","default_agent":"ai-agent-lite","agent_type":"simple","sub_agents":null,"session_id":"<uuid>"}}
+{"type":"init","data":{"type":"init","default_agent":"ai-agent-lite","agent_type":"supervisor","sub_agents":["code_reviewer","problem_analyzer","contest_coach","learning_partner","learning_manager"],"session_id":"<uuid>"}}
 ```
 
 Stream token:
@@ -113,12 +152,29 @@ frontend-vue-ai-chat
   |
   | WS /ws?session_id=X
   v
-ai-agent-lite (FastAPI)
+ai-agent-lite (FastAPI + Supervisor Pattern)
+  ├── Supervisor (Intelligent routing + state management)
+  ├── Code Reviewer (代码审查和优化建议)
+  ├── Problem Analyzer (算法问题解析)
+  ├── Contest Coach (竞赛策略指导)
+  ├── Learning Partner (学习伙伴和情感支持)
+  └── Learning Manager (个性化学习管理)
   |
-  | HTTP /chat/completions (stream)
+  | HTTP /chat/completions
   v
 LLM Provider (DeepSeek)
 ```
+
+## Configuration
+
+The supervisor pattern can be configured via environment variables:
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| SUPERVISOR_ENABLED | No | true | Enable supervisor pattern routing |
+| MAX_CONTEXT_MESSAGES | No | 20 | Number of historical messages for context |
+| STATE_PERSISTENCE_INTERVAL | No | 60 | State persistence interval in seconds |
+| EMOTION_ANALYSIS_ENABLED | No | true | Enable emotion-aware routing |
 
 ## Dependencies
 

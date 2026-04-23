@@ -120,67 +120,10 @@ async def _load_context(db: AsyncSession, session_id: uuid.UUID) -> list[dict]:
     return msgs
 
 
-async def _stream_llm_response(
-    websocket: WebSocket,
-    db: AsyncSession,
-    session_id: uuid.UUID,
-    request_id: uuid.UUID,
-    user_id: str,
-    query_text: str,
-) -> str:
-    """Call LLM, stream tokens to client, persist the assistant response. Returns full text."""
-    ws_messages_total.labels(direction="in", msg_type="query").inc()
-
-    # Persist user message
-    await message_repo.create_message(db, session_id, role="user", content=query_text)
-    db_operations_total.labels(operation="insert", table="messages").inc()
-
-    # Build context
-    context = await _load_context(db, session_id)
-    # Include current message if not already in history
-    if not context or context[-1].get("content") != query_text:
-        context.append({"role": "user", "content": query_text})
-
-    # Call LLM
-    full_text = ""
-    start_time = __import__("time").monotonic()
-    try:
-        async for chunk in llm.stream(context):
-            full_text += chunk
-            await websocket.send_json({
-                "type": "raw",
-                "data": {"type": "text", "delta": chunk, "inprogress": True},
-            })
-    except AppError as exc:
-        llm_errors_total.labels(code=exc.code.value).inc()
-        # Fallback to non-streaming
-        await log_event(db, event_type="llm_stream_fallback", request_id=request_id,
-                        session_id=session_id, user_id=user_id, detail={"code": exc.code.value})
-        try:
-            full_text = await llm.complete(context)
-            await _send_text_stream(websocket, full_text)
-        except AppError as inner_exc:
-            await websocket.send_json(inner_exc.to_ws_dict())
-            await websocket.send_json({"type": "finish"})
-            await log_event(db, event_type="llm_error", request_id=request_id,
-                            session_id=session_id, user_id=user_id,
-                            detail={"code": inner_exc.code.value, "message": inner_exc.message})
-            return ""
-
-    duration = __import__("time").monotonic() - start_time
-    llm_request_duration_seconds.observe(duration)
-    ws_messages_total.labels(direction="out", msg_type="raw").inc()
-
-    # Persist assistant message
-    if full_text:
-        await message_repo.create_message(db, session_id, role="assistant", content=full_text)
-        db_operations_total.labels(operation="insert", table="messages").inc()
-
-    await log_event(db, event_type="llm_complete", request_id=request_id,
-                    session_id=session_id, user_id=user_id,
-                    detail={"duration_s": round(duration, 3), "chars": len(full_text)})
-
-    return full_text
+async def _load_context(db: AsyncSession, session_id: uuid.UUID) -> list[dict]:
+    """Load recent messages as LLM context dicts."""
+    msgs = await message_repo.list_messages_as_dicts(db, session_id, limit=MAX_CONTEXT_MESSAGES)
+    return msgs
 
 
 async def _send_text_stream(websocket: WebSocket, content: str, chunk_size: int = 80) -> None:
