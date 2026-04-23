@@ -40,6 +40,7 @@ The system now uses a **Supervisor Pattern** with specialized worker agents:
 3. **Contest Coach** - Competition strategy and performance optimization
 4. **Learning Partner** - Emotional support and motivational guidance
 5. **Learning Manager** - Personalized learning path recommendations
+6. **Next Step Suggester** - Generates contextual next-step suggestions at the end of each conversation turn (not a content-producing worker; only runs after the primary worker finishes)
 
 ## Quick Start (Docker)
 
