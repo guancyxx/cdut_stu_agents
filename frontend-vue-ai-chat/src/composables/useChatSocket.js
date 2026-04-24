@@ -144,6 +144,28 @@ export function useChatSocket({
         return
       }
 
+      // Handle trace events — LLM call stages for user visibility
+      if (eventData.type === 'trace') {
+        const traceData = eventData.data || {}
+        const stage = traceData.stage || ''
+
+        // session_complete is an internal signal, skip display
+        if (stage === 'session_complete') return
+
+        targetSession.messages.push({
+          role: 'trace',
+          stage,
+          title: traceData.title || '',
+          detail: traceData.detail || '',
+          output: traceData.output || '',
+          time: createTimeLabel()
+        })
+        saveSessions()
+        onAfterMessageAppended?.(targetSessionId)
+        await scrollToBottom()
+        return
+      }
+
       if (eventData.type === 'finish') {
         resetStreamState()
         saveSessions()

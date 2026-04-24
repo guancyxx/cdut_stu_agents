@@ -56,6 +56,9 @@ class Supervisor:
         # Intent classification with LLM
         intent = await self._classify_intent(user_input)
         
+        # Store for trace output
+        self._last_intent = intent
+        
         # State-aware routing logic
         agent_type = self._determine_agent(intent, user_input)
         

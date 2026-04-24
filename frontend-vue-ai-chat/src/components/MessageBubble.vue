@@ -1,5 +1,5 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { renderMessageContent } from '../utils/validators'
 
 const props = defineProps({
@@ -29,16 +29,55 @@ const shouldShowAgent = computed(() => {
 
 // Render message content as safe HTML (Markdown / HTML / plain text)
 const renderedMessage = computed(() => {
-  // Skip trace system messages
   if (props.message.role === 'trace') return { html: '', contentType: 'text' }
 
   const result = renderMessageContent(props.message.content)
   return result
 })
+
+// Trace: collapsible state
+const traceExpanded = ref(false)
+
+const isTrace = computed(() => props.message.role === 'trace')
+
+const traceHasOutput = computed(() => {
+  return isTrace.value && props.message.output && props.message.output.trim().length > 0
+})
+
+// Map stage to status icon
+const traceStatusIcon = computed(() => {
+  if (!isTrace.value) return ''
+  const stage = props.message.stage || ''
+  // Result stages get a checkmark
+  if (stage.endsWith('_result')) return '✓'
+  // Processing stages get a spinner indicator
+  return '⟳'
+})
+
+const traceStatusClass = computed(() => {
+  if (!isTrace.value) return ''
+  const stage = props.message.stage || ''
+  return stage.endsWith('_result') ? 'done' : 'running'
+})
 </script>
 
 <template>
-  <div class="message-bubble" :class="{
+  <!-- Trace message: collapsible step card -->
+  <div v-if="isTrace" class="trace-card" :class="traceStatusClass" @click="traceHasOutput && (traceExpanded = !traceExpanded)">
+    <div class="trace-header">
+      <span class="trace-icon">{{ traceStatusIcon }}</span>
+      <span class="trace-title">{{ message.title }}</span>
+      <span v-if="message.detail" class="trace-detail">{{ message.detail }}</span>
+      <span v-if="traceHasOutput" class="trace-toggle">{{ traceExpanded ? '▲' : '▼' }}</span>
+    </div>
+    <div v-if="traceHasOutput && traceExpanded" class="trace-output">
+      <pre>{{ message.output }}</pre>
+    </div>
+    <div class="message-time">{{ message.time }}</div>
+  </div>
+
+  <!-- Normal message bubble -->
+  <div v-else class="message-bubble" :class="{
     assistant: message.role === 'assistant',
     user: message.role === 'user',
     'has-agent': shouldShowAgent
@@ -65,6 +104,95 @@ const renderedMessage = computed(() => {
 </template>
 
 <style scoped>
+/* ---- Trace Card ---- */
+.trace-card {
+  max-width: 75%;
+  padding: 8px 14px;
+  border-radius: 10px;
+  margin-bottom: 6px;
+  align-self: flex-start;
+  margin-right: auto;
+  cursor: default;
+  font-size: 13px;
+  border: 1px solid var(--border-subtle, #e8e8e8);
+  background: var(--bg-soft, #f9f9fb);
+  color: var(--text-secondary, #666);
+  transition: border-color 0.2s, background 0.2s;
+}
+
+.trace-card.running {
+  border-left: 3px solid var(--brand, #4a9eff);
+}
+
+.trace-card.done {
+  border-left: 3px solid #4caf50;
+  opacity: 0.85;
+}
+
+.trace-card:hover {
+  border-color: var(--border-standard, #d0d0d0);
+}
+
+.trace-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.trace-icon {
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.running .trace-icon {
+  animation: spin 1.5s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.trace-title {
+  font-weight: 600;
+  color: var(--text-primary, #333);
+}
+
+.trace-detail {
+  color: var(--text-tertiary, #999);
+  font-size: 12px;
+}
+
+.trace-toggle {
+  margin-left: auto;
+  font-size: 10px;
+  color: var(--text-tertiary, #999);
+  cursor: pointer;
+  padding: 2px 4px;
+}
+
+.trace-output {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px dashed var(--border-subtle, #eee);
+}
+
+.trace-output pre {
+  margin: 0;
+  padding: 6px 10px;
+  background: var(--code-bg, #1e1e2e);
+  color: var(--code-fg, #cdd6f4);
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 1.4;
+  overflow-x: auto;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+/* ---- Normal Message Bubble ---- */
 .message-bubble {
   max-width: 85%;
   padding: 12px 16px;

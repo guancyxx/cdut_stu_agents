@@ -277,12 +277,53 @@ async def ws_handler(websocket: WebSocket) -> None:
                 # Load message history context
                 context = await _load_context(db, session_id)
                 
+                # Trace 1: Supervisor routing — intent classification
+                await websocket.send_json({
+                    "type": "trace",
+                    "data": {
+                        "stage": "intent_classification",
+                        "title": "意图识别",
+                        "detail": "正在分析用户意图，确定路由目标...",
+                        "output": ""
+                    }
+                })
+                
                 # Use supervisor pattern for advanced routing
                 agent_type = await supervisor.route_request(query_text, {
                     "message_history": context,
                     "problem_id": current_state.get("current_problem_id"),
                     "submitted_code": current_state.get("submitted_code"),
                     "user_id": user_id
+                })
+
+                # Trace 1 result: show classified intent + selected agent
+                await websocket.send_json({
+                    "type": "trace",
+                    "data": {
+                        "stage": "intent_result",
+                        "title": "意图识别完成",
+                        "detail": f"已路由至 {agent_type.value} 处理",
+                        "output": f"Intent: {getattr(supervisor, '_last_intent', 'N/A')}\nAgent: {agent_type.value}"
+                    }
+                })
+
+                # Trace 2: Worker processing
+                agent_name_mapping = {
+                    "code_reviewer": "代码审查专家",
+                    "problem_analyzer": "问题解析专家",
+                    "contest_coach": "竞赛教练",
+                    "learning_partner": "学习伙伴",
+                    "learning_manager": "学习管理专家"
+                }
+                agent_display_name = agent_name_mapping.get(agent_type.value, agent_type.value)
+                await websocket.send_json({
+                    "type": "trace",
+                    "data": {
+                        "stage": "worker_processing",
+                        "title": f"{agent_display_name} 处理中",
+                        "detail": "正在生成回复...",
+                        "output": ""
+                    }
                 })
                 
                 # Dispatch to specialized worker
@@ -291,6 +332,17 @@ async def ws_handler(websocket: WebSocket) -> None:
 
                 # Send response
                 await _send_text_stream(websocket, agent_response.content, agent_type)
+
+                # Trace 3: Suggestion generation
+                await websocket.send_json({
+                    "type": "trace",
+                    "data": {
+                        "stage": "suggestion_generation",
+                        "title": "生成下一步建议",
+                        "detail": "正在分析对话上下文，生成个性化建议...",
+                        "output": ""
+                    }
+                })
 
                 # Generate and send next-step suggestions for quick-action buttons
                 next_actions = await supervisor.get_next_actions(
@@ -301,6 +353,18 @@ async def ws_handler(websocket: WebSocket) -> None:
                         "type": "next_suggestions",
                         "data": {"suggestions": next_actions},
                     })
+
+                # Trace 3 result: show generated suggestions
+                suggestion_summary = ", ".join(a.get("title", "") for a in next_actions) if next_actions else "无"
+                await websocket.send_json({
+                    "type": "trace",
+                    "data": {
+                        "stage": "suggestion_result",
+                        "title": "建议生成完成",
+                        "detail": f"已生成 {len(next_actions)} 条建议",
+                        "output": suggestion_summary
+                    }
+                })
 
                 # Persist assistant message
                 if agent_response.content:
