@@ -24,7 +24,7 @@ const agentInfo = computed(() => {
 })
 
 const shouldShowAgent = computed(() => {
-  return agentInfo.value && props.isLast
+  return !!agentInfo.value
 })
 
 // Render message content as safe HTML (Markdown / HTML / plain text)
