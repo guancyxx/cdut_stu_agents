@@ -229,9 +229,14 @@ async def ws_handler(websocket: WebSocket) -> None:
             AgentType.LEARNING_MANAGER: LearningManagerAgent(llm)
         }
         suggester = NextStepSuggester(llm)
-        
+
         # Load or initialize state
         current_state = await state_manager.load_state(str(session_id))
+
+        # Snapshot state BEFORE processing this turn (for delta computation)
+        before_state = dict(current_state) if current_state else {}
+        before_kg = dict(before_state.get("knowledge_graph_position", {}) or {})
+
         state_manager.update_from_context(current_state, {
             "problem_id": websocket.query_params.get("problem_id"),
             "user_id": user_id
@@ -333,20 +338,38 @@ async def ws_handler(websocket: WebSocket) -> None:
                 # Send response
                 await _send_text_stream(websocket, agent_response.content, agent_type)
 
+                # Assess knowledge delta from this turn and update state
+                kg_deltas = await supervisor.assess_knowledge_delta(
+                    query_text, agent_response.content, agent_type.value
+                )
+                kg = current_state.get("knowledge_graph_position") or {}
+                for topic, delta_val in kg_deltas.items():
+                    kg[topic] = round(kg.get(topic, 0.0) + delta_val, 3)
+                current_state["knowledge_graph_position"] = kg
+
                 # Trace 3: Suggestion generation
                 await websocket.send_json({
                     "type": "trace",
                     "data": {
                         "stage": "suggestion_generation",
                         "title": "生成下一步建议",
-                        "detail": "正在分析对话上下文，生成个性化建议...",
+                        "detail": "正在分析知识变化，生成个性化建议...",
                         "output": ""
                     }
                 })
 
+                # Compute knowledge delta between before and after this turn
+                after_kg = dict(current_state.get("knowledge_graph_position", {}) or {})
+                before_state_for_delta = {"knowledge_graph_position": before_kg}
+                after_state_for_delta = {"knowledge_graph_position": after_kg}
+                state_delta = state_manager.compute_knowledge_delta(
+                    before_state_for_delta, after_state_for_delta
+                )
+
                 # Generate and send next-step suggestions for quick-action buttons
                 next_actions = await supervisor.get_next_actions(
-                    agent_response.content, agent_type, suggester=suggester
+                    agent_response.content, agent_type, suggester=suggester,
+                    state_delta=state_delta
                 )
                 if next_actions:
                     await websocket.send_json({
@@ -373,6 +396,9 @@ async def ws_handler(websocket: WebSocket) -> None:
 
                 # Update state with this interaction
                 await state_manager.save_state(str(session_id), current_state)
+
+                # Refresh before_kg snapshot for the next turn's delta computation
+                before_kg = dict(current_state.get("knowledge_graph_position", {}) or {})
 
                 await log_event(db, event_type="supervisor_complete", request_id=request_id,
                     session_id=session_id, user_id=user_id,

@@ -131,7 +131,53 @@ class Supervisor:
             self.state.submitted_code = context["submitted_code"]
         # Update emotional state based on message tone
         self._analyze_emotional_state(context.get("message_history", []))
-    
+
+    async def assess_knowledge_delta(self, user_input: str, agent_response: str, agent_type: str) -> Dict[str, float]:
+        """Use LLM to assess the student's knowledge gains from this conversation turn.
+
+        Returns a dict of {topic: mastery_delta} where mastery_delta is positive
+        for gains and negative for losses. These deltas are applied to the
+        knowledge_graph_position in the student state.
+        """
+        prompt = (
+            "You are an AI tutor analyzing a conversation. Based on the exchange below, "
+            "identify what programming/algorithm knowledge topics the student has gained, "
+            "reinforced, or might be confused about.\n\n"
+            f"Student asked: {user_input[:400]}\n"
+            f"AI role: {agent_type}\n"
+            f"AI response: {agent_response[:800]}\n\n"
+            "Return JSON ONLY — no markdown, no explanation. Format:\n"
+            '{"deltas":[{"topic":"topic_name","delta":0.1}]}\n'
+            "Rules:\n"
+            "- topic should be a concise algorithm/CS concept (e.g. \"binary_search\", \"dp\", \"graph_bfs\")\n"
+            "- delta is between -0.1 and 0.3 (positive = gained understanding, negative = confusion)\n"
+            "- Only include topics that clearly appear in the exchange\n"
+            "- Maximum 5 topics\n"
+        )
+
+        try:
+            raw = await self.llm.complete([{"role": "user", "content": prompt}])
+            import json as _json
+            cleaned = raw.strip()
+            if cleaned.startswith("```"):
+                cleaned = cleaned.split("\n", 1)[-1]
+            if cleaned.endswith("```"):
+                cleaned = cleaned.rsplit("```", 1)[0]
+            cleaned = cleaned.strip()
+
+            data = _json.loads(cleaned)
+            deltas = data.get("deltas", [])
+            result = {}
+            for item in deltas:
+                topic = item.get("topic", "").strip()
+                delta_val = float(item.get("delta", 0))
+                if topic and -0.1 <= delta_val <= 0.3:
+                    result[topic] = delta_val
+            return result
+        except Exception as exc:
+            logger.warning("knowledge delta assessment failed: %s", exc)
+            return {}
+
     def _analyze_emotional_state(self, message_history: list):
         """Simple emotional state analysis from message history."""
         # This would be enhanced with proper sentiment analysis
@@ -149,11 +195,12 @@ class Supervisor:
                             for indicator in indicators))
             self.state.emotion_tags[emotion] = min(1.0, count * 0.3)
 
-    async def get_next_actions(self, agent_response: str, agent_type: AgentType, suggester=None) -> list:
+    async def get_next_actions(self, agent_response: str, agent_type: AgentType, suggester=None, state_delta: dict = None) -> list:
         """Generate next action suggestions via NextStepSuggester.
 
         If a suggester instance is provided, delegates to its ``suggest`` method.
         Falls back to an empty list if the suggester is unavailable or fails.
+        ``state_delta`` is the knowledge delta computed by StateManager.compute_knowledge_delta().
         """
         if suggester is None:
             return []
@@ -167,5 +214,6 @@ class Supervisor:
                 "emotion_tags": dict(self.state.emotion_tags),
                 "efficiency_trend": self.state.efficiency_trend,
             },
+            state_delta=state_delta,
         )# Test hot reload comment
 # Hot reload test comment
