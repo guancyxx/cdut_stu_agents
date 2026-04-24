@@ -324,40 +324,82 @@ class NextStepSuggester(BaseWorker):
 
 
 class LearningManagerAgent(BaseWorker):
-    """Tracks progress and designs adaptive learning paths."""
-    
+    """Micro-stepping learning coach that guides students through atomic tasks.
+
+    This agent does NOT produce full lesson plans or information dumps.
+    Instead, it follows a strict THOUGHT → GUIDANCE → INTERACTION protocol,
+    delivering one atomic concept per turn and always ending with a question
+    or micro-exercise that requires the student's active response.
+    """
+
     async def process(self, user_input: str, state: Dict[str, Any]) -> AgentResponse:
         knowledge_graph = state.get("knowledge_graph_position", {})
         efficiency = state.get("efficiency_trend", 1.0)
-        
-        prompt = f"""
-        As a learning manager, create personalized learning plan:
-        
-        Current Knowledge State: {knowledge_graph}
-        Learning Efficiency: {efficiency}
-        Student's Request: {user_input}
-        
-        Provide structured learning guidance:
-        1. Current Skill Assessment
-        2. Recommended Learning Objectives  
-        3. Adaptive Difficulty Adjustment
-        4. Practice Problem Recommendations
-        5. Study Schedule Suggestions
-        
-        Base recommendations on actual competency levels.
-        IMPORTANT: You must respond in Chinese (简体中文) only. All content must be in Chinese.
-        """
-        
+        emotion_tags = state.get("emotion_tags", {})
+        emotion_context = ""
+        if emotion_tags:
+            emotion_items = ", ".join(f"{k}={v:.1f}" for k, v in emotion_tags.items() if v > 0.2)
+            if emotion_items:
+                emotion_context = f"\nStudent emotional signals: {emotion_items}"
+
+        # Detect frustration from efficiency trend or emotional state
+        frustration_level = ""
+        if efficiency < 0.7:
+            frustration_level = (
+                "\n[IMPORTANT] The student's efficiency trend is declining. "
+                "Simplify immediately — drop to a foundational concept, "
+                "use a very small concrete example, and avoid any abstraction."
+            )
+        elif emotion_tags.get("frustration", 0) > 0.5 or emotion_tags.get("confusion", 0) > 0.6:
+            frustration_level = (
+                "\n[IMPORTANT] The student shows frustration or confusion. "
+                "Slow down. Reassure briefly that the current difficulty is normal. "
+                "Then offer a simpler, more concrete anchoring question."
+            )
+
+        prompt = (
+            "You are a pragmatic, precise programming-competition learning coach. "
+            "Your role is to guide students through micro-steps, NOT to lecture.\n\n"
+            "ABSOLUTE RULES:\n"
+            "- Your ENTIRE response body MUST NOT exceed 200 Chinese characters.\n"
+            "- NEVER list more than 1 new concept or 1 exercise per turn.\n"
+            "- NEVER give complete source code unless the student has asked 3+ times "
+            "on the same logical point.\n"
+            "- NEVER use empty praise like \"太棒了\" or \"令人惊叹\". Evaluate logic and "
+            "code efficiency, not effort.\n"
+            "- ALWAYS end your response with a concrete question or micro-task "
+            "that requires the student to act. No exceptions.\n"
+            "- Be warm and patient. Acknowledge struggle honestly — don't pretend "
+            "difficult things are easy.\n"
+            "- When a student is wrong, point out the specific gap and provide a "
+            "minimal hint, not the full correction.\n\n"
+            f"Student's current knowledge profile: {knowledge_graph or 'new student'}\n"
+            f"Efficiency trend: {efficiency:.2f}{emotion_context}{frustration_level}\n\n"
+            f"Student says: {user_input}\n\n"
+            "YOU MUST follow this output structure (use the headers exactly):\n\n"
+            "【分析】\n"
+            "One sentence: what knowledge point does the student need right now, "
+            "based on their current level and their message.\n\n"
+            "【引导】\n"
+            "One or two sentences: the single most important thing for this turn. "
+            "If introducing a new concept, explain WHY it matters for competition.\n\n"
+            "【互动】\n"
+            "A specific, immediately actionable question or micro-exercise. "
+            "This MUST be the last section. Stop here. Wait for the student's response.\n\n"
+            "IMPORTANT: You must respond in Chinese (简体中文) only. "
+            "All content must be in Chinese."
+        )
+
         try:
             response = await self.llm.complete([{"role": "user", "content": prompt}])
             return AgentResponse(
                 content=response,
                 status=CompletionStatus.COMPLETE,
-                metadata={"plan_type": "adaptive_learning", "efficiency_factor": efficiency}
+                metadata={"plan_type": "micro_step_coaching", "efficiency_factor": efficiency}
             )
         except Exception as e:
             logger.error(f"Learning management failed: {e}")
             return AgentResponse(
-                content="Learning planning temporarily unavailable.",
+                content="暂时无法响应，请稍后再试。",
                 status=CompletionStatus.ERROR
             )
