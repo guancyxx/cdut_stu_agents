@@ -12,7 +12,8 @@ export function useChatSocket({
   setSending,
   createTimeLabel,
   onAfterMessageAppended,
-  onSuggestions
+  onSuggestions,
+  onFinish
 }) {
   const sending = ref(false)
 
@@ -176,6 +177,7 @@ export function useChatSocket({
 
       if (eventData.type === 'finish') {
         resetStreamState()
+        onFinish?.()
         saveSessions()
         await scrollToBottom()
       }

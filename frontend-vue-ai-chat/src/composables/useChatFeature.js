@@ -255,6 +255,13 @@ export function useChatFeature() {
     },
     onSuggestions: (items) => {
       setSuggestionsForCurrentSession(items)
+    },
+    onFinish: () => {
+      // Remove all trace messages from current session — they've served their purpose
+      const session = currentSession.value
+      if (session && Array.isArray(session.messages)) {
+        session.messages = session.messages.filter((m) => m.role !== 'trace')
+      }
     }
   })
 
