@@ -311,9 +311,46 @@ async def ws_handler(websocket: WebSocket) -> None:
                 current_problem_context = current_state.get("current_problem_context", "")
                 if not current_problem_context:
                     current_problem_context = _extract_problem_context(context)
-                # Also check if the current user message updates the problem context
+                # When the frontend sends a SYSTEM CONTEXT message (problem selection),
+                # it is metadata injection — NOT a teaching request from the student.
+                # Cache the problem context and send a brief confirmation, then skip
+                # the full supervisor→worker pipeline.
                 if query_text.startswith("SYSTEM CONTEXT:"):
                     current_problem_context = query_text
+                    current_state["current_problem_context"] = current_problem_context
+                    # Persist the problem context update (but NOT the raw SYSTEM CONTEXT
+                    # message as a user message — it's not a conversational turn)
+                    await state_manager.save_state(str(session_id), current_state)
+
+                    # Send a lightweight confirmation to the frontend
+                    problem_title = ""
+                    for line in query_text.split("\n"):
+                        if line.startswith("Title:"):
+                            problem_title = line.replace("Title:", "").strip()
+                            break
+                    confirm_msg = f"已加载题目「{problem_title}」，有什么想了解的随时问我。" if problem_title else "已加载题目，有什么想了解的随时问我。"
+                    await _send_text_stream(websocket, confirm_msg)
+
+                    # Trace: show the problem was loaded (not routed to an agent)
+                    await websocket.send_json({
+                        "type": "trace",
+                        "data": {
+                            "stage": "intent_result",
+                            "title": "题目已加载",
+                            "detail": f"已加载题目：{problem_title or '未知'}",
+                            "output": "Intent: system_context_load (skipped routing)"
+                        }
+                    })
+                    await websocket.send_json({
+                        "type": "next_suggestions",
+                        "data": {"suggestions": [
+                            {"type": "learn", "title": "帮我分析题意", "target": problem_title, "reason": "理解题目是解题的第一步"},
+                            {"type": "practice", "title": "给我一个提示", "target": problem_title, "reason": "从提示开始思考"},
+                        ]},
+                    })
+                    await websocket.send_json({"type": "finish"})
+                    continue
+
                 if current_problem_context:
                     current_state["current_problem_context"] = current_problem_context
 

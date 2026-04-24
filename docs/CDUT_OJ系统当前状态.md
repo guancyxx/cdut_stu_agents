@@ -124,8 +124,24 @@
 
 - No rate limiting or abuse prevention
 - Only 24 of 609 problems have test data (4%)
-- No structured code review output from AI
-- No learning progress tracking
+- ~~No structured code review output from AI~~ → CodeReviewerAgent provides structured analysis but non-standardized output format
+- ~~No learning progress tracking~~ → LearningManagerAgent exists but uses LLM generation without algorithmic planning
+- No intelligent problem recommendation system (PDF requirement #4, unimplemented)
+- No programming thinking visualization (PDF requirement #5, unimplemented)
+- No structured knowledge graph (current tag system is flat, not graph-based)
+
+## Project Spec Gap Analysis
+
+> 对照 `docs/PROJECT_SPEC.md`
+
+| PDF 预期目标 | 实现状态 | 差距 |
+|-------------|---------|------|
+| 竞赛知识图谱 | 19 flat tags / 609 题 | 无图结构、无边权、无推理 |
+| 智能学习路径 | LLM 生成（无算法） | 缺少自适应推荐算法 |
+| AI 代码分析 | CodeReviewerAgent | 非结构化，无自动判题联动 |
+| 智能题目推荐 | 未实现 | — |
+| 编程思维可视化 | 未实现 | — |
+| 虚拟助教系统 | ✅ 完成 | 6 种 Agent（5 专业 + 1 情绪） |
 
 ---
 
@@ -137,17 +153,22 @@
 - Unified error codes + timeout/retry
 - Basic observability (metrics, healthz/readyz)
 - Frontend -> backend WebSocket session/user binding (`session_id` + `user_id` query)
+- LLM-based emotion analysis (EmotionAnalyzer)
+- System prompt injection (Chinese-only policy)
 
 ### Medium-term
 - Problem-context prompt template
-- Code review structured output
+- Code review structured output (align with PDF requirement #3)
 - Judge result auto-analysis (WA/RE/TLE explanation)
 - Expand test data to 50+ problems
+- Intelligent problem recommendation (PDF requirement #4)
 
 ### Long-term
-- Learning path recommendation
+- Learning path recommendation with algorithmic planning (PDF requirement #2)
 - Contest simulation mode
 - 100+ problems with test data
+- Knowledge graph construction (PDF requirement #1)
+- Programming thinking visualization (PDF requirement #5)
 
 ---
 
