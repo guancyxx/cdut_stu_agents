@@ -154,6 +154,9 @@ export function useChatSocket({
         // session_complete is an internal signal, skip display
         if (stage === 'session_complete') return
 
+        // Remove previous trace messages — only keep the latest one visible
+        targetSession.messages = targetSession.messages.filter((m) => m.role !== 'trace')
+
         targetSession.messages.push({
           role: 'trace',
           stage,
