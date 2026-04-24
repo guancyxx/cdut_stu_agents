@@ -31,10 +31,18 @@ const sanitizeStoredMessage = (message) => {
   const content = typeof message.content === 'string' ? message.content : ''
   const time = typeof message.time === 'string' && message.time.trim() ? message.time : new Date().toLocaleTimeString()
 
+  // Preserve agent info and streaming state for assistant messages
+  const extra = {}
+  if (role === 'assistant') {
+    if (message.agent) extra.agent = message.agent
+    if (message.streamingDone !== undefined) extra.streamingDone = !!message.streamingDone
+  }
+
   return {
     role,
     content,
-    time
+    time,
+    ...extra
   }
 }
 

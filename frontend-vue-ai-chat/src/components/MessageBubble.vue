@@ -27,6 +27,16 @@ const shouldShowAgent = computed(() => {
   return !!agentInfo.value
 })
 
+// Agent badge: dynamic status based on streaming state
+const agentBadge = computed(() => {
+  if (!shouldShowAgent.value) return null
+  const done = props.message.streamingDone !== false // default true for loaded history
+  return {
+    text: done ? '已完成' : '处理中',
+    class: done ? 'badge-done' : 'badge-working'
+  }
+})
+
 // Render message content as safe HTML (Markdown / HTML / plain text)
 const renderedMessage = computed(() => {
   if (props.message.role === 'trace') return { html: '', contentType: 'text' }
@@ -103,7 +113,7 @@ onUnmounted(() => {
     <div v-if="message.role === 'assistant' && shouldShowAgent" class="agent-header">
       <span class="agent-icon">{{ agentInfo.icon }}</span>
       <span class="agent-name" :style="{ color: agentInfo.color }">{{ agentInfo.name }}</span>
-      <span class="agent-badge" :style="{ backgroundColor: agentInfo.color }">当前处理中</span>
+      <span v-if="agentBadge" class="agent-badge" :class="agentBadge.class" :style="{ backgroundColor: agentInfo.color }">{{ agentBadge.text }}</span>
     </div>
 
     <!-- Message content: rendered Markdown/HTML -->
@@ -284,6 +294,27 @@ onUnmounted(() => {
   border-radius: 10px;
   color: white;
   font-weight: 500;
+  transition: opacity 0.6s ease, transform 0.3s ease;
+}
+
+.agent-badge.badge-working {
+  animation: badge-pulse 1.5s ease-in-out infinite;
+}
+
+.agent-badge.badge-done {
+  opacity: 0.5;
+  animation: badge-fadeout 3s ease forwards;
+}
+
+@keyframes badge-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.7; transform: scale(0.95); }
+}
+
+@keyframes badge-fadeout {
+  0% { opacity: 0.6; }
+  70% { opacity: 0.4; }
+  100% { opacity: 0; }
 }
 
 .message-content {

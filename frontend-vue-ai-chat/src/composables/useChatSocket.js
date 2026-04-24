@@ -91,7 +91,8 @@ export function useChatSocket({
           targetSession.messages.push({
             role: 'assistant',
             content: '',
-            time: createTimeLabel()
+            time: createTimeLabel(),
+            streamingDone: false
           })
           currentAssistantIndex = targetSession.messages.length - 1
         }
@@ -101,6 +102,7 @@ export function useChatSocket({
         }
 
         if (eventData.data.inprogress === false) {
+          targetSession.messages[currentAssistantIndex].streamingDone = true
           currentAssistantIndex = -1
         }
 
@@ -124,7 +126,8 @@ export function useChatSocket({
             role: 'assistant',
             content: '',
             time: createTimeLabel(),
-            agent: agentInfo
+            agent: agentInfo,
+            streamingDone: false
           })
           currentAssistantIndex = targetSession.messages.length - 1
         }
