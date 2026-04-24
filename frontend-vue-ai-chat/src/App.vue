@@ -634,17 +634,6 @@ onBeforeUnmount(() => {
               <span v-if="tmsg.detail" class="trace-bar-detail">{{ tmsg.detail }}</span>
             </div>
           </TransitionGroup>
-          <div class="pending-attachments" v-if="pendingAttachments.length">
-            <div
-              v-for="(att, idx) in pendingAttachments"
-              :key="idx"
-              class="attachment-chip"
-              :class="att.type"
-            >
-              <span class="chip-filename">{{ att.filename }}</span>
-              <button class="chip-remove" type="button" @click="removePendingAttachment(idx)">&times;</button>
-            </div>
-          </div>
           <div class="suggestion-chips" v-if="nextStepSuggestions.length && !sending">
             <button
               v-for="(sug, idx) in nextStepSuggestions"
@@ -657,6 +646,17 @@ onBeforeUnmount(() => {
               <span class="sug-icon">{{ { practice: '🎯', learn: '📖', review: '🔍', debug: '🐛', compete: '🏆' }[sug.type] || '💡' }}</span>
               <span class="sug-title">{{ sug.title }}</span>
             </button>
+          </div>
+          <div class="pending-attachments" v-if="pendingAttachments.length">
+            <div
+              v-for="(att, idx) in pendingAttachments"
+              :key="idx"
+              class="attachment-chip"
+              :class="att.type"
+            >
+              <span class="chip-filename">{{ att.filename }}</span>
+              <button class="chip-remove" type="button" @click="removePendingAttachment(idx)">&times;</button>
+            </div>
           </div>
           <div class="chat-input-row">
             <textarea
