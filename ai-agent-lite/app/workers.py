@@ -143,28 +143,112 @@ class ContestCoachAgent(BaseWorker):
                 status=CompletionStatus.ERROR
             )
 
+class EmotionAnalyzer(BaseWorker):
+    """Analyzes student emotional state using LLM instead of keyword matching.
+
+    Returns structured emotion scores used by the supervisor for routing
+    and by other agents for adaptive behavior. This agent does NOT produce
+    user-facing content — it returns a metadata-only AgentResponse.
+    """
+
+    async def analyze(self, user_input: str, recent_messages: list = None) -> Dict[str, float]:
+        """Return emotion scores {frustration, confusion, excitement, confidence}.
+
+        Each score is 0.0–1.0. On failure returns a neutral baseline.
+        """
+        # Build context from recent messages (max 3)
+        ctx_lines = []
+        if recent_messages:
+            for msg in recent_messages[-3:]:
+                role = msg.get("role", "user")
+                content = str(msg.get("content", ""))[:200]
+                ctx_lines.append(f"{role}: {content}")
+        context_block = "\n".join(ctx_lines) if ctx_lines else "(no prior context)"
+
+        prompt = (
+            "You are analyzing a programming-competition student's emotional state. "
+            "Based on their latest message and recent conversation context, "
+            "estimate their current emotional levels.\n\n"
+            f"Recent context:\n{context_block}\n"
+            f"Current message: {user_input}\n\n"
+            "Return JSON ONLY — no markdown, no explanation. Format:\n"
+            '{"emotions":{"frustration":0.0,"confusion":0.0,"excitement":0.0,"confidence":0.0}}\n'
+            "Rules:\n"
+            "- Each value is between 0.0 and 1.0\n"
+            "- frustration: annoyance, impatience, wanting to give up\n"
+            "- confusion: not understanding, feeling lost\n"
+            "- excitement: enthusiasm, insight, satisfaction\n"
+            "- confidence: self-assurance in their ability\n"
+            "- If the message is neutral, all values should be close to 0.3\n"
+        )
+
+        try:
+            raw = await self.llm.complete([{"role": "user", "content": prompt}])
+            import json as _json
+            cleaned = raw.strip()
+            if cleaned.startswith("```"):
+                cleaned = cleaned.split("\n", 1)[-1]
+            if cleaned.endswith("```"):
+                cleaned = cleaned.rsplit("```", 1)[0]
+            cleaned = cleaned.strip()
+
+            data = _json.loads(cleaned)
+            emotions = data.get("emotions", {})
+            result = {}
+            for key in ("frustration", "confusion", "excitement", "confidence"):
+                val = float(emotions.get(key, 0.3))
+                result[key] = max(0.0, min(1.0, val))
+            return result
+        except Exception as exc:
+            logger.warning("EmotionAnalyzer failed: %s", exc)
+            return {"frustration": 0.0, "confusion": 0.0, "excitement": 0.0, "confidence": 0.5}
+
+    async def process(self, user_input: str, state: Dict[str, Any]) -> AgentResponse:
+        """Not used directly — ``analyze`` is the public interface."""
+        return AgentResponse(
+            content="",
+            status=CompletionStatus.COMPLETE,
+            metadata={"role": "emotion_analyzer"},
+        )
+
+
 class LearningPartnerAgent(BaseWorker):
-    """Provides emotional support and motivation."""
-    
+    """Provides warm, targeted emotional support and positive framing.
+
+    Unlike the old keyword-driven approach, this agent receives LLM-analyzed
+    emotion scores and crafts a response that directly addresses the student's
+    specific emotional state — frustration, confusion, or simply needing
+    encouragement. It never lists generic advice; it speaks to the student
+    as a real person.
+    """
+
     async def process(self, user_input: str, state: Dict[str, Any]) -> AgentResponse:
         emotional_state = state.get("emotion_tags", {})
-        
-        prompt = f"""
-        As a supportive learning partner, provide emotional support:
-        
-        Student's Expression: {user_input}
-        Detected Emotional State: {emotional_state}
-        
-        Provide:
-        1. Empathetic acknowledgement of feelings
-        2. Encouragement and motivation  
-        3. Growth mindset perspective
-        4. Practical coping strategies
-        5. Positive reinforcement of progress
-        
-        Be warm, understanding, and genuinely supportive.
-        """
-        
+
+        # Build a concise emotion summary for the prompt
+        emotion_desc = ", ".join(
+            f"{k}={v:.1f}" for k, v in emotional_state.items() if v > 0.2
+        ) if emotional_state else "neutral"
+
+        prompt = (
+            "You are a supportive learning companion for a programming-competition "
+            "student. Your job is to provide genuine emotional support based on "
+            "their current state.\n\n"
+            f"Student says: {user_input}\n"
+            f"Detected emotional state: {emotion_desc}\n\n"
+            "Rules:\n"
+            "- Speak directly to the student's specific feeling right now.\n"
+            "- If frustrated: acknowledge the difficulty honestly, don't say it's "
+            "easy. Share that this specific struggle is a normal stage.\n"
+            "- If confused: reassure that confusion means learning is happening. "
+            "Offer one tiny concrete thing to try.\n"
+            "- If excited: match their energy briefly, then channel it into a "
+            "small next step.\n"
+            "- If neutral: be a calm, steady presence. No forced enthusiasm.\n"
+            "- Keep it short — 2-3 sentences max.\n"
+            "- Do NOT give a list of generic advice. Talk like a real person.\n"
+        )
+
         try:
             response = await self.llm.complete([{"role": "user", "content": prompt}])
             return AgentResponse(
@@ -175,7 +259,7 @@ class LearningPartnerAgent(BaseWorker):
         except Exception as e:
             logger.error(f"Learning partner response failed: {e}")
             return AgentResponse(
-                content="I'm here to support you. Let's continue learning together.",
+                content="我在这儿，随时可以继续。",
                 status=CompletionStatus.COMPLETE
             )
 

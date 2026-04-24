@@ -26,7 +26,7 @@ from app.metrics import ws_connections_active, ws_messages_total, llm_request_du
 from app.middleware import RequestMiddleware
 from app.repositories import session_repo, message_repo
 from app.supervisor import Supervisor, AgentType
-from app.workers import CodeReviewerAgent, ProblemAnalyzerAgent, ContestCoachAgent, LearningPartnerAgent, LearningManagerAgent, NextStepSuggester
+from app.workers import CodeReviewerAgent, ProblemAnalyzerAgent, ContestCoachAgent, LearningPartnerAgent, LearningManagerAgent, NextStepSuggester, EmotionAnalyzer
 from app.state_manager import state_manager
 
 logger = logging.getLogger("ai-agent-lite")
@@ -220,7 +220,8 @@ async def ws_handler(websocket: WebSocket) -> None:
                         detail={"is_new": is_new})
 
         # Initialize supervisor, workers, and suggestion agent
-        supervisor = Supervisor(llm)
+        emotion_analyzer = EmotionAnalyzer(llm)
+        supervisor = Supervisor(llm, emotion_analyzer=emotion_analyzer)
         workers = {
             AgentType.CODE_REVIEWER: CodeReviewerAgent(llm),
             AgentType.PROBLEM_ANALYZER: ProblemAnalyzerAgent(llm),
@@ -295,6 +296,7 @@ async def ws_handler(websocket: WebSocket) -> None:
                 
                 # Use supervisor pattern for advanced routing
                 agent_type = await supervisor.route_request(query_text, {
+                    "user_input": query_text,
                     "message_history": context,
                     "problem_id": current_state.get("current_problem_id"),
                     "submitted_code": current_state.get("submitted_code"),
