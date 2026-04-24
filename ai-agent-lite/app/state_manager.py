@@ -37,7 +37,9 @@ class StateManager:
             "submitted_code": None,
             "knowledge_graph_position": {},
             "emotion_tags": {},
-            "efficiency_trend": 1.0
+            "efficiency_trend": 1.0,
+            "last_agent_type": None,
+            "current_problem_context": "",
         }
     
     async def save_state(self, session_id: str, state: Dict[str, Any]):
@@ -57,7 +59,9 @@ class StateManager:
             "submitted_code": state.submitted_code,
             "knowledge_graph_position": state.knowledge_graph_position,
             "emotion_tags": state.emotion_tags,
-            "efficiency_trend": state.efficiency_trend
+            "efficiency_trend": state.efficiency_trend,
+            "last_agent_type": state.last_agent_type,
+            "current_problem_context": getattr(state, "current_problem_context", ""),
         }
     
     def update_from_context(self, state: Dict[str, Any], context: Dict[str, Any]):
@@ -68,6 +72,10 @@ class StateManager:
             state["submitted_code"] = context["submitted_code"]
         if "language" in context:
             state["language"] = context["language"]
+        if "last_agent_type" in context and context["last_agent_type"]:
+            state["last_agent_type"] = context["last_agent_type"]
+        if "problem_context" in context and context["problem_context"]:
+            state["current_problem_context"] = context["problem_context"]
 
     def compute_knowledge_delta(
         self,

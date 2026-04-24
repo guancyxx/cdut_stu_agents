@@ -1,6 +1,7 @@
 # AI Agent 提示链详细说明
 
 > 本文档描述 `ai-agent-lite` 系统中 AI Agent 的完整对话处理流程、提示词设计、路由逻辑及状态管理。
+> **Updated**: 2026-04-24 — 反映 EmotionAnalyzer 升级和系统提示注入
 
 ---
 
@@ -8,33 +9,39 @@
 
 ```
 用户消息 (WebSocket)
-        │
-        ▼
+     │
+     ▼
 ┌─────────────────────────────────────────────┐
-│            Supervisor (监督者)               │
-│  ┌─────────────────────────────────────────┐ │
-│  │ 1. 意图分类 (LLM Call #1)              │ │
-│  │    classify_intent()                    │ │
-│  └───────────────┬─────────────────────────┘ │
-│                  │                           │
-│  ┌───────────────▼─────────────────────────┐ │
-│  │ 2. 情绪覆盖 / 效率覆盖                   │ │
-│  │    _determine_agent()                    │ │
-│  └───────────────┬─────────────────────────┘ │
-│                  │                           │
-│  ┌───────────────▼─────────────────────────┐ │
-│  │ 3. Worker 处理 (LLM Call #2)            │ │
-│  │    selected_worker.process()             │ │
-│  └───────────────┬─────────────────────────┘ │
-│                  │                           │
-│  ┌───────────────▼─────────────────────────┐ │
-│  │ 4. 下一步建议 (LLM Call #3)              │ │
-│  │    NextStepSuggester.suggest()           │ │
-│  └─────────────────────────────────────────┘ │
+│ Supervisor (监督者)                          │
+│ ┌─────────────────────────────────────────┐ │
+│ │ 1. 意图分类 (LLM Call #1)              │ │
+│ │    classify_intent()                    │ │
+│ └───────────────┬─────────────────────────┘ │
+│                 │                            │
+│ ┌───────────────▼─────────────────────────┐ │
+│ │ 2. 情绪分析 (LLM Call #2)              │ │
+│ │    EmotionAnalyzer.analyze()            │ │
+│ │    → frustration/confusion/             │ │
+│ │      excitement/confidence              │ │
+│ └───────────────┬─────────────────────────┘ │
+│                 │                            │
+│ ┌───────────────▼─────────────────────────┐ │
+│ │ 3. 情绪覆盖 / 效率覆盖路由              │ │
+│ │    _determine_agent()                   │ │
+│ └───────────────┬─────────────────────────┘ │
+│                 │                            │
+│ ┌───────────────▼─────────────────────────┐ │
+│ │ 4. Worker 处理 (LLM Call #3)           │ │
+│ │    selected_worker.process()            │ │
+│ └───────────────┬─────────────────────────┘ │
+│                 │                            │
+│ ┌───────────────▼─────────────────────────┐ │
+│ │ 5. ~~下一步建议 (LLM Call #3)~~ → 已移除│ │
+│ └─────────────────────────────────────────┘ │
 └─────────────────────────────────────────────┘
 ```
 
-**每次用户消息 = 3 次 LLM 调用**（意图分类 + Worker 响应 + 建议生成）
+**每次用户消息 = 2-3 次 LLM 调用**（意图分类 + 情绪分析 + Worker 响应。NextStepSuggester 已移除。）
 
 ---
 
@@ -47,7 +54,8 @@
 | `contest_coach` | 竞赛教练 | 🏆 | #d45a5a | 竞赛策略与表现优化 |
 | `learning_partner` | 学习伙伴 | 🤝 | #5ad47a | 情感支持与学习动力 |
 | `learning_manager` | 学习管理专家 | 📊 | #d4a05a | 学习路径规划与进度管理 |
-| `next_step_suggester` | 下一步建议 | — | — | 对话末尾生成后续行动建议 |
+| `emotion_analyzer` | 情绪分析师 | — | — | LLM 驱动的情绪评分（非用户可见，元数据输出） |
+| ~~`next_step_suggester`~~ | ~~下一步建议~~ | — | — | **已移除** — 造成 3x LLM 调用 |
 
 ---
 
@@ -69,17 +77,17 @@
 步骤 3  发送 trace: "意图识别"
 步骤 4  supervisor.route_request() → LLM Call #1（意图分类）
 步骤 5  发送 trace: "意图识别完成" + intent
-步骤 6  _determine_agent() 根据意图 + 情绪/效率 → 选择 Worker
-步骤 7  发送 trace: "{Agent显示名} 处理中"
-步骤 8  selected_worker.process() → LLM Call #2（Worker响应）
-步骤 9  发送 agent_info 事件（Agent元数据）
-步骤 10 逐片发送 raw 事件（最大80字符/片）
-步骤 11  supervisor.get_next_actions() → LLM Call #3（建议生成）
-步骤 12  发送 next_suggestions 事件（如有建议）
-步骤 13  发送 trace: "建议生成完成"
-步骤 14  持久化 Assistant 消息到 DB
-步骤 15  更新 StateManager 状态
-步骤 16  发送 finish 事件
+步骤 6  supervisor._analyze_emotional_state_async() → LLM Call #2（情绪分析）
+步骤 7  情绪覆盖/效率覆盖检查 → 可能覆盖路由结果
+步骤 8  发送 trace: "{Agent显示名} 处理中"
+步骤 9  selected_worker.process() → LLM Call #3（Worker响应）
+步骤 10 发送 agent_info 事件（Agent元数据）
+步骤 11 逐片发送 raw 事件（最大80字符/片）
+步骤 12 ~~supervisor.get_next_actions() → LLM Call #3（建议生成）~~ → 已移除
+步骤 13 ~~发送 next_suggestions 事件~~ → 已移除
+步骤 14 持久化 Assistant 消息到 DB
+步骤 15 更新 StateManager 状态
+步骤 16 发送 finish 事件
 ```
 
 ---
@@ -128,13 +136,16 @@ Return ONLY the intent name.
 | `confusion > 0.7` | LearningPartnerAgent | 迷惑感强时优先情感支持 |
 | `efficiency_trend < 0.7` | LearningManagerAgent | 效率低迷时优先学习规划 |
 
-**情绪检测方式**: 关键词扫描最近3条消息
+**情绪检测方式**: ~~关键词扫描~~ → **LLM 驱动的 EmotionAnalyzer**（2026-04-24 升级）
 
-| 情绪维度 | 关键词 | 计分方式 |
-|---------|--------|---------|
-| frustration | "难""不会""崩溃""frustrat""hard""can't" | 出现次数 × 0.3，上限1.0 |
-| excitement | "太好""明白了""excit""great""understand" | 同上 |
-| confusion | "为什么""不懂""confus""why""don't understand" | 同上 |
+| 情绪维度 | 旧方式（已废弃） | 新方式 |
+|---------|-----------------|--------|
+| frustration | 关键词 "难""不会""崩溃" 等 | LLM 返回 0.0-1.0 分数 |
+| excitement | 关键词 "太好""明白了" 等 | LLM 返回 0.0-1.0 分数 |
+| confusion | 关键词 "为什么""不懂" 等 | LLM 返回 0.0-1.0 分数 |
+| confidence | —（未实现） | LLM 返回 0.0-1.0 分数（新增） |
+
+EmotionAnalyzer 提示词返回结构化 JSON：`{"frustration": 0.0-1.0, "confusion": 0.0-1.0, "excitement": 0.0-1.0, "confidence": 0.0-1.0}`
 
 ### 4.3 CodeReviewerAgent 提示词
 
@@ -255,29 +266,32 @@ IMPORTANT: You must respond in Chinese (简体中文) only. All content must be 
 **元数据输出**: `{"plan_type": "adaptive_learning", "efficiency_factor": efficiency}`
 **错误回退**: "学习规划暂时不可用。"
 
-### 4.8 NextStepSuggester 提示词
+### 4.8 ~~NextStepSuggester~~ → 已移除
+
+**已于 2026-04-23 移除**。原因：每次请求额外消耗 1 次 LLM 调用，总调用量从 2x 变 3x。下一步建议功能后续考虑在前端静态实现或由 NextStepSuggester 统一在对话末尾生成（非 Worker 级别）。
+
+### 4.9 EmotionAnalyzer 提示词（新增 2026-04-24）
 
 ```
-You are an AI programming-competition coach. Based on the conversation below, suggest 2-3 concrete
-next actions the student could take.
+Analyze the emotional state of a programming competition student based on their recent messages.
 
-Student's last message: {user_input}
-AI agent role: {agent_type}
-AI response summary: {agent_response[:600]}
-Current context: problem_id={state.get('current_problem_id', 'N/A')}
+Recent messages:
+{recent_messages}
 
-Return JSON ONLY — no markdown, no explanation. Format:
-{"suggestions":[{"type":"practice|learn|review|debug|compete","title":"short action title
-in Chinese (简体中文)","target":"specific target or problem id","reason":"why this helps,
-in Chinese (简体中文)"}]}
+Return ONLY a JSON object with these emotion scores (0.0 to 1.0):
+{
+  "frustration": <score>,
+  "confusion": <score>,
+  "excitement": <score>,
+  "confidence": <score>
+}
 
-Keep titles under 20 characters. Keep reasons under 40 characters. Title and reason MUST be
-in Chinese (简体中文).
+Base scores on: tone, language patterns, emotional expressions, problem-solving confidence.
 ```
 
-**输出**: JSON 格式建议列表，最多3项
-**验证**: 剥离 markdown 代码围栏、解析 JSON、截断标题≤20字/目标≤60字/理由≤40字
-**失败模式**: 返回空列表（永不抛异常）
+**调用方式**: `supervisor._analyze_emotional_state_async()` → 异步 LLM 调用
+**输出**: 四维情绪分数，用于路由覆盖判断和 Worker 上下文注入
+**失败回退**: 返回默认 `{"frustration": 0.0, "confusion": 0.0, "excitement": 0.0, "confidence": 0.5}`
 
 ---
 
@@ -293,6 +307,9 @@ in Chinese (简体中文).
 | 超时 | 30s | 可通过 `LITE_LLM_TIMEOUT` 覆盖 |
 | 重试策略 | 最多2次，指数退避（2s×2^attempt） | 触发条件: 429/超时/5xx |
 | 流式传输 | 代码中 `stream()` 存在但未被使用 | 已知问题 OPT-002 |
+| 系统提示 | `LlmClient.SYSTEM_PROMPT` | 硬编码，通过 `_inject_system()` 自动注入到每个请求的 messages 列表头部 |
+
+**系统提示内容**: 指导 LLM 以中文回复、扮演程序设计竞赛培训助教角色、使用结构化格式
 
 **实际响应流**: Worker 调用 `complete()` 获取完整结果 → 逐80字符切片通过 WebSocket `raw` 事件推送给前端（非 LLM 级别流式传输）
 
@@ -307,7 +324,7 @@ in Chinese (简体中文).
     "current_problem_id": str | None,          # 当前题目ID
     "submitted_code": str | None,              # 已提交的代码
     "knowledge_graph_position": dict,           # {topic: mastery_level} 知识图谱
-    "emotion_tags": dict,                       # 情绪标签 (frustration/excitement/confusion)
+ "emotion_tags": dict, # 情绪标签 (frustration/excitement/confusion/confidence)
     "efficiency_trend": float,                  # 效率趋势 (默认1.0)
     "session_start_time": datetime,             # 会话开始时间
     "last_activity_time": datetime              # 最后活动时间
@@ -342,7 +359,7 @@ new_trend = old_trend × 0.8 + efficiency × 0.2
 | `trace` | 服务端→客户端 | 处理阶段标记，含阶段名和状态 |
 | `agent_info` | 服务端→客户端 | Agent 元数据（名称、描述、图标、颜色） |
 | `raw` | 服务端→客户端 | 响应文本片段（最大80字符/片） |
-| `next_suggestions` | 服务端→客户端 | 后续行动建议列表 |
+| ~~`next_suggestions`~~ | ~~服务端→客户端~~ | ~~后续行动建议列表~~ → **已移除** |
 | `finish` | 服务端→客户端 | 处理完成信号 |
 
 ---
@@ -351,15 +368,15 @@ new_trend = old_trend × 0.8 + efficiency × 0.2
 
 | ID | 问题 | 状态 |
 |----|------|------|
-| OPT-001 | 每次请求3次LLM调用（意图+Worker+建议） | 待优化 |
+| OPT-001 | 每次请求2-3次LLM调用（意图+情绪分析+Worker） | 待优化（NextStepSuggester已移除） |
 | OPT-002 | Worker 使用 `complete()` 而非 `stream()`，无真正流式传输 | 待优化 |
-| OPT-003 | `_load_context()` 存在重复加载风险 | 待优化 |
+| OPT-003 | `_load_context()` 存在重复加载风险 | 待修复 |
 | OPT-004 | 未实现 scope guard（tutor_policy.py） | 未实现 |
 | OPT-005 | 未实现 boundary router（boundary_router.py） | 未实现 |
 | OPT-006 | 无响应格式化器 | 未实现 |
 | OPT-007 | Supervisor 每条WS连接创建（无共享状态） | 设计如此 |
 | OPT-008 | 状态写入无并发保护 | 待优化 |
-| OPT-009 | 情绪分析仅为关键词匹配 | 待优化 |
+| ~~OPT-009~~ | ~~情绪分析仅为关键词匹配~~ | **已解决** → EmotionAnalyzer |
 | OPT-010 | 无 Web 检索模块 | 未实现 |
 
 ---

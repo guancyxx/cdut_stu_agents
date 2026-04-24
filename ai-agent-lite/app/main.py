@@ -120,6 +120,26 @@ async def _load_context(db: AsyncSession, session_id: uuid.UUID) -> list[dict]:
     return msgs
 
 
+def _extract_problem_context(messages: list[dict]) -> str:
+    """Extract the most recent problem context message from conversation history.
+
+    The frontend sends a structured message starting with
+    "SYSTEM CONTEXT: OJ problem has been selected." when the student
+    selects a problem. We find the latest one and return it so
+    all agents stay anchored to the current problem.
+
+    Returns empty string if no problem context message is found.
+    """
+    if not messages:
+        return ""
+    # Search backwards for the most recent problem context message
+    for msg in reversed(messages):
+        content = str(msg.get("content", ""))
+        if content.startswith("SYSTEM CONTEXT:"):
+            return content
+    return ""
+
+
 async def _send_text_stream(websocket: WebSocket, content: str, agent_type: AgentType = None, chunk_size: int = 80) -> None:
     """Send a complete string as chunked streaming messages with optional agent info."""
     if not content:
@@ -282,7 +302,21 @@ async def ws_handler(websocket: WebSocket) -> None:
 
                 # Load message history context
                 context = await _load_context(db, session_id)
-                
+
+                # Extract current problem context from message history.
+                # The frontend sends a structured message starting with
+                # "SYSTEM CONTEXT: OJ problem has been selected." when the
+                # student picks a problem. We cache the full problem info
+                # into current_state so all agents stay anchored to it.
+                current_problem_context = current_state.get("current_problem_context", "")
+                if not current_problem_context:
+                    current_problem_context = _extract_problem_context(context)
+                # Also check if the current user message updates the problem context
+                if query_text.startswith("SYSTEM CONTEXT:"):
+                    current_problem_context = query_text
+                if current_problem_context:
+                    current_state["current_problem_context"] = current_problem_context
+
                 # Trace 1: Supervisor routing — intent classification
                 await websocket.send_json({
                     "type": "trace",
@@ -294,14 +328,20 @@ async def ws_handler(websocket: WebSocket) -> None:
                     }
                 })
                 
-                # Use supervisor pattern for advanced routing
-                agent_type = await supervisor.route_request(query_text, {
-                    "user_input": query_text,
-                    "message_history": context,
-                    "problem_id": current_state.get("current_problem_id"),
-                    "submitted_code": current_state.get("submitted_code"),
-                    "user_id": user_id
-                })
+                # Use supervisor pattern for context-aware routing
+                agent_type = await supervisor.route_request(
+                    query_text,
+                    {
+                        "user_input": query_text,
+                        "message_history": context,
+                        "problem_id": current_state.get("current_problem_id"),
+                        "submitted_code": current_state.get("submitted_code"),
+                        "user_id": user_id,
+                        "last_agent_type": current_state.get("last_agent_type"),
+                        "problem_context": current_problem_context,
+                    },
+                    message_history=context,
+                )
 
                 # Trace 1 result: show classified intent + selected agent
                 await websocket.send_json({
@@ -333,9 +373,13 @@ async def ws_handler(websocket: WebSocket) -> None:
                     }
                 })
                 
-                # Dispatch to specialized worker
+                # Dispatch to specialized worker (with conversation history for context)
                 selected_worker = workers[agent_type]
-                agent_response = await selected_worker.process(query_text, current_state)
+                # Inject problem context into state so workers can anchor on it
+                worker_state = {**current_state, "current_problem_context": current_problem_context}
+                agent_response = await selected_worker.process(
+                    query_text, worker_state, message_history=context
+                )
 
                 # Send response
                 await _send_text_stream(websocket, agent_response.content, agent_type)
@@ -390,6 +434,9 @@ async def ws_handler(websocket: WebSocket) -> None:
                         "output": suggestion_summary
                     }
                 })
+
+                # Track which agent handled this turn (persisted for next turn's routing)
+                current_state["last_agent_type"] = agent_type.value
 
                 # Persist assistant message
                 if agent_response.content:

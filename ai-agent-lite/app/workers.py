@@ -5,7 +5,7 @@ All AI responses to users must be in Chinese (简体中文).
 Prompts and code remain in English only.
 """
 from enum import Enum
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 import logging
 from dataclasses import dataclass
 
@@ -16,50 +16,155 @@ class CompletionStatus(Enum):
     NEEDS_FOLLOWUP = "needs_followup"
     ERROR = "error"
 
-@dataclass 
+@dataclass
 class AgentResponse:
     content: str
     status: CompletionStatus
     metadata: Dict[str, Any] = None
     next_actions: List[Dict] = None
 
+
+def _build_history_block(
+    message_history: List[Dict[str, str]] = None,
+    max_messages: int = 6,
+    max_chars: int = 200,
+) -> str:
+    """Build a concise conversation-history block for agent prompts.
+
+    Returns a human-readable summary of recent turns, or an empty string
+    if no history is available.  Keeps the last *max_messages* messages
+    and truncates each to *max_chars*.
+    """
+    if not message_history:
+        return ""
+    recent = message_history[-max_messages:]
+    lines = []
+    for msg in recent:
+        role = msg.get("role", "unknown")
+        content = str(msg.get("content", ""))[:max_chars]
+        lines.append(f"{role}: {content}")
+    return "\n".join(lines)
+
+
+def _build_problem_anchor_block(state: Dict[str, Any]) -> str:
+    """Build a problem-anchor instruction block for agent prompts.
+
+    When a problem is selected, this generates a strong instruction
+    that keeps the agent anchored to the current problem, preventing
+    the conversation from drifting to unrelated topics.
+
+    Returns empty string if no problem context is available.
+    """
+    problem_context = state.get("current_problem_context", "")
+    if not problem_context:
+        return ""
+
+    # Extract title and problem ID from the structured context message
+    title = ""
+    problem_id = ""
+    difficulty = ""
+    for line in problem_context.split("\n"):
+        if line.startswith("Title:"):
+            title = line.replace("Title:", "").strip()
+        elif line.startswith("Problem ID:"):
+            problem_id = line.replace("Problem ID:", "").strip()
+        elif line.startswith("Difficulty:"):
+            difficulty = line.replace("Difficulty:", "").strip()
+
+    # Extract problem statement section
+    statement_start = problem_context.find("Problem statement:")
+    problem_statement = ""
+    if statement_start >= 0:
+        problem_statement = problem_context[statement_start + len("Problem statement:"):].strip()
+
+    anchor = (
+        "\n====== CURRENT PROBLEM (TEACHING ANCHOR) ======\n"
+        f"Problem ID: {problem_id or 'N/A'}\n"
+        f"Title: {title or 'Unknown'}\n"
+        f"Difficulty: {difficulty or 'Unknown'}\n"
+    )
+    if problem_statement:
+        # Truncate very long statements to keep prompts manageable
+        stmt_preview = problem_statement[:800] + ("..." if len(problem_statement) > 800 else "")
+        anchor += f"Problem statement preview: {stmt_preview}\n"
+
+    anchor += (
+        "====== END PROBLEM ANCHOR ======\n\n"
+        "ABSOLUTE RULE — TOPIC ANCHORING:\n"
+        "- You are aware that this problem is selected, but do NOT start teaching or analyzing it\n"
+        "  unless the student EXPLICITLY asks for help with it.\n"
+        "- If the student is chatting, greeting, or making casual conversation, respond NATURALLY.\n"
+        "  Do NOT redirect them to the problem. Let them lead.\n"
+        "- ONLY when the student asks about this problem (e.g., \"怎么做\", \"帮我看看\", \"不理解\"),\n"
+        "  then enter teaching mode and anchor all your guidance to this problem.\n"
+        "- In teaching mode: your response MUST be relevant to the current problem.\n"
+        "  Do NOT discuss algorithms, data structures, or topics unrelated to this problem.\n"
+        "  When giving examples or exercises, they must relate to THIS problem.\n"
+    )
+    return anchor
+
+
 class BaseWorker:
     """Base class for all specialized workers."""
-    
+
     def __init__(self, llm_client):
         self.llm = llm_client
-    
-    async def process(self, user_input: str, state: Dict[str, Any]) -> AgentResponse:
+
+    async def process(
+        self,
+        user_input: str,
+        state: Dict[str, Any],
+        message_history: List[Dict[str, str]] = None,
+    ) -> AgentResponse:
         """Process user input and return structured response."""
         raise NotImplementedError
 
+
 class CodeReviewerAgent(BaseWorker):
     """Specialized in code quality, efficiency, and style evaluation."""
-    
-    async def process(self, user_input: str, state: Dict[str, Any]) -> AgentResponse:
+
+    async def process(
+        self,
+        user_input: str,
+        state: Dict[str, Any],
+        message_history: List[Dict[str, str]] = None,
+    ) -> AgentResponse:
         code = state.get("submitted_code", "")
         language = state.get("language", "unknown")
-        
-        prompt = f"""
-        As an expert code reviewer for programming competitions, analyze this {language} code:
-        
-        Code:
-        ```{language}
-        {code}
-        ```
-        
-        Student's question: {user_input}
-        
-        Provide structured analysis covering:
-        1. Logic Correctness (checkmark/warning/cross + brief explanation)
-        2. Time Complexity Analysis (Big O notation)  
-        3. Space Complexity Analysis
-        4. Code Style Assessment (naming, structure, readability)
-        5. 3 Specific Improvement Suggestions
-        
-        Format response clearly with sections.
-        """
-        
+        problem_id = state.get("current_problem_id", "unknown")
+
+        history_block = _build_history_block(message_history)
+        history_section = ""
+        if history_block:
+            history_section = (
+                f"\nConversation history (for context — the student may be "
+                f"responding to a previous question about this code):\n"
+                f"```\n{history_block}\n```\n"
+            )
+
+        problem_anchor = _build_problem_anchor_block(state)
+
+        prompt = f"""As an expert code reviewer for programming competitions, analyze this {language} code.
+{problem_anchor}
+Problem ID: {problem_id}
+
+Code:
+```{language}
+{code}
+```
+
+Student's question: {user_input}
+{history_section}
+MICRO-STEP TEACHING RULES:
+- Do NOT dump all analysis in one response. Cover ONE aspect per turn only.
+- Start with the most critical issue (logic correctness). Other aspects wait for future turns.
+- ALWAYS end with a concrete question or micro-task for the student (e.g., "Can you spot the bug in the loop condition?" or "Try fixing the time complexity and show me").
+- NEVER give the complete corrected code unless the student has asked 3+ times on the same point.
+- Briefly evaluate → give a hint → ask them to act.
+
+If the student is answering a question from the conversation history,
+evaluate their answer directly and concisely, then advance to the next aspect."""
+
         try:
             response = await self.llm.complete([{"role": "user", "content": prompt}])
             return AgentResponse(
@@ -74,28 +179,50 @@ class CodeReviewerAgent(BaseWorker):
                 status=CompletionStatus.ERROR
             )
 
+
 class ProblemAnalyzerAgent(BaseWorker):
     """Deep analysis of competition problems and solution guidance."""
-    
-    async def process(self, user_input: str, state: Dict[str, Any]) -> AgentResponse:
+
+    async def process(
+        self,
+        user_input: str,
+        state: Dict[str, Any],
+        message_history: List[Dict[str, str]] = None,
+    ) -> AgentResponse:
         problem_id = state.get("current_problem_id", "unknown")
-        
-        prompt = f"""
-        As a programming competition problem expert, help with problem analysis:
-        
-        Problem Context: {problem_id}
-        Student's Question: {user_input}
-        
-        Provide comprehensive guidance covering:
-        1. Problem Understanding (what is being asked)
-        2. Solution Approach (step-by-step strategy)
-        3. Algorithm Selection (optimal choices and alternatives)
-        4. Edge Cases to consider
-        5. Implementation Tips
-        
-        Focus on teaching problem-solving thinking, not just giving answers.
-        """
-        
+
+        history_block = _build_history_block(message_history)
+        history_section = ""
+        if history_block:
+            history_section = (
+                f"\nConversation history (for context — the student may be "
+                f"continuing a discussion about this problem):\n"
+                f"```\n{history_block}\n```\n"
+            )
+
+        problem_anchor = _build_problem_anchor_block(state)
+
+        prompt = f"""As a programming competition problem expert, help the student through this problem step by step.
+{problem_anchor}
+Problem Context: {problem_id}
+Student's Question: {user_input}
+{history_section}
+MICRO-STEP TEACHING RULES:
+- Do NOT provide a full analysis covering everything at once. You are a coach, not a textbook.
+- Each turn, cover only ONE small aspect of the problem (e.g., just understand the input format, or just identify the core algorithm, or just analyze one edge case).
+- ALWAYS end your response with a concrete question or micro-task that requires the student to think or try (e.g., "What do you think the time complexity would be if we used brute force?" or "Try writing just the input-parsing part").
+- NEVER reveal the full solution approach unless the student has been stuck on the same point 3+ times.
+- When the student answers your question, evaluate it first, then advance to the next micro-step.
+- Do NOT give numbered lists of all aspects — that is lecturing, not coaching.
+- Be brief. One concept → one question. That is one turn.
+
+IMPORTANT: If the conversation history shows the student is answering a
+previous question or trying an exercise, respond to THEIR answer first
+(evaluate correctness, give feedback), then advance to the NEXT micro-step.
+Do NOT restart the explanation from scratch as if this is a new conversation.
+
+Focus on teaching problem-solving thinking, not just giving answers."""
+
         try:
             response = await self.llm.complete([{"role": "user", "content": prompt}])
             return AgentResponse(
@@ -110,25 +237,39 @@ class ProblemAnalyzerAgent(BaseWorker):
                 status=CompletionStatus.ERROR
             )
 
+
 class ContestCoachAgent(BaseWorker):
     """Simulates competition pressure and provides strategic advice."""
-    
-    async def process(self, user_input: str, state: Dict[str, Any]) -> AgentResponse:
-        prompt = f"""
-        As a programming competition coach, provide strategic advice:
-        
-        Student's Situation: {user_input}
-        
-        Focus on competition-specific guidance:
-        1. Time Management Strategies
-        2. Problem Selection Priority (easy/medium/hard)
-        3. Debugging under Pressure
-        4. Common Competition Pitfalls to Avoid
-        5. Mental Preparation Techniques
-        
-        Use competitive but supportive tone.
-        """
-        
+
+    async def process(
+        self,
+        user_input: str,
+        state: Dict[str, Any],
+        message_history: List[Dict[str, str]] = None,
+    ) -> AgentResponse:
+        history_block = _build_history_block(message_history)
+        history_section = ""
+        if history_block:
+            history_section = (
+                f"\nConversation history (for context):\n"
+                f"```\n{history_block}\n```\n"
+            )
+
+        problem_anchor = _build_problem_anchor_block(state)
+
+        prompt = f"""As a programming competition coach, provide strategic advice.
+{problem_anchor}
+Student's Situation: {user_input}
+{history_section}
+MICRO-STEP TEACHING RULES:
+- Do NOT list all strategies at once. Cover ONE concrete tip or strategy per turn.
+- ALWAYS end with a concrete question or small action for the student (e.g., "Which problem would you tackle first in a 2-hour contest and why?").
+- When the student follows up, evaluate their thinking, then give the next tip.
+- Be competitive but supportive. Brief and direct.
+
+If the student is following up on previous coaching advice, respond to
+their specific situation first, then advance to the next strategy point."""
+
         try:
             response = await self.llm.complete([{"role": "user", "content": prompt}])
             return AgentResponse(
@@ -142,6 +283,7 @@ class ContestCoachAgent(BaseWorker):
                 content="Competition coaching temporarily unavailable.",
                 status=CompletionStatus.ERROR
             )
+
 
 class EmotionAnalyzer(BaseWorker):
     """Analyzes student emotional state using LLM instead of keyword matching.
@@ -203,7 +345,7 @@ class EmotionAnalyzer(BaseWorker):
             logger.warning("EmotionAnalyzer failed: %s", exc)
             return {"frustration": 0.0, "confusion": 0.0, "excitement": 0.0, "confidence": 0.5}
 
-    async def process(self, user_input: str, state: Dict[str, Any]) -> AgentResponse:
+    async def process(self, user_input: str, state: Dict[str, Any], message_history: List[Dict[str, str]] = None) -> AgentResponse:
         """Not used directly — ``analyze`` is the public interface."""
         return AgentResponse(
             content="",
@@ -222,7 +364,12 @@ class LearningPartnerAgent(BaseWorker):
     as a real person.
     """
 
-    async def process(self, user_input: str, state: Dict[str, Any]) -> AgentResponse:
+    async def process(
+        self,
+        user_input: str,
+        state: Dict[str, Any],
+        message_history: List[Dict[str, str]] = None,
+    ) -> AgentResponse:
         emotional_state = state.get("emotion_tags", {})
 
         # Build a concise emotion summary for the prompt
@@ -230,23 +377,41 @@ class LearningPartnerAgent(BaseWorker):
             f"{k}={v:.1f}" for k, v in emotional_state.items() if v > 0.2
         ) if emotional_state else "neutral"
 
+        history_block = _build_history_block(message_history)
+        history_section = ""
+        if history_block:
+            history_section = (
+                f"\nConversation history (so you understand what the student has been through):\n"
+                f"```\n{history_block}\n```\n"
+            )
+
+        problem_anchor = _build_problem_anchor_block(state)
+
         prompt = (
             "You are a supportive learning companion for a programming-competition "
-            "student. Your job is to provide genuine emotional support based on "
-            "their current state.\n\n"
+            "student.\n\n"
             f"Student says: {user_input}\n"
-            f"Detected emotional state: {emotion_desc}\n\n"
+            f"Detected emotional state: {emotion_desc}\n"
+            f"{problem_anchor}"
+            f"{history_section}"
             "Rules:\n"
-            "- Speak directly to the student's specific feeling right now.\n"
+            "- CRITICAL: Do NOT start teaching or coaching unless the student explicitly asks for help. "
+            "If the student is just greeting, chatting, or making small talk, respond as a friendly "
+            "conversation partner — be natural, warm, and brief. No teaching, no problem analysis, "
+            "no suggestions about algorithms or exercises.\n"
+            "- If the student DOES explicitly ask for help with a problem or concept, briefly encourage "
+            "them and then suggest they ask the specific question — but let them lead.\n"
             "- If frustrated: acknowledge the difficulty honestly, don't say it's "
             "easy. Share that this specific struggle is a normal stage.\n"
             "- If confused: reassure that confusion means learning is happening. "
             "Offer one tiny concrete thing to try.\n"
-            "- If excited: match their energy briefly, then channel it into a "
-            "small next step.\n"
+            "- If excited: match their energy briefly, then let them continue.\n"
             "- If neutral: be a calm, steady presence. No forced enthusiasm.\n"
             "- Keep it short — 2-3 sentences max.\n"
             "- Do NOT give a list of generic advice. Talk like a real person.\n"
+            "- If the conversation history shows the student was in the middle of "
+            "a learning exercise, briefly acknowledge their emotional state then "
+            "help them get back on track with that exercise.\n"
         )
 
         try:
@@ -262,6 +427,7 @@ class LearningPartnerAgent(BaseWorker):
                 content="我在这儿，随时可以继续。",
                 status=CompletionStatus.COMPLETE
             )
+
 
 class NextStepSuggester(BaseWorker):
     """Generates contextual next-step suggestions at the end of a conversation turn.
@@ -394,7 +560,7 @@ class NextStepSuggester(BaseWorker):
             logger.warning("NextStepSuggester failed: %s", exc)
             return []
 
-    async def process(self, user_input: str, state: Dict[str, Any]) -> AgentResponse:
+    async def process(self, user_input: str, state: Dict[str, Any], message_history: List[Dict[str, str]] = None) -> AgentResponse:
         """Not used directly — ``suggest`` is the public interface."""
         return AgentResponse(
             content="",
@@ -412,10 +578,17 @@ class LearningManagerAgent(BaseWorker):
     or micro-exercise that requires the student's active response.
     """
 
-    async def process(self, user_input: str, state: Dict[str, Any]) -> AgentResponse:
+    async def process(
+        self,
+        user_input: str,
+        state: Dict[str, Any],
+        message_history: List[Dict[str, str]] = None,
+    ) -> AgentResponse:
         knowledge_graph = state.get("knowledge_graph_position", {})
         efficiency = state.get("efficiency_trend", 1.0)
         emotion_tags = state.get("emotion_tags", {})
+        problem_id = state.get("current_problem_id", "unknown")
+
         emotion_context = ""
         if emotion_tags:
             emotion_items = ", ".join(f"{k}={v:.1f}" for k, v in emotion_tags.items() if v > 0.2)
@@ -437,11 +610,24 @@ class LearningManagerAgent(BaseWorker):
                 "Then offer a simpler, more concrete anchoring question."
             )
 
+        # Build conversation history section
+        history_block = _build_history_block(message_history)
+        history_section = ""
+        if history_block:
+            history_section = (
+                "\nConversation history (the teaching dialogue so far):\n"
+                f"```\n{history_block}\n```\n"
+            )
+
+        # Build problem anchor — this is the strongest constraint
+        problem_anchor = _build_problem_anchor_block(state)
+
         prompt = (
             "You are a pragmatic, precise programming-competition learning coach. "
             "Your role is to guide students through micro-steps, NOT to lecture.\n\n"
             "ABSOLUTE RULES:\n"
-            "- Your ENTIRE response body MUST NOT exceed 200 Chinese characters.\n"
+            "- NEVER dump large amounts of information in one turn. Cover only 1 concept "
+            "or 1 exercise per turn, keeping your response concise and focused.\n"
             "- NEVER list more than 1 new concept or 1 exercise per turn.\n"
             "- NEVER give complete source code unless the student has asked 3+ times "
             "on the same logical point.\n"
@@ -453,9 +639,19 @@ class LearningManagerAgent(BaseWorker):
             "difficult things are easy.\n"
             "- When a student is wrong, point out the specific gap and provide a "
             "minimal hint, not the full correction.\n\n"
+            f"{problem_anchor}"
             f"Student's current knowledge profile: {knowledge_graph or 'new student'}\n"
-            f"Efficiency trend: {efficiency:.2f}{emotion_context}{frustration_level}\n\n"
-            f"Student says: {user_input}\n"
+            f"Current problem: {problem_id}\n"
+            f"Efficiency trend: {efficiency:.2f}{emotion_context}{frustration_level}\n"
+            f"{history_section}"
+            f"Student says: {user_input}\n\n"
+            "CRITICAL: If the conversation history shows you previously asked the student "
+            "a question or gave them an exercise, the student's current message is likely "
+            "their ANSWER to that question. In that case:\n"
+            "- Evaluate their answer first (correct/partially correct/wrong)\n"
+            "- Give targeted feedback on their specific answer\n"
+            "- Then give the NEXT micro-step or question\n"
+            "- Do NOT repeat the previous question or restart the explanation\n"
         )
 
         try:

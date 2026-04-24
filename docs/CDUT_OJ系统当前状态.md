@@ -1,6 +1,6 @@
 # CDUT OJ System - Current Status
 
-**Updated**: 2026-04-22
+**Updated**: 2026-04-24
 **OJ Version**: QDUOJ v1.6.1
 **System Status**: Running
 
@@ -76,6 +76,9 @@
 - [x] OJ problem browsing + code submission in chat UI
 - [x] Per-session OJ submit draft (language, code, state)
 - [x] LLM connected (DeepSeek via API)
+- [x] EmotionAnalyzer (LLM-based 4-dimensional emotion scoring: frustration/confusion/excitement/confidence)
+- [x] System prompt injection via LlmClient.SYSTEM_PROMPT + _inject_system()
+- [x] NextStepSuggester removed (reduced 3x to 2-3x LLM calls per request)
 
 ---
 

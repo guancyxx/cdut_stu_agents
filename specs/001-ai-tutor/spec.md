@@ -2,7 +2,7 @@
 
 **Feature Branch**: `001-ai-tutor`
 **Created**: 2025-12-02
-**Updated**: 2026-04-23
+**Updated**: 2026-04-24
 **Status**: In Progress
 **Implementation**: ai-agent-lite (FastAPI) + frontend-vue-ai-chat (Vue 3)
 **Original input**: "Develop AI tutor chat system based on AI agent"
@@ -26,6 +26,8 @@
 | Online retrieval | Not yet | web_retrieval.py not implemented |
 | Structured output format | Not yet | response_formatter.py not implemented |
 | Per-agent next-step suggestions | Removed | Was generating 3x LLM calls per request; see Optimization Backlog |
+| LLM-based emotion analysis | Done | EmotionAnalyzer agent replaces keyword matching; returns frustration/confusion/excitement/confidence scores |
+| Global system prompt injection | Done | LlmClient.SYSTEM_PROMPT + _inject_system() ensures Chinese-only responses |
 
 ## User Scenarios & Testing
 
@@ -147,7 +149,7 @@ System records student history and provides personalized recommendations.
 - **LLM**: DeepSeek-V3 via OpenAI-compatible streaming API
 - **OJ integration**: REST API proxy from frontend to QDUOJ backend
 - **Session isolation**: Currently by client-generated session_id; user_id binding TODO
-- **Language**: All user-facing text is Chinese; system prompt instructs LLM to respond in Chinese
+- **Language**: All user-facing text is Chinese; system prompt (LlmClient.SYSTEM_PROMPT) instructs LLM to respond in Chinese; `_inject_system()` prepends system prompt to every request if not already present
 
 ## Optimization Backlog
 
@@ -157,7 +159,7 @@ Issues identified during architecture review (2026-04-23). Ordered by priority.
 
 | ID | Issue | Description | Impact |
 |----|-------|-------------|--------|
-| OPT-001 | 3x LLM calls per request | Supervisor intent classification + Worker response + NextStepSuggester = 3 sequential LLM calls per user message | 3x cost, 3x latency. NextStepSuggester has been removed; intent classification merge is pending |
+| OPT-001 | 2x LLM calls per request | Supervisor intent classification (LLM #1) + Worker response (LLM #2). EmotionAnalyzer adds an optional 3rd call. NextStepSuggester removed. | 2x base cost/latency + optional emotion call. Intent classification merge is pending |
 | OPT-002 | Workers use complete() not stream() | LlmClient.stream() is implemented but no worker calls it. Users wait for full generation before seeing any output | Perceived latency is maximal; streaming would show first token in ~1s |
 | OPT-003 | Duplicate _load_context() definition | main.py defines `_load_context()` at line 117 and again at line 123. Second silently shadows the first | If definitions diverge, wrong one runs; currently harmless but a latent bug |
 
@@ -175,7 +177,7 @@ Issues identified during architecture review (2026-04-23). Ordered by priority.
 |----|-------|-------------|--------|
 | OPT-007 | Supervisor re-instantiated per WS connection | main.py line 229 creates `Supervisor(llm)` inside ws_handler. Each connection gets a fresh instance, no state sharing | State is not shared across connections; memory is wasted |
 | OPT-008 | State manager has no concurrency protection | state_manager.active_states is a plain dict without locking | Concurrent WS connections writing same session may lose updates |
-| OPT-009 | Emotion analysis is keyword matching only | supervisor._analyze_emotional_state() counts hardcoded Chinese/English keywords in last 3 messages | Prone to false positives/negatives; no real sentiment model |
+| OPT-009 | ~~Emotion analysis is keyword matching only~~ | **Resolved 2026-04-24**: Replaced with LLM-based EmotionAnalyzer agent that returns structured scores (frustration/confusion/excitement/confidence 0.0-1.0). supervisor._analyze_emotional_state_async() calls EmotionAnalyzer.analyze() instead of keyword scanning. | ~~Prone to false positives/negatives~~ — Now uses LLM; remaining concern is extra LLM call cost (~1x per request) |
 | OPT-010 | No web retrieval | web_retrieval.py not implemented. Agent cannot fetch docs, version diffs, or external references | Answers lack external grounding; queries about version differences or official docs are answered from training data only |
 
 ### P3 — Polish and monitoring
@@ -186,10 +188,49 @@ Issues identified during architecture review (2026-04-23). Ordered by priority.
 | OPT-012 | No LLM call duration tracking in metrics | llm_request_duration_seconds Histogram exists but is never observed | Cannot measure actual LLM latency in production |
 | OPT-013 | No rate limiting per user | Any user can send unlimited requests | Vulnerable to abuse; no per-user quota |
 
+## Project Spec Alignment
+
+> Source: `docs/PROJECT_SPEC.md` — extracted from the official project specification PDF
+
+### Research Content → Implementation Mapping
+
+| # | Research Content (项目说明) | Current Implementation | Status |
+|---|---------------------------|----------------------|--------|
+| 1 | 竞赛知识图谱构建 | 19 tags on 609 problems; no structured graph | Early stage |
+| 2 | 学习路径智能规划 | LearningManagerAgent (LLM-based, no algorithm) | Partial |
+| 3 | AI代码分析与反馈 | CodeReviewerAgent (LLM-based, unstructured) | Partial |
+| 4 | 智能题目推荐系统 | Not implemented | Not yet |
+| 5 | 编程思维可视化 | Not implemented | Not yet |
+| 6 | 虚拟助教系统 | 5 Worker Agents + Supervisor + EmotionAnalyzer | Done |
+| 7 | 多功能AI Agent设计 | 5 specialized + 1 emotion analysis agent | Done |
+
+### Agent Roles → PDF Specification Mapping
+
+| PDF Agent Role | Implementation | Class | Status |
+|---------------|---------------|-------|--------|
+| 学习伙伴Agent | LearningPartnerAgent | workers.py | Done — emotional support + motivation |
+| 竞赛教练Agent | ContestCoachAgent | workers.py | Done — contest strategy + pressure guidance |
+| 代码审查Agent | CodeReviewerAgent | workers.py | Done — code quality + optimization |
+| 问题解析Agent | ProblemAnalyzerAgent | workers.py | Done — problem breakdown + approach |
+| 学习管理Agent | LearningManagerAgent | workers.py | Done — learning path + time management |
+| *(implicit)* | EmotionAnalyzer | workers.py | Done — LLM-based emotion scoring (resolves OPT-009) |
+
+### Expected Goals Gap Analysis
+
+| # | Expected Goal | Current Achievement | Gap |
+|---|--------------|-------------------|-----|
+| 1 | 完整AI辅助培训系统 | Core system running (OJ + AI chat) | Missing: knowledge graph, visualization, contest sim |
+| 2 | 知识图谱+题库 ≥3000题 | 609 problems imported | Need 2400+ more; no structured knowledge graph |
+| 3 | 代码分析准确率 ≥85% | LLM-based review works conversationally | No formal evaluation; accuracy unmeasured |
+| 4 | 解题效率+30%, 成绩+20% | Not measured | No baseline or tracking system |
+| 5 | 可推广AI辅助编程教育模式 | System is self-contained | No formal methodology or replication guide |
+| 6 | ≥5种专业化AI Agent | 5 Worker + 1 EmotionAnalyzer = 6 agents | Exceeds minimum; agents lack specialized training |
+
 ## Change Log
 
 | Date | Change |
 |------|--------|
+| 2026-04-24 | Added EmotionAnalyzer (LLM-based emotion analysis, resolves OPT-009). Added LlmClient.SYSTEM_PROMPT + _inject_system(). Updated OPT-001 from 3x to 2x LLM calls. Added project spec alignment (research goals, agent roles). |
 | 2026-04-23 | Removed per-agent next-step suggestions (NextStepSuggester). Was causing 3x LLM calls per request. Added OPT-001..OPT-013 optimization backlog. Added Chinese-only language policy. Added FR-016..FR-019. |
 | 2026-04-22 | Added supervisor pattern implementation status |
 | 2025-12-02 | Initial spec |
