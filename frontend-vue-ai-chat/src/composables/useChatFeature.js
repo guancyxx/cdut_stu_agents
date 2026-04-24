@@ -10,8 +10,23 @@ const createHistoryStorageKey = (youtuSessionId) => `cdut-ai-chat-history-${yout
 const sanitizeStoredMessage = (message) => {
   if (!message || typeof message !== 'object') return null
 
-  const role = message.role === 'user' ? 'user' : message.role === 'assistant' ? 'assistant' : ''
+  const role = message.role === 'user' ? 'user'
+    : message.role === 'assistant' ? 'assistant'
+    : message.role === 'trace' ? 'trace'
+    : ''
   if (!role) return null
+
+  // Trace messages have structured fields
+  if (role === 'trace') {
+    return {
+      role: 'trace',
+      stage: typeof message.stage === 'string' ? message.stage.slice(0, 64) : '',
+      title: typeof message.title === 'string' ? message.title.slice(0, 120) : '',
+      detail: typeof message.detail === 'string' ? message.detail.slice(0, 500) : '',
+      output: typeof message.output === 'string' ? message.output.slice(0, 2000) : '',
+      time: typeof message.time === 'string' && message.time.trim() ? message.time : new Date().toLocaleTimeString()
+    }
+  }
 
   const content = typeof message.content === 'string' ? message.content : ''
   const time = typeof message.time === 'string' && message.time.trim() ? message.time : new Date().toLocaleTimeString()
