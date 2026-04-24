@@ -94,6 +94,9 @@ const {
   removePendingAttachment,
   clearPendingAttachments,
   pruneOrphanAttachments,
+  nextStepSuggestions,
+  sendSuggestion,
+  clearSuggestions,
   loadSessions,
   selectSession,
   selectOrCreateProblemSession,
@@ -621,6 +624,19 @@ onBeforeUnmount(() => {
               <span class="chip-filename">{{ att.filename }}</span>
               <button class="chip-remove" type="button" @click="removePendingAttachment(idx)">&times;</button>
             </div>
+          </div>
+          <div class="suggestion-chips" v-if="nextStepSuggestions.length && !sending">
+            <button
+              v-for="(sug, idx) in nextStepSuggestions"
+              :key="idx"
+              class="suggestion-chip"
+              :class="sug.type"
+              :title="sug.reason || ''"
+              @click="sendSuggestion(sug)"
+            >
+              <span class="sug-icon">{{ { practice: '🎯', learn: '📖', review: '🔍', debug: '🐛', compete: '🏆' }[sug.type] || '💡' }}</span>
+              <span class="sug-title">{{ sug.title }}</span>
+            </button>
           </div>
           <div class="chat-input-row">
             <textarea

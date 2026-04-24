@@ -139,6 +139,33 @@ export function useChatFeature() {
 
   const hasPendingAttachments = computed(() => pendingAttachments.value.length > 0)
 
+  // Next-step suggestions from AI (displayed as clickable chips above input)
+  const nextStepSuggestions = ref([])
+
+  const clearSuggestions = () => {
+    nextStepSuggestions.value = []
+  }
+
+  const sendSuggestion = async (suggestion) => {
+    if (sending.value || !currentSession.value) return
+    const text = suggestion.title || suggestion.target || ''
+    if (!text) return
+
+    // Clear suggestions immediately to prevent double-click
+    clearSuggestions()
+
+    appendMessageToSession(currentSessionId.value, {
+      role: 'user',
+      content: text,
+      time: createTimeLabel()
+    })
+    syncSessionHistoryCache(currentSessionId.value)
+    input.value = ''
+    clearPendingAttachments()
+    await scrollToBottom()
+    await socketDriver.sendQuery(text)
+  }
+
   const {
     sessions,
     currentSessionId,
@@ -198,6 +225,9 @@ export function useChatFeature() {
     createTimeLabel,
     onAfterMessageAppended: (sessionId) => {
       syncSessionHistoryCache(sessionId)
+    },
+    onSuggestions: (items) => {
+      nextStepSuggestions.value = items
     }
   })
 
@@ -315,6 +345,7 @@ export function useChatFeature() {
 
     input.value = ''
     clearPendingAttachments()
+    clearSuggestions()
     await scrollToBottom()
     await socketDriver.sendQuery(finalContent)
   }
@@ -357,6 +388,9 @@ export function useChatFeature() {
     removePendingAttachment,
     clearPendingAttachments,
     pruneOrphanAttachments,
+    nextStepSuggestions,
+    sendSuggestion,
+    clearSuggestions,
     createSession: createMappedSession,
     loadSessions,
     selectSession: selectSessionAndRestore,

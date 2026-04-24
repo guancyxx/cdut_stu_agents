@@ -11,7 +11,8 @@ export function useChatSocket({
   scrollToBottom,
   setSending,
   createTimeLabel,
-  onAfterMessageAppended
+  onAfterMessageAppended,
+  onSuggestions
 }) {
   const sending = ref(false)
 
@@ -163,6 +164,13 @@ export function useChatSocket({
         saveSessions()
         onAfterMessageAppended?.(targetSessionId)
         await scrollToBottom()
+        return
+      }
+
+      // Handle next-step suggestions — display as clickable chips above input
+      if (eventData.type === 'next_suggestions') {
+        const items = eventData.data?.suggestions || []
+        onSuggestions?.(items)
         return
       }
 

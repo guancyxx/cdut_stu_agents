@@ -460,6 +460,107 @@ body {
   background: rgba(255, 255, 255, 0.2);
 }
 
+/* --- Suggestion chips (next-step actions from AI) --- */
+
+.suggestion-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 4px 0;
+}
+
+.suggestion-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 12px;
+  border-radius: 16px;
+  font-size: 12px;
+  line-height: 1.4;
+  font-weight: 500;
+  border: 1px solid var(--border-standard, #4a5568);
+  background: rgba(74, 159, 255, 0.08);
+  color: var(--brand, #4a9eff);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, transform 0.1s;
+  white-space: nowrap;
+}
+
+.suggestion-chip:hover {
+  background: rgba(74, 159, 255, 0.18);
+  border-color: var(--brand, #4a9eff);
+  transform: translateY(-1px);
+}
+
+.suggestion-chip:active {
+  transform: translateY(0);
+  background: rgba(74, 159, 255, 0.25);
+}
+
+.suggestion-chip.practice {
+  border-color: #e67e22;
+  background: rgba(230, 126, 34, 0.08);
+  color: #e67e22;
+}
+
+.suggestion-chip.practice:hover {
+  background: rgba(230, 126, 34, 0.18);
+  border-color: #e67e22;
+}
+
+.suggestion-chip.learn {
+  border-color: #3498db;
+  background: rgba(52, 152, 219, 0.08);
+  color: #3498db;
+}
+
+.suggestion-chip.learn:hover {
+  background: rgba(52, 152, 219, 0.18);
+  border-color: #3498db;
+}
+
+.suggestion-chip.review {
+  border-color: #9b59b6;
+  background: rgba(155, 89, 182, 0.08);
+  color: #9b59b6;
+}
+
+.suggestion-chip.review:hover {
+  background: rgba(155, 89, 182, 0.18);
+  border-color: #9b59b6;
+}
+
+.suggestion-chip.debug {
+  border-color: #e74c3c;
+  background: rgba(231, 76, 60, 0.08);
+  color: #e74c3c;
+}
+
+.suggestion-chip.debug:hover {
+  background: rgba(231, 76, 60, 0.18);
+  border-color: #e74c3c;
+}
+
+.suggestion-chip.compete {
+  border-color: #f39c12;
+  background: rgba(243, 156, 18, 0.08);
+  color: #f39c12;
+}
+
+.suggestion-chip.compete:hover {
+  background: rgba(243, 156, 18, 0.18);
+  border-color: #f39c12;
+}
+
+.sug-icon {
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.sug-title {
+  font-size: 12px;
+}
+
 textarea,
 input,
 select {
