@@ -373,6 +373,81 @@ body {
   background: var(--bg-soft);
 }
 
+/* --- Trace status bar (fixed above input, not in chat scroll) --- */
+
+.trace-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 4px 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.trace-bar-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  line-height: 1.4;
+  font-weight: 500;
+  border: 1px solid var(--border-subtle, #e0e0e0);
+  background: var(--bg-soft, #f9f9fb);
+  color: var(--text-secondary, #666);
+  white-space: nowrap;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.trace-bar-item.running {
+  border-left: 2px solid var(--brand, #4a9eff);
+  color: var(--brand, #4a9eff);
+}
+
+.trace-bar-item.done {
+  border-left: 2px solid #4caf50;
+  color: #4caf50;
+  opacity: 0.8;
+}
+
+.trace-bar-icon {
+  font-size: 11px;
+}
+
+.trace-bar-item.running .trace-bar-icon {
+  animation: spin 1.5s linear infinite;
+}
+
+.trace-bar-title {
+  font-weight: 600;
+}
+
+.trace-bar-detail {
+  color: var(--text-tertiary, #999);
+  font-size: 10px;
+}
+
+/* Trace slide transition */
+.trace-slide-enter-active {
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.trace-slide-leave-active {
+  transition: opacity 0.4s ease, transform 0.4s ease;
+}
+
+.trace-slide-enter-from {
+  opacity: 0;
+  transform: translateY(8px);
+}
+
+.trace-slide-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
+}
+
 .chat-input-area textarea {
   width: 100%;
 }

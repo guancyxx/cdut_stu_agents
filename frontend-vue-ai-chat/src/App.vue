@@ -108,6 +108,11 @@ const {
   closeSocket
 } = useChatFeature()
 
+// Separate trace messages from normal chat messages
+// Trace is displayed in a fixed overlay above the input, not in the scrollable chat flow
+const chatMessages = computed(() => messages.value.filter((m) => m.role !== 'trace'))
+const traceMessages = computed(() => messages.value.filter((m) => m.role === 'trace'))
+
 const {
   authMode,
   authUsernameRef,
@@ -609,14 +614,26 @@ onBeforeUnmount(() => {
 
         <main class="chat-main" ref="listRef">
           <MessageBubble 
-            v-for="(msg, idx) in messages" 
-            :key="idx" 
+            v-for="(msg, idx) in chatMessages" 
+            :key="msg._uid || idx" 
             :message="msg" 
-            :is-last="idx === messages.length - 1"
+            :is-last="idx === chatMessages.length - 1"
           />
         </main>
 
         <footer class="chat-input-area">
+          <TransitionGroup name="trace-slide" tag="div" class="trace-bar" v-if="traceMessages.length">
+            <div
+              v-for="tmsg in traceMessages"
+              :key="tmsg._uid || tmsg.time"
+              class="trace-bar-item"
+              :class="tmsg.stage?.endsWith('_result') ? 'done' : 'running'"
+            >
+              <span class="trace-bar-icon">{{ tmsg.stage?.endsWith('_result') ? '✓' : '⟳' }}</span>
+              <span class="trace-bar-title">{{ tmsg.title }}</span>
+              <span v-if="tmsg.detail" class="trace-bar-detail">{{ tmsg.detail }}</span>
+            </div>
+          </TransitionGroup>
           <div class="pending-attachments" v-if="pendingAttachments.length">
             <div
               v-for="(att, idx) in pendingAttachments"
