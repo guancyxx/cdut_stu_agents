@@ -1,7 +1,6 @@
 """
 Specialized Worker Agents for programming competition training.
 Each agent focuses on a specific aspect of student development.
-All prompts are in Chinese — Chinese is the sole interaction language.
 """
 from enum import Enum
 from typing import Dict, Any, List
@@ -40,24 +39,24 @@ class CodeReviewerAgent(BaseWorker):
         language = state.get("language", "unknown")
         
         prompt = f"""
-        你是编程竞赛代码审查专家，请用中文分析以下 {language} 代码：
+        As an expert code reviewer for programming competitions, analyze this {language} code:
         
-        代码：
+        Code:
         ```{language}
         {code}
         ```
         
-        学生的问题：{user_input}
+        Student's question: {user_input}
         
-        请按以下结构进行分析：
-        1. 逻辑正确性（✅/⚠️/❌ + 简要说明）
-        2. 时间复杂度分析（大O表示法）
-        3. 空间复杂度分析
-        4. 代码风格评估（命名、结构、可读性）
-        5. 3 条具体改进建议
-        6. 相关算法/数据结构推荐
+        Provide structured analysis covering:
+        1. Logic Correctness (✅/⚠️/❌ + brief explanation)
+        2. Time Complexity Analysis (Big O notation)  
+        3. Space Complexity Analysis
+        4. Code Style Assessment (naming, structure, readability)
+        5. 3 Specific Improvement Suggestions
+        6. Related Algorithm/Data Structure to review
         
-        请用中文清晰作答，分节格式输出。
+        Format response clearly with sections.
         """
         
         try:
@@ -81,20 +80,20 @@ class ProblemAnalyzerAgent(BaseWorker):
         problem_id = state.get("current_problem_id", "unknown")
         
         prompt = f"""
-        你是编程竞赛题目解析专家，请用中文帮助学生分析题目：
+        As a programming competition problem expert, help with problem analysis:
         
-        题目上下文：{problem_id}
-        学生的问题：{user_input}
+        Problem Context: {problem_id}
+        Student's Question: {user_input}
         
-        请提供以下指导：
-        1. 题目理解（题目到底在问什么）
-        2. 解题思路（分步骤策略）
-        3. 算法选择（最优选择及替代方案）
-        4. 边界情况考虑
-        5. 实现技巧
-        6. 相关练习题推荐
+        Provide comprehensive guidance covering:
+        1. Problem Understanding (what is being asked)
+        2. Solution Approach (step-by-step strategy)
+        3. Algorithm Selection (optimal choices and alternatives)
+        4. Edge Cases to consider
+        5. Implementation Tips
+        6. Related Problems for practice
         
-        重点培养解题思维，而非直接给出答案。
+        Focus on teaching problem-solving thinking, not just giving answers.
         """
         
         try:
@@ -116,19 +115,19 @@ class ContestCoachAgent(BaseWorker):
     
     async def process(self, user_input: str, state: Dict[str, Any]) -> AgentResponse:
         prompt = f"""
-        你是编程竞赛教练，请用中文提供竞赛策略建议：
+        As a programming competition coach, provide strategic advice:
         
-        学生的情况：{user_input}
+        Student's Situation: {user_input}
         
-        请提供以下竞赛专项指导：
-        1. 时间管理策略
-        2. 题目选择优先级（简单/中等/困难）
-        3. 压力下调试技巧
-        4. 常见竞赛陷阱及规避方法
-        5. 心理准备技巧
-        6. 模拟赛情景建议
+        Focus on competition-specific guidance:
+        1. Time Management Strategies
+        2. Problem Selection Priority (easy/medium/hard)
+        3. Debugging under Pressure
+        4. Common Competition Pitfalls to Avoid
+        5. Mental Preparation Techniques
+        6. Mock Competition Scenarios
         
-        请用竞技但有鼓励性的语气作答。
+        Use competitive but supportive tone.
         """
         
         try:
@@ -152,20 +151,20 @@ class LearningPartnerAgent(BaseWorker):
         emotional_state = state.get("emotion_tags", {})
         
         prompt = f"""
-        你是温暖的学习伙伴，请用中文提供情感支持和鼓励：
+        As a supportive learning partner, provide emotional support:
         
-        学生的表达：{user_input}
-        检测到的情绪状态：{emotional_state}
+        Student's Expression: {user_input}
+        Detected Emotional State: {emotional_state}
         
-        请提供以下支持：
-        1. 对学生感受的共情认同
-        2. 鼓励和激励
-        3. 成长型思维引导
-        4. 实用的应对策略
-        5. 对进步的积极肯定
-        6. 温和地将学生引回学习中
+        Provide:
+        1. Empathetic acknowledgement of feelings
+        2. Encouragement and motivation  
+        3. Growth mindset perspective
+        4. Practical coping strategies
+        5. Positive reinforcement of progress
+        6. Gentle guidance back to learning
         
-        请保持温暖、理解和真诚支持的态度。
+        Be warm, understanding, and genuinely supportive.
         """
         
         try:
@@ -190,21 +189,21 @@ class LearningManagerAgent(BaseWorker):
         efficiency = state.get("efficiency_trend", 1.0)
         
         prompt = f"""
-        你是学习管理专家，请用中文制定个性化学习计划：
+        As a learning manager, create personalized learning plan:
         
-        当前知识状态：{knowledge_graph}
-        学习效率：{efficiency}
-        学生请求：{user_input}
+        Current Knowledge State: {knowledge_graph}
+        Learning Efficiency: {efficiency}
+        Student's Request: {user_input}
         
-        请提供以下结构化学习指导：
-        1. 当前技能评估
-        2. 推荐学习目标
-        3. 自适应难度调整建议
-        4. 练习题推荐
-        5. 学习计划建议
-        6. 进度追踪方法
+        Provide structured learning guidance:
+        1. Current Skill Assessment
+        2. Recommended Learning Objectives  
+        3. Adaptive Difficulty Adjustment
+        4. Practice Problem Recommendations
+        5. Study Schedule Suggestions
+        6. Progress Tracking Method
         
-        请基于实际能力水平做出推荐。
+        Base recommendations on actual competency levels.
         """
         
         try:
