@@ -11,6 +11,11 @@ data/problems/*
 !data/chat_history/.gitkeep
 !data/problems/.gitkeep
 
+# Database backups
+backups/*.dump
+backups/*.sql
+backups/*.tar.gz
+
 # Python
 __pycache__/
 *.py[cod]
@@ -39,6 +44,9 @@ env/
 ENV/
 .venv
 
+# Node.js
+node_modules/
+
 # IDE
 .vscode/
 .idea/
@@ -61,3 +69,14 @@ logs/
 tmp/
 temp/
 *.tmp
+*.original
+
+# Build artifacts
+frontend-vue-ai-chat/dist/
+
+# Archive directories (historical, not active)
+docs/archive/
+scripts/archive/
+
+# Scraped/external draft docs
+docs/open.*/
