@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, ref, onMounted, onUnmounted } from 'vue'
 import { renderMessageContent } from '../utils/validators'
 
 const props = defineProps({
@@ -59,25 +59,42 @@ const traceStatusClass = computed(() => {
   const stage = props.message.stage || ''
   return stage.endsWith('_result') ? 'done' : 'running'
 })
+
+// Auto-fade: completed trace cards disappear after a delay
+const traceVisible = ref(true)
+let fadeTimer = null
+
+onMounted(() => {
+  if (isTrace.value && traceStatusClass.value === 'done') {
+    fadeTimer = setTimeout(() => {
+      traceVisible.value = false
+    }, 8000) // 8s after mount, fade out
+  }
+})
+
+onUnmounted(() => {
+  if (fadeTimer) clearTimeout(fadeTimer)
+})
 </script>
 
 <template>
-  <!-- Trace message: collapsible step card -->
-  <div v-if="isTrace" class="trace-card" :class="traceStatusClass" @click="traceHasOutput && (traceExpanded = !traceExpanded)">
-    <div class="trace-header">
-      <span class="trace-icon">{{ traceStatusIcon }}</span>
-      <span class="trace-title">{{ message.title }}</span>
-      <span v-if="message.detail" class="trace-detail">{{ message.detail }}</span>
-      <span v-if="traceHasOutput" class="trace-toggle">{{ traceExpanded ? '▲' : '▼' }}</span>
+  <!-- Trace message: collapsible step card (auto-fades when done) -->
+  <Transition name="trace-fade">
+    <div v-if="isTrace && traceVisible" class="trace-card" :class="traceStatusClass" @click="traceHasOutput && (traceExpanded = !traceExpanded)">
+      <div class="trace-header">
+        <span class="trace-icon">{{ traceStatusIcon }}</span>
+        <span class="trace-title">{{ message.title }}</span>
+        <span v-if="message.detail" class="trace-detail">{{ message.detail }}</span>
+        <span v-if="traceHasOutput" class="trace-toggle">{{ traceExpanded ? '▲' : '▼' }}</span>
+      </div>
+      <div v-if="traceHasOutput && traceExpanded" class="trace-output">
+        <pre>{{ message.output }}</pre>
+      </div>
     </div>
-    <div v-if="traceHasOutput && traceExpanded" class="trace-output">
-      <pre>{{ message.output }}</pre>
-    </div>
-    <div class="message-time">{{ message.time }}</div>
-  </div>
+  </Transition>
 
   <!-- Normal message bubble -->
-  <div v-else class="message-bubble" :class="{
+  <div v-if="!isTrace" class="message-bubble" :class="{
     assistant: message.role === 'assistant',
     user: message.role === 'user',
     'has-agent': shouldShowAgent
@@ -104,29 +121,29 @@ const traceStatusClass = computed(() => {
 </template>
 
 <style scoped>
-/* ---- Trace Card ---- */
+/* ---- Trace Card (compact, auto-fading) ---- */
 .trace-card {
-  max-width: 75%;
-  padding: 8px 14px;
-  border-radius: 10px;
-  margin-bottom: 6px;
+  max-width: 65%;
+  padding: 4px 10px;
+  border-radius: 8px;
+  margin-bottom: 3px;
   align-self: flex-start;
   margin-right: auto;
   cursor: default;
-  font-size: 13px;
+  font-size: 11px;
   border: 1px solid var(--border-subtle, #e8e8e8);
   background: var(--bg-soft, #f9f9fb);
   color: var(--text-secondary, #666);
-  transition: border-color 0.2s, background 0.2s;
+  transition: border-color 0.2s, background 0.2s, opacity 0.6s ease;
 }
 
 .trace-card.running {
-  border-left: 3px solid var(--brand, #4a9eff);
+  border-left: 2px solid var(--brand, #4a9eff);
 }
 
 .trace-card.done {
-  border-left: 3px solid #4caf50;
-  opacity: 0.85;
+  border-left: 2px solid #4caf50;
+  opacity: 0.7;
 }
 
 .trace-card:hover {
@@ -136,12 +153,12 @@ const traceStatusClass = computed(() => {
 .trace-header {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   flex-wrap: wrap;
 }
 
 .trace-icon {
-  font-size: 14px;
+  font-size: 11px;
   flex-shrink: 0;
 }
 
@@ -157,39 +174,54 @@ const traceStatusClass = computed(() => {
 .trace-title {
   font-weight: 600;
   color: var(--text-primary, #333);
+  font-size: 11px;
 }
 
 .trace-detail {
   color: var(--text-tertiary, #999);
-  font-size: 12px;
+  font-size: 10px;
 }
 
 .trace-toggle {
   margin-left: auto;
-  font-size: 10px;
+  font-size: 9px;
   color: var(--text-tertiary, #999);
   cursor: pointer;
-  padding: 2px 4px;
+  padding: 1px 3px;
 }
 
 .trace-output {
-  margin-top: 6px;
-  padding-top: 6px;
+  margin-top: 4px;
+  padding-top: 4px;
   border-top: 1px dashed var(--border-subtle, #eee);
 }
 
 .trace-output pre {
   margin: 0;
-  padding: 6px 10px;
+  padding: 4px 8px;
   background: var(--code-bg, #1e1e2e);
   color: var(--code-fg, #cdd6f4);
-  border-radius: 6px;
-  font-size: 12px;
-  line-height: 1.4;
+  border-radius: 4px;
+  font-size: 10px;
+  line-height: 1.3;
   overflow-x: auto;
   font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
   white-space: pre-wrap;
   word-break: break-all;
+}
+
+/* Fade-out transition for completed traces */
+.trace-fade-leave-active {
+  transition: opacity 0.8s ease, max-height 0.5s ease, margin 0.5s ease, padding 0.5s ease;
+}
+
+.trace-fade-leave-to {
+  opacity: 0;
+  max-height: 0;
+  margin-bottom: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  overflow: hidden;
 }
 
 /* ---- Normal Message Bubble ---- */
