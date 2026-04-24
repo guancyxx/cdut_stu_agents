@@ -1,16 +1,24 @@
-"""
-Async audit logger for ai-agent-lite.
-Writes to the audit_log table without blocking the WS handler.
+"""Async audit log repository.
+
+Migrated from app.audit — keeps data access in the repository layer.
+PII key filtering logic is co-located with the write path.
 """
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import AuditLog
+from app.models.orm import AuditLog
 
 logger = logging.getLogger("ai-agent-lite.audit")
+
+# Keys that should never appear in audit detail (PII / secrets)
+_BLOCKED_KEYS = {"password", "secret", "token", "api_key", "authorization", "cookie"}
+
+
+def _is_safe_key(key: str) -> bool:
+    return key.lower() not in _BLOCKED_KEYS
 
 
 async def log_event(
@@ -29,7 +37,7 @@ async def log_event(
             user_id=user_id,
             event_type=event_type,
             detail={k: v for k, v in (detail or {}).items() if _is_safe_key(k)},
-            created_at=datetime.utcnow(),
+            created_at=datetime.now(timezone.utc),
         )
         db.add(entry)
         await db.commit()
@@ -37,11 +45,3 @@ async def log_event(
         logger.exception("Failed to write audit log for event_type=%s", event_type)
         # Non-blocking: swallow to avoid crashing the WS handler
         await db.rollback()
-
-
-# Keys that should never appear in audit detail (PII / secrets)
-_BLOCKED_KEYS = {"password", "secret", "token", "api_key", "authorization", "cookie"}
-
-
-def _is_safe_key(key: str) -> bool:
-    return key.lower() not in _BLOCKED_KEYS

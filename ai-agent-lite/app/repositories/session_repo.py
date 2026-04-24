@@ -1,13 +1,11 @@
-"""
-Async CRUD for sessions table.
-"""
-from datetime import datetime
+"""Async CRUD for sessions table."""
+from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Session
+from app.models.orm import Session
 
 
 async def create_session(
@@ -56,6 +54,6 @@ async def archive_session(db: AsyncSession, session_id: UUID) -> None:
     await db.execute(
         update(Session)
         .where(Session.id == session_id)
-        .values(status="archived", updated_at=datetime.utcnow())
+        .values(status="archived", updated_at=datetime.now(timezone.utc))
     )
     await db.commit()

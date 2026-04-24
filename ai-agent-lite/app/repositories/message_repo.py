@@ -1,12 +1,11 @@
-"""
-Async CRUD for messages table.
-"""
+"""Async CRUD for messages table."""
 from uuid import UUID
 
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Message
+from app.models.orm import Message
+from app.config import settings
 
 
 async def create_message(
@@ -57,8 +56,12 @@ async def count_messages(db: AsyncSession, session_id: UUID) -> int:
 async def list_messages_as_dicts(
     db: AsyncSession,
     session_id: UUID,
-    limit: int = 100,
+    limit: int = 0,
 ) -> list[dict]:
-    """Return messages as role/content dicts suitable for LLM context."""
-    msgs = await list_messages(db, session_id, limit=limit)
+    """Return messages as role/content dicts suitable for LLM context.
+
+    If limit is 0 (default), uses the configured max_context_messages.
+    """
+    effective_limit = limit or settings.max_context_messages
+    msgs = await list_messages(db, session_id, limit=effective_limit)
     return [{"role": m.role, "content": m.content} for m in msgs]

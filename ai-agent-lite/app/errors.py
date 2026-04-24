@@ -1,16 +1,5 @@
-"""
-Unified error codes and AppError exception for ai-agent-lite.
-"""
-from enum import Enum
-
-
-class ErrorCode(str, Enum):
-    LLM_TIMEOUT = "LLM_TIMEOUT"
-    LLM_RATE_LIMIT = "LLM_RATE_LIMIT"
-    LLM_SERVER_ERROR = "LLM_SERVER_ERROR"
-    INVALID_INPUT = "INVALID_INPUT"
-    SESSION_NOT_FOUND = "SESSION_NOT_FOUND"
-    INTERNAL = "INTERNAL"
+"""Unified error codes and AppError exception for ai-agent-lite."""
+from app.models.enums import ErrorCode
 
 
 class AppError(Exception):

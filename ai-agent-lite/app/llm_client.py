@@ -1,19 +1,19 @@
-"""
-LLM client with retry, timeout, and structured error handling.
-"""
+"""LLM client with retry, timeout, and structured error handling."""
 import asyncio
+import json
 import logging
-import os
-from typing import AsyncGenerator
 
 import httpx
 
-from app.errors import AppError, ErrorCode
+from app.config import settings
+from app.errors import AppError
+from app.models.enums import ErrorCode
 
 logger = logging.getLogger("ai-agent-lite.llm")
 
-# Mask API keys in logs
+
 def _mask_key(key: str) -> str:
+    """Mask API keys in logs."""
     if len(key) <= 8:
         return "***"
     return key[:4] + "..." + key[-4:]
@@ -30,12 +30,10 @@ class LlmClient:
     )
 
     def __init__(self) -> None:
-        self.base_url = os.getenv("LITE_LLM_BASE_URL", "").strip()
-        self.api_key = os.getenv("LITE_LLM_API_KEY", "").strip()
-        self.model = os.getenv("LITE_LLM_MODEL", "deepseek-chat").strip()
-        self.timeout_seconds = float(os.getenv("LITE_LLM_TIMEOUT", "30"))
-        self._max_retries = 2
-        self._retry_delay = 2.0
+        self.base_url = settings.llm_base_url
+        self.api_key = settings.llm_api_key
+        self.model = settings.llm_model
+        self.timeout_seconds = settings.llm_timeout
 
     @property
     def enabled(self) -> bool:
@@ -65,15 +63,15 @@ class LlmClient:
         }
 
         last_error: Exception | None = None
-        for attempt in range(self._max_retries + 1):
+        for attempt in range(settings.llm_max_retries + 1):
             try:
                 async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
                     response = await client.post(endpoint, headers=headers, json=payload)
 
                     if response.status_code == 429:
-                        if attempt < self._max_retries:
-                            logger.warning("LLM rate limited, retry %d/%d", attempt + 1, self._max_retries)
-                            await asyncio.sleep(self._retry_delay * (2 ** attempt))
+                        if attempt < settings.llm_max_retries:
+                            logger.warning("LLM rate limited, retry %d/%d", attempt + 1, settings.llm_max_retries)
+                            await asyncio.sleep(settings.llm_retry_delay * (2 ** attempt))
                             continue
                         raise AppError(ErrorCode.LLM_RATE_LIMIT, "LLM provider rate limit exceeded")
 
@@ -85,15 +83,15 @@ class LlmClient:
             except AppError:
                 raise
             except httpx.TimeoutException:
-                if attempt < self._max_retries:
-                    logger.warning("LLM timeout, retry %d/%d", attempt + 1, self._max_retries)
-                    await asyncio.sleep(self._retry_delay)
+                if attempt < settings.llm_max_retries:
+                    logger.warning("LLM timeout, retry %d/%d", attempt + 1, settings.llm_max_retries)
+                    await asyncio.sleep(settings.llm_retry_delay)
                     continue
                 raise AppError(ErrorCode.LLM_TIMEOUT, f"LLM request timed out after {self.timeout_seconds}s")
             except httpx.HTTPStatusError as exc:
-                if exc.response.status_code >= 500 and attempt < self._max_retries:
-                    logger.warning("LLM server error %d, retry %d/%d", exc.response.status_code, attempt + 1, self._max_retries)
-                    await asyncio.sleep(self._retry_delay)
+                if exc.response.status_code >= 500 and attempt < settings.llm_max_retries:
+                    logger.warning("LLM server error %d, retry %d/%d", exc.response.status_code, attempt + 1, settings.llm_max_retries)
+                    await asyncio.sleep(settings.llm_retry_delay)
                     continue
                 raise AppError(ErrorCode.LLM_SERVER_ERROR, f"LLM server returned {exc.response.status_code}")
             except Exception as exc:
@@ -102,7 +100,7 @@ class LlmClient:
 
         raise AppError(ErrorCode.INTERNAL, "LLM call failed after retries") from last_error
 
-    async def stream(self, messages: list[dict]) -> AsyncGenerator[str, None]:
+    async def stream(self, messages: list[dict]):
         """Streaming completion. Yields content chunks."""
         if not self.enabled:
             yield self._fallback(messages)
@@ -131,7 +129,6 @@ class LlmClient:
                         data = line[6:]
                         if data.strip() == "[DONE]":
                             return
-                        import json
                         chunk = json.loads(data)
                         delta = chunk.get("choices", [{}])[0].get("delta", {})
                         content = delta.get("content")

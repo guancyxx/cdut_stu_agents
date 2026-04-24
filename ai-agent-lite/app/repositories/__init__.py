@@ -1,1 +1,1 @@
-"""Package marker."""
+"""Repository layer — data access modules."""

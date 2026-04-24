@@ -1,37 +1,29 @@
-"""
-State management and persistence for supervisor pattern.
-Integrated with existing PostgreSQL storage.
-"""
-from typing import Dict, Any, Optional
+"""State management service — student state persistence and knowledge delta computation."""
 import uuid
-from datetime import datetime
-import json
-from sqlalchemy.ext.asyncio import AsyncSession
+import logging
+from typing import Dict, Any
 
 from app.database import async_session
-from app.repositories import session_repo, message_repo
-from app.models import Session, Message
+from app.repositories import session_repo
+from app.config import settings
+
+logger = logging.getLogger("ai-agent-lite.state_manager")
+
 
 class StateManager:
-    """Manages student state with persistent storage."""
-    
-    def __init__(self):
-        self.active_states = {}  # session_id -> StudentState
-    
+    """Manages student state with persistent PostgreSQL storage.
+
+    No in-memory cache — each load/save goes directly to the database
+    to avoid stale state and memory leaks.
+    """
+
     async def load_state(self, session_id: str) -> Dict[str, Any]:
-        """Load state from database or create new."""
-        if session_id in self.active_states:
-            return self._state_to_dict(self.active_states[session_id])
-        
-        # Load from database
+        """Load state from database or return default empty state."""
         async with async_session() as db:
             session_data = await session_repo.get_session(db, uuid.UUID(session_id))
             if session_data and session_data.supervisor_state:
-                state_data = session_data.supervisor_state
-                # Convert back to StudentState object if needed
-                return state_data
-        
-        # Return empty state if not found
+                return session_data.supervisor_state
+        # Return empty default state
         return {
             "current_problem_id": None,
             "submitted_code": None,
@@ -41,29 +33,17 @@ class StateManager:
             "last_agent_type": None,
             "current_problem_context": "",
         }
-    
+
     async def save_state(self, session_id: str, state: Dict[str, Any]):
         """Save state to database."""
+        from datetime import datetime, timezone
         async with async_session() as db:
             session_obj = await session_repo.get_session(db, uuid.UUID(session_id))
             if session_obj:
-                # Update supervisor state directly
                 session_obj.supervisor_state = state
-                session_obj.updated_at = datetime.utcnow()
+                session_obj.updated_at = datetime.now(timezone.utc)
                 await db.commit()
-    
-    def _state_to_dict(self, state) -> Dict[str, Any]:
-        """Convert StudentState to dictionary."""
-        return {
-            "current_problem_id": state.current_problem_id,
-            "submitted_code": state.submitted_code,
-            "knowledge_graph_position": state.knowledge_graph_position,
-            "emotion_tags": state.emotion_tags,
-            "efficiency_trend": state.efficiency_trend,
-            "last_agent_type": state.last_agent_type,
-            "current_problem_context": getattr(state, "current_problem_context", ""),
-        }
-    
+
     def update_from_context(self, state: Dict[str, Any], context: Dict[str, Any]):
         """Update state based on current context."""
         if "problem_id" in context:
@@ -124,19 +104,15 @@ class StateManager:
             "before_summary": {k: round(v, 3) for k, v in before_kg.items()},
             "after_summary": {k: round(v, 3) for k, v in after_kg.items()},
         }
-    
+
     async def track_efficiency(self, session_id: str, response_time: float, complexity: str):
         """Track learning efficiency metrics."""
-        # This would integrate with proper metrics system
-        # For now, simple tracking
         state = await self.load_state(session_id)
-        
-        # Simple efficiency calculation (would be more sophisticated)
         expected_time = {"easy": 2.0, "medium": 5.0, "hard": 10.0}.get(complexity, 5.0)
         efficiency = expected_time / max(response_time, 0.1)
-        
         state["efficiency_trend"] = state.get("efficiency_trend", 1.0) * 0.8 + efficiency * 0.2
         await self.save_state(session_id, state)
 
-# Singleton instance
+
+# Singleton instance — stateless, safe to share across connections
 state_manager = StateManager()

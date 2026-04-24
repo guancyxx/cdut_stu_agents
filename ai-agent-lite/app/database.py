@@ -1,19 +1,13 @@
-"""
-Database connection pool and initialization for ai-agent-lite.
+"""Database connection pool and initialization for ai-agent-lite.
+
 Reuses the existing QDUOJ PostgreSQL instance with a separate schema.
 """
-import os
-
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-_SCHEMA = os.getenv("LITE_DB_SCHEMA", "ai_agent")
-_DATABASE_URL = os.getenv(
-    "LITE_DATABASE_URL",
-    "postgresql+asyncpg://onlinejudge:onlinejudge@oj-postgres:5432/onlinejudge",
-)
+from app.config import settings
 
 engine = create_async_engine(
-    _DATABASE_URL,
+    settings.db_url,
     pool_size=5,
     max_overflow=10,
     pool_pre_ping=True,
@@ -25,12 +19,12 @@ async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit
 
 def _apply_schema(base):
     """Set schema on all tables before create_all."""
-    base.metadata.schema = _SCHEMA
+    base.metadata.schema = settings.db_schema
 
 
 async def init_db() -> None:
     """Create schema and tables if they do not exist."""
-    from app.models import Base
+    from app.models.orm import Base
 
     # Set schema BEFORE create_all
     _apply_schema(Base)
@@ -38,7 +32,7 @@ async def init_db() -> None:
     # Ensure schema exists
     async with engine.begin() as conn:
         import sqlalchemy
-        await conn.execute(sqlalchemy.text(f"CREATE SCHEMA IF NOT EXISTS {_SCHEMA}"))
+        await conn.execute(sqlalchemy.text(f"CREATE SCHEMA IF NOT EXISTS {settings.db_schema}"))
         await conn.run_sync(Base.metadata.create_all)
 
 
