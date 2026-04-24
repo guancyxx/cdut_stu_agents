@@ -219,7 +219,7 @@ async def ws_handler(websocket: WebSocket) -> None:
                         session_id=session_id, user_id=user_id,
                         detail={"is_new": is_new})
 
-        # Initialize supervisor and workers
+        # Initialize supervisor, workers
         supervisor = Supervisor(llm)
         workers = {
             AgentType.CODE_REVIEWER: CodeReviewerAgent(llm),

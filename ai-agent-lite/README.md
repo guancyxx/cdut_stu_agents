@@ -230,3 +230,4 @@ Supervisor 模式可通过环境变量配置：
 | 日期 | 变更 |
 |------|------|
 | 2026-04-23 | 移除 NextStepSuggester（3x LLM 调用降为 2x）。添加已知问题与优化待办。标注中文唯一语言策略。移除 next_suggestions 协议说明。 |
+| 2026-04-24 | 全量中文交互策略：所有 Worker/Supervisor 提示词改为中文，移除 NextStepSuggester 代码残留（类、枚举、suggester 实例化），前端 agents.js 去除下一步建议模式匹配。 |

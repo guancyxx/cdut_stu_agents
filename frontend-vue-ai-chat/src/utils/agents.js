@@ -49,7 +49,7 @@ export function extractAgentFromMessage(content) {
     { agent: AGENT_TYPES.PROBLEM_ANALYZER, patterns: [/算法.*解释/, /问题.*解析/, /动态规划/, /贪心算法/] },
     { agent: AGENT_TYPES.CONTEST_COACH, patterns: [/竞赛.*策略/, /比赛.*建议/, /时间.*管理/] },
     { agent: AGENT_TYPES.LEARNING_PARTNER, patterns: [/加油/, /坚持/, /相信.*你/, /学习.*伙伴/] },
-    { agent: AGENT_TYPES.LEARNING_MANAGER, patterns: [/学习.*计划/, /下一步.*建议/, /学习.*路径/] }
+    { agent: AGENT_TYPES.LEARNING_MANAGER, patterns: [/学习.*计划/, /学习.*路径/, /进度.*管理/] }
   ]
   
   for (const marker of agentMarkers) {

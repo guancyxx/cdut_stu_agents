@@ -61,19 +61,19 @@ class Supervisor:
     async def _classify_intent(self, user_input: str) -> str:
         """Use LLM to classify user intent."""
         prompt = f"""
-        Classify the student's intent from programming competition training:
-        
-        Input: "{user_input}"
-        
-        Possible intents:
-        - code_review: Request for code analysis, optimization, or style feedback
-        - problem_help: Need help understanding or solving a problem
-        - contest_prep: Seeking competition strategies or pressure simulation  
-        - emotional_support: Expressing frustration, confusion, or need for motivation
-        - learning_plan: Request for study recommendations or progress tracking
-        - general_question: Other algorithm/data structure questions
-        
-        Return ONLY the intent name.
+        请根据学生的输入判断其意图（编程竞赛培训场景）：
+
+        输入："{user_input}"
+
+        可能的意图：
+        - code_review：请求代码分析、优化或风格点评
+        - problem_help：需要帮助理解或解决题目
+        - contest_prep：寻求竞赛策略或压力模拟
+        - emotional_support：表达挫折、困惑或需要鼓励
+        - learning_plan：请求学习建议或进度跟踪
+        - general_question：其他算法/数据结构问题
+
+        仅返回意图名称。
         """
         
         try:
@@ -142,38 +142,5 @@ class Supervisor:
                             for indicator in indicators))
             self.state.emotion_tags[emotion] = min(1.0, count * 0.3)
 
-    async def get_next_actions(self, agent_response: str, agent_type: AgentType) -> list:
-        """Generate next action suggestions based on agent response."""
-        prompt = f"""
-        As an AI programming competition coach, suggest 2-3 specific next actions 
-        based on this interaction:
-        
-        Agent Role: {agent_type.value}
-        Response: {agent_response}
-        
-        Student State:
-       - Current Problem: {self.state.current_problem_id or 'None'}
-       - Emotional State: {self.state.emotion_tags}
-        
-        Provide JSON format:
-        {{
-          "next_actions": [
-            {{
-              "type": "practice|learn|review|debug|compete",
-              "title": "Short description",
-              "target": "specific target if applicable",
-              "reason": "why this is recommended"
-            }}
-          ]
-        }}
-        """
-        
-        try:
-            response = await self.llm.complete([{"role": "user", "content": prompt}])
-            # Parse JSON response and return actions
-            import json
-            return json.loads(response).get("next_actions", [])
-        except Exception as e:
-            logger.error(f"Next actions generation failed: {e}")
-            return []# Test hot reload comment
+# Test hot reload comment
 # Hot reload test comment
