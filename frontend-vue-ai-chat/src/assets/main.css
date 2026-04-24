@@ -452,6 +452,12 @@ body {
   width: 100%;
 }
 
+.chat-input-area textarea:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background: var(--bg-soft, #f5f5f5);
+}
+
 .chat-input-row {
   display: grid;
   grid-template-columns: 1fr auto;

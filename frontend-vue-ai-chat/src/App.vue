@@ -662,6 +662,7 @@ onBeforeUnmount(() => {
             <textarea
               v-model="input"
               placeholder="请输入你的问题，Enter发送，Shift+Enter换行"
+              :disabled="sending"
               @keydown.enter.exact.prevent="sendMessage"
             />
             <button :disabled="sending || (!input.trim() && !hasPendingAttachments)" @click="sendMessage">发送</button>
