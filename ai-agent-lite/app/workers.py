@@ -58,7 +58,6 @@ class CodeReviewerAgent(BaseWorker):
         5. 3 Specific Improvement Suggestions
         
         Format response clearly with sections.
-        IMPORTANT: You must respond in Chinese (简体中文) only. All content must be in Chinese.
         """
         
         try:
@@ -95,7 +94,6 @@ class ProblemAnalyzerAgent(BaseWorker):
         5. Implementation Tips
         
         Focus on teaching problem-solving thinking, not just giving answers.
-        IMPORTANT: You must respond in Chinese (简体中文) only. All content must be in Chinese.
         """
         
         try:
@@ -129,7 +127,6 @@ class ContestCoachAgent(BaseWorker):
         5. Mental Preparation Techniques
         
         Use competitive but supportive tone.
-        IMPORTANT: You must respond in Chinese (简体中文) only. All content must be in Chinese.
         """
         
         try:
@@ -166,7 +163,6 @@ class LearningPartnerAgent(BaseWorker):
         5. Positive reinforcement of progress
         
         Be warm, understanding, and genuinely supportive.
-        IMPORTANT: You must respond in Chinese (简体中文) only. All content must be in Chinese.
         """
         
         try:
@@ -375,19 +371,7 @@ class LearningManagerAgent(BaseWorker):
             "minimal hint, not the full correction.\n\n"
             f"Student's current knowledge profile: {knowledge_graph or 'new student'}\n"
             f"Efficiency trend: {efficiency:.2f}{emotion_context}{frustration_level}\n\n"
-            f"Student says: {user_input}\n\n"
-            "YOU MUST follow this output structure (use the headers exactly):\n\n"
-            "【分析】\n"
-            "One sentence: what knowledge point does the student need right now, "
-            "based on their current level and their message.\n\n"
-            "【引导】\n"
-            "One or two sentences: the single most important thing for this turn. "
-            "If introducing a new concept, explain WHY it matters for competition.\n\n"
-            "【互动】\n"
-            "A specific, immediately actionable question or micro-exercise. "
-            "This MUST be the last section. Stop here. Wait for the student's response.\n\n"
-            "IMPORTANT: You must respond in Chinese (简体中文) only. "
-            "All content must be in Chinese."
+            f"Student says: {user_input}\n"
         )
 
         try:

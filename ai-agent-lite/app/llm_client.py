@@ -22,6 +22,13 @@ def _mask_key(key: str) -> str:
 class LlmClient:
     """Async LLM client with retry and streaming support."""
 
+    SYSTEM_PROMPT = (
+        "You are part of an AI tutoring system for programming competitions. "
+        "All your responses to the student MUST be in Chinese (简体中文). "
+        "Code, variable names, and technical terms may remain in English, "
+        "but all explanatory text, commentary, and instructions must be in Chinese."
+    )
+
     def __init__(self) -> None:
         self.base_url = os.getenv("LITE_LLM_BASE_URL", "").strip()
         self.api_key = os.getenv("LITE_LLM_API_KEY", "").strip()
@@ -34,11 +41,18 @@ class LlmClient:
     def enabled(self) -> bool:
         return bool(self.base_url and self.api_key)
 
+    def _inject_system(self, messages: list[dict]) -> list[dict]:
+        """Prepend system prompt if no system message is already present."""
+        if messages and messages[0].get("role") == "system":
+            return messages
+        return [{"role": "system", "content": self.SYSTEM_PROMPT}] + messages
+
     async def complete(self, messages: list[dict]) -> str:
         """Non-streaming completion with retry logic."""
         if not self.enabled:
             return self._fallback(messages)
 
+        messages = self._inject_system(messages)
         endpoint = self.base_url.rstrip("/") + "/chat/completions"
         payload = {
             "model": self.model,
@@ -94,6 +108,7 @@ class LlmClient:
             yield self._fallback(messages)
             return
 
+        messages = self._inject_system(messages)
         endpoint = self.base_url.rstrip("/") + "/chat/completions"
         payload = {
             "model": self.model,
