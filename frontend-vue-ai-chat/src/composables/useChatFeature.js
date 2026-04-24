@@ -139,11 +139,38 @@ export function useChatFeature() {
 
   const hasPendingAttachments = computed(() => pendingAttachments.value.length > 0)
 
-  // Next-step suggestions from AI (displayed as clickable chips above input)
-  const nextStepSuggestions = ref([])
+  // Per-session suggestion storage — follow same pattern as attachmentsBySessionId
+  const suggestionsBySessionId = ref({})
+
+  const ensureSuggestionsForSession = (sessionId) => {
+    if (!sessionId) return []
+    if (!suggestionsBySessionId.value[sessionId]) {
+      suggestionsBySessionId.value[sessionId] = []
+    }
+    return suggestionsBySessionId.value[sessionId]
+  }
+
+  // Reactive view of suggestions for the current session
+  const nextStepSuggestions = computed({
+    get: () => ensureSuggestionsForSession(currentSessionId.value),
+    set: () => { /* read-only via helpers */ }
+  })
+
+  const setSuggestionsForCurrentSession = (items) => {
+    if (!currentSessionId.value) return
+    suggestionsBySessionId.value[currentSessionId.value] = items
+  }
 
   const clearSuggestions = () => {
-    nextStepSuggestions.value = []
+    if (!currentSessionId.value) return
+    suggestionsBySessionId.value[currentSessionId.value] = []
+  }
+
+  const pruneOrphanSuggestions = () => {
+    const validSessionIds = new Set(sessions.value.map((s) => s.id))
+    suggestionsBySessionId.value = Object.fromEntries(
+      Object.entries(suggestionsBySessionId.value).filter(([sid]) => validSessionIds.has(sid))
+    )
   }
 
   const sendSuggestion = async (suggestion) => {
@@ -227,7 +254,7 @@ export function useChatFeature() {
       syncSessionHistoryCache(sessionId)
     },
     onSuggestions: (items) => {
-      nextStepSuggestions.value = items
+      setSuggestionsForCurrentSession(items)
     }
   })
 
@@ -388,6 +415,7 @@ export function useChatFeature() {
     removePendingAttachment,
     clearPendingAttachments,
     pruneOrphanAttachments,
+    pruneOrphanSuggestions,
     nextStepSuggestions,
     sendSuggestion,
     clearSuggestions,

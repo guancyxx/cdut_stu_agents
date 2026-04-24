@@ -94,6 +94,7 @@ const {
   removePendingAttachment,
   clearPendingAttachments,
   pruneOrphanAttachments,
+  pruneOrphanSuggestions,
   nextStepSuggestions,
   sendSuggestion,
   clearSuggestions,
@@ -280,6 +281,7 @@ const handleClearAllSessions = () => {
   activeSubmitCode.value = ''
   activeSubmitState.value = { type: '', message: '' }
   pruneOrphanAttachments()
+  pruneOrphanSuggestions()
 }
 
 const syncCurrentSessionUserId = (userId) => {
@@ -405,6 +407,7 @@ watch(
   ([sessionId, sessionList]) => {
     pruneSubmitDrafts()
     pruneOrphanAttachments()
+    pruneOrphanSuggestions()
 
     if (!sessionId) {
       selectedProblemId.value = ''
