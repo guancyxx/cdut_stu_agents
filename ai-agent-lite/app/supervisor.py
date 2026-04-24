@@ -16,6 +16,7 @@ class AgentType(Enum):
     CONTEST_COACH = "contest_coach"
     LEARNING_PARTNER = "learning_partner"
     LEARNING_MANAGER = "learning_manager"
+    NEXT_STEP_SUGGESTER = "next_step_suggester"
 
 @dataclass
 class StudentState:
@@ -45,6 +46,9 @@ class Supervisor:
         
     async def route_request(self, user_input: str, session_context: Dict[str, Any]) -> AgentType:
         """Determine which agent should handle this request based on intent and state."""
+        
+        # Store user input for downstream suggestion context
+        self._last_user_input = user_input
         
         # Update state from context
         self._update_state_from_context(session_context)
@@ -142,38 +146,23 @@ class Supervisor:
                             for indicator in indicators))
             self.state.emotion_tags[emotion] = min(1.0, count * 0.3)
 
-    async def get_next_actions(self, agent_response: str, agent_type: AgentType) -> list:
-        """Generate next action suggestions based on agent response."""
-        prompt = f"""
-        As an AI programming competition coach, suggest 2-3 specific next actions 
-        based on this interaction:
-        
-        Agent Role: {agent_type.value}
-        Response: {agent_response}
-        
-        Student State:
-       - Current Problem: {self.state.current_problem_id or 'None'}
-       - Emotional State: {self.state.emotion_tags}
-        
-        Provide JSON format:
-        {{
-          "next_actions": [
-            {{
-              "type": "practice|learn|review|debug|compete",
-              "title": "Short description",
-              "target": "specific target if applicable",
-              "reason": "why this is recommended"
-            }}
-          ]
-        }}
+    async def get_next_actions(self, agent_response: str, agent_type: AgentType, suggester=None) -> list:
+        """Generate next action suggestions via NextStepSuggester.
+
+        If a suggester instance is provided, delegates to its ``suggest`` method.
+        Falls back to an empty list if the suggester is unavailable or fails.
         """
-        
-        try:
-            response = await self.llm.complete([{"role": "user", "content": prompt}])
-            # Parse JSON response and return actions
-            import json
-            return json.loads(response).get("next_actions", [])
-        except Exception as e:
-            logger.error(f"Next actions generation failed: {e}")
-            return []# Test hot reload comment
+        if suggester is None:
+            return []
+
+        return await suggester.suggest(
+            user_input=getattr(self, "_last_user_input", ""),
+            agent_response=agent_response,
+            agent_type=agent_type.value,
+            state={
+                "current_problem_id": self.state.current_problem_id,
+                "emotion_tags": dict(self.state.emotion_tags),
+                "efficiency_trend": self.state.efficiency_trend,
+            },
+        )# Test hot reload comment
 # Hot reload test comment

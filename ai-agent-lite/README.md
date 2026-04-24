@@ -33,7 +33,7 @@
 └──────────────────────────────────────────────────────────────┘
 ```
 
-> **注意**：NextStepSuggester（每轮对话末尾的"下一步建议"生成器）已移除。该组件每次请求额外调用一次 LLM，导致 3x 调用开销。见优化待办 OPT-001。
+> **注意**：NextStepSuggester 已恢复启用。每轮对话结束后通过 `next_suggestions` 事件发送 2-3 条建议（中文），显示在输入框上方供用户快速点击。
 
 ## Worker Agent 列表
 
@@ -51,7 +51,7 @@
 
 | 优先级 | 编号 | 问题 | 当前影响 |
 |--------|------|------|----------|
-| P0 | OPT-001 | 每次请求 3 次 LLM 调用（已移除 NextStepSuggester 降为 2 次，意图分类合并待实现） | 2x 延迟+成本 |
+| P0 | OPT-001 | 每次请求 3 次 LLM 调用（NextStepSuggester 已恢复，意图分类合并待实现） | 3x 延迟+成本 |
 | P0 | OPT-002 | Worker 使用 complete() 而非 stream() | 用户需等待完整生成才能看到内容 |
 | P0 | OPT-003 | main.py _load_context() 重复定义 | 潜在 Bug |
 | P1 | OPT-004 | 无范围守卫（tutor_policy.py 未实现） | 非编程查询浪费 LLM token |
@@ -143,7 +143,10 @@ Agent 信息（在响应前发送）：
 {"type":"error","data":{"type":"error","code":"INVALID_INPUT","message":"错误描述"}}
 ```
 
-> ~~Next-step suggestions~~ 已移除。不再发送 `next_suggestions` 类型消息。
+> Next-step suggestions are sent after each response. Title and reason fields are in Chinese.
+> ```json
+> {"type":"next_suggestions","data":{"suggestions":[{"type":"practice","title":"练习动态规划","target":"P1004","reason":"巩固本次学习内容"}]}}
+> ```
 
 ## 环境变量
 
@@ -230,3 +233,4 @@ Supervisor 模式可通过环境变量配置：
 | 日期 | 变更 |
 |------|------|
 | 2026-04-23 | 移除 NextStepSuggester（3x LLM 调用降为 2x）。添加已知问题与优化待办。标注中文唯一语言策略。移除 next_suggestions 协议说明。 |
+| 2026-04-24 | 恢复 NextStepSuggester 调用并启用 next_suggestions 事件。AI 回复强制中文，提示词和代码保持英文。Worker prompt 移除末尾建议列表项（改由 NextStepSuggester 统一生成）。 |

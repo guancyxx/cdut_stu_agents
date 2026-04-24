@@ -26,7 +26,7 @@ from app.metrics import ws_connections_active, ws_messages_total, llm_request_du
 from app.middleware import RequestMiddleware
 from app.repositories import session_repo, message_repo
 from app.supervisor import Supervisor, AgentType
-from app.workers import CodeReviewerAgent, ProblemAnalyzerAgent, ContestCoachAgent, LearningPartnerAgent, LearningManagerAgent
+from app.workers import CodeReviewerAgent, ProblemAnalyzerAgent, ContestCoachAgent, LearningPartnerAgent, LearningManagerAgent, NextStepSuggester
 from app.state_manager import state_manager
 
 logger = logging.getLogger("ai-agent-lite")
@@ -219,7 +219,7 @@ async def ws_handler(websocket: WebSocket) -> None:
                         session_id=session_id, user_id=user_id,
                         detail={"is_new": is_new})
 
-        # Initialize supervisor and workers
+        # Initialize supervisor, workers, and suggestion agent
         supervisor = Supervisor(llm)
         workers = {
             AgentType.CODE_REVIEWER: CodeReviewerAgent(llm),
@@ -228,6 +228,7 @@ async def ws_handler(websocket: WebSocket) -> None:
             AgentType.LEARNING_PARTNER: LearningPartnerAgent(llm),
             AgentType.LEARNING_MANAGER: LearningManagerAgent(llm)
         }
+        suggester = NextStepSuggester(llm)
         
         # Load or initialize state
         current_state = await state_manager.load_state(str(session_id))
@@ -288,8 +289,18 @@ async def ws_handler(websocket: WebSocket) -> None:
                 selected_worker = workers[agent_type]
                 agent_response = await selected_worker.process(query_text, current_state)
 
-                # Send response (no next-step suggestions - removed to reduce LLM call overhead)
+                # Send response
                 await _send_text_stream(websocket, agent_response.content, agent_type)
+
+                # Generate and send next-step suggestions for quick-action buttons
+                next_actions = await supervisor.get_next_actions(
+                    agent_response.content, agent_type, suggester=suggester
+                )
+                if next_actions:
+                    await websocket.send_json({
+                        "type": "next_suggestions",
+                        "data": {"suggestions": next_actions},
+                    })
 
                 # Persist assistant message
                 if agent_response.content:

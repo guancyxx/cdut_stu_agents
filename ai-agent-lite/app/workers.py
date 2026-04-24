@@ -1,6 +1,8 @@
 """
 Specialized Worker Agents for programming competition training.
 Each agent focuses on a specific aspect of student development.
+All AI responses to users must be in Chinese (简体中文).
+Prompts and code remain in English only.
 """
 from enum import Enum
 from typing import Dict, Any, List
@@ -49,14 +51,14 @@ class CodeReviewerAgent(BaseWorker):
         Student's question: {user_input}
         
         Provide structured analysis covering:
-        1. Logic Correctness (✅/⚠️/❌ + brief explanation)
+        1. Logic Correctness (checkmark/warning/cross + brief explanation)
         2. Time Complexity Analysis (Big O notation)  
         3. Space Complexity Analysis
         4. Code Style Assessment (naming, structure, readability)
         5. 3 Specific Improvement Suggestions
-        6. Related Algorithm/Data Structure to review
         
         Format response clearly with sections.
+        IMPORTANT: You must respond in Chinese (简体中文) only. All content must be in Chinese.
         """
         
         try:
@@ -91,9 +93,9 @@ class ProblemAnalyzerAgent(BaseWorker):
         3. Algorithm Selection (optimal choices and alternatives)
         4. Edge Cases to consider
         5. Implementation Tips
-        6. Related Problems for practice
         
         Focus on teaching problem-solving thinking, not just giving answers.
+        IMPORTANT: You must respond in Chinese (简体中文) only. All content must be in Chinese.
         """
         
         try:
@@ -125,9 +127,9 @@ class ContestCoachAgent(BaseWorker):
         3. Debugging under Pressure
         4. Common Competition Pitfalls to Avoid
         5. Mental Preparation Techniques
-        6. Mock Competition Scenarios
         
         Use competitive but supportive tone.
+        IMPORTANT: You must respond in Chinese (简体中文) only. All content must be in Chinese.
         """
         
         try:
@@ -162,9 +164,9 @@ class LearningPartnerAgent(BaseWorker):
         3. Growth mindset perspective
         4. Practical coping strategies
         5. Positive reinforcement of progress
-        6. Gentle guidance back to learning
         
         Be warm, understanding, and genuinely supportive.
+        IMPORTANT: You must respond in Chinese (简体中文) only. All content must be in Chinese.
         """
         
         try:
@@ -180,6 +182,83 @@ class LearningPartnerAgent(BaseWorker):
                 content="I'm here to support you. Let's continue learning together.",
                 status=CompletionStatus.COMPLETE
             )
+
+class NextStepSuggester(BaseWorker):
+    """Generates contextual next-step suggestions at the end of a conversation turn.
+
+    This agent runs ONLY after the primary worker has finished producing content.
+    It does not generate message content — it returns structured suggestion items
+    that the WebSocket handler sends as a separate `next_suggestions` event.
+    Suggestion titles and reasons are in Chinese for user-facing display.
+    """
+
+    SUGGESTION_TYPES = ("practice", "learn", "review", "debug", "compete")
+
+    async def suggest(
+        self,
+        user_input: str,
+        agent_response: str,
+        agent_type: str,
+        state: Dict[str, Any],
+    ) -> List[Dict[str, str]]:
+        """Return 2-3 structured next-step suggestions.
+
+        Returns a list of dicts with keys: type, title, target, reason.
+        On failure returns an empty list (never raises).
+        """
+        prompt = (
+            "You are an AI programming-competition coach. Based on the conversation "
+            "below, suggest 2-3 concrete next actions the student could take.\n\n"
+            f"Student's last message: {user_input}\n"
+            f"AI agent role: {agent_type}\n"
+            f"AI response summary: {agent_response[:600]}\n"
+            f"Current context: problem_id={state.get('current_problem_id', 'N/A')}\n\n"
+            'Return JSON ONLY — no markdown, no explanation. Format:\n'
+            '{"suggestions":[{"type":"practice|learn|review|debug|compete",'
+            '"title":"short action title in Chinese (简体中文)",'
+            '"target":"specific target or problem id",'
+            '"reason":"why this helps, in Chinese (简体中文)"}]}\n'
+            "Keep titles under 20 characters. Keep reasons under 40 characters. "
+            "Title and reason MUST be in Chinese (简体中文)."
+        )
+
+        try:
+            raw = await self.llm.complete([{"role": "user", "content": prompt}])
+            import json as _json
+
+            # Strip markdown fences if the model wraps them
+            cleaned = raw.strip()
+            if cleaned.startswith("```"):
+                cleaned = cleaned.split("\n", 1)[-1]
+            if cleaned.endswith("```"):
+                cleaned = cleaned.rsplit("```", 1)[0]
+            cleaned = cleaned.strip()
+
+            data = _json.loads(cleaned)
+            items = data.get("suggestions", [])
+            validated = []
+            for item in items[:3]:
+                if not isinstance(item, dict):
+                    continue
+                validated.append({
+                    "type": item.get("type", "learn") if item.get("type") in self.SUGGESTION_TYPES else "learn",
+                    "title": str(item.get("title", ""))[:40],
+                    "target": str(item.get("target", ""))[:60],
+                    "reason": str(item.get("reason", ""))[:80],
+                })
+            return validated[:3]
+        except Exception as exc:
+            logger.warning("NextStepSuggester failed: %s", exc)
+            return []
+
+    async def process(self, user_input: str, state: Dict[str, Any]) -> AgentResponse:
+        """Not used directly — ``suggest`` is the public interface."""
+        return AgentResponse(
+            content="",
+            status=CompletionStatus.COMPLETE,
+            metadata={"role": "next_step_suggester"},
+        )
+
 
 class LearningManagerAgent(BaseWorker):
     """Tracks progress and designs adaptive learning paths."""
@@ -201,9 +280,9 @@ class LearningManagerAgent(BaseWorker):
         3. Adaptive Difficulty Adjustment
         4. Practice Problem Recommendations
         5. Study Schedule Suggestions
-        6. Progress Tracking Method
         
         Base recommendations on actual competency levels.
+        IMPORTANT: You must respond in Chinese (简体中文) only. All content must be in Chinese.
         """
         
         try:
