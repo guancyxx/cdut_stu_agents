@@ -128,3 +128,110 @@ export function sanitizeHtmlContent(rawHtml) {
   walk(documentNode.body)
   return documentNode.body.innerHTML
 }
+
+// --- Chat message rendering: Markdown + HTML support ---
+
+// Heuristic: content containing HTML block tags is treated as HTML source
+const HTML_TAG_REGEX = /<(?:p|br|pre|code|blockquote|ul|ol|li|strong|b|em|i|u|span|h[1-6]|table|thead|tbody|tr|th|td|div|a|img|hr|dl|dt|dd|sup|sub|details|summary)\b[^>]*>/i
+
+/**
+ * Detect whether content should be rendered as HTML or Markdown.
+ * - If content contains recognized HTML block tags -> HTML mode
+ * - Otherwise -> Markdown mode
+ */
+export function detectContentType(content) {
+  if (typeof content !== 'string' || !content.trim()) return 'text'
+  if (HTML_TAG_REGEX.test(content)) return 'html'
+  // Markdown indicators: headings, fenced blocks, lists, bold/italic, links
+  if (/^#{1,6}\s/m.test(content) || /```/.test(content) || /\*\*[^*]+\*\*/.test(content) || /\[[^\]]+\]\([^)]+\)/.test(content) || /^[-*+]\s/m.test(content) || /^\d+\.\s/m.test(content)) return 'markdown'
+  return 'text'
+}
+
+/**
+ * Render chat message content to safe HTML.
+ * - HTML content: sanitize with DOMPurify (allows safe HTML tags)
+ * - Markdown content: parse with marked, then sanitize with DOMPurify
+ * - Plain text: escape and wrap in <p>
+ *
+ * Returns an object { html, contentType } for downstream use.
+ */
+export function renderMessageContent(content) {
+  if (typeof content !== 'string') return { html: '', contentType: 'text' }
+  const trimmed = content.trim()
+  if (!trimmed) return { html: '', contentType: 'text' }
+
+  const contentType = detectContentType(trimmed)
+
+  if (contentType === 'html') {
+    return { html: dompurifySanitize(trimmed), contentType: 'html' }
+  }
+
+  if (contentType === 'markdown') {
+    const rawHtml = markedParse(trimmed)
+    return { html: dompurifySanitize(rawHtml), contentType: 'markdown' }
+  }
+
+  // Plain text: escape and wrap
+  return { html: `<p>${escapeHtml(trimmed)}</p>`, contentType: 'text' }
+}
+
+// Lazy-loaded module references (set by initMessageRenderer)
+let _marked = null
+let _dompurify = null
+
+/**
+ * Initialize the message renderer with marked and DOMPurify instances.
+ * Call once at app startup (e.g. in App.vue onMounted).
+ */
+export function initMessageRenderer(marked, dompurify) {
+  _marked = marked
+  _dompurify = dompurify
+
+  if (marked && typeof marked.setOptions === 'function') {
+    marked.setOptions({
+      breaks: true,
+      gfm: true
+    })
+  }
+}
+
+function markedParse(text) {
+  if (!_marked) {
+    // Fallback: return escaped text if marked not initialized
+    return `<p>${escapeHtml(text)}</p>`
+  }
+  try {
+    return _marked.parse(text)
+  } catch {
+    return `<p>${escapeHtml(text)}</p>`
+  }
+}
+
+function dompurifySanitize(html) {
+  if (!_dompurify) {
+    // Fallback to the existing DOMParser-based sanitizer
+    return sanitizeHtmlContent(html)
+  }
+  return _dompurify.sanitize(html, {
+    ALLOWED_TAGS: [
+      'p', 'br', 'pre', 'code', 'blockquote',
+      'ul', 'ol', 'li',
+      'strong', 'b', 'em', 'i', 'u', 'span', 'a', 'img',
+      'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+      'table', 'thead', 'tbody', 'tr', 'th', 'td',
+      'hr', 'div', 'sup', 'sub', 'details', 'summary',
+      'dl', 'dt', 'dd', 'input', 'del'
+    ],
+    ALLOWED_ATTR: ['class', 'href', 'src', 'alt', 'title', 'target', 'rel', 'id', 'name', 'type', 'checked', 'disabled'],
+    ADD_ATTR: ['target']
+  })
+}
+
+function escapeHtml(text) {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;')
+}

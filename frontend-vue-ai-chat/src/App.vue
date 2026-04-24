@@ -3,7 +3,9 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import CodeEditor from './components/CodeEditor.vue'
 import MessageBubble from './components/MessageBubble.vue'
 import { useChatFeature } from './composables/useChatFeature'
-import { AUTH_MODES, OJ_DIFFICULTY_OPTIONS, sanitizeHtmlContent, sanitizeTextInput } from './utils/validators'
+import { AUTH_MODES, OJ_DIFFICULTY_OPTIONS, initMessageRenderer, sanitizeHtmlContent, sanitizeTextInput } from './utils/validators'
+import { marked } from 'marked'
+import DOMPurify from 'dompurify'
 import { useOjAuthAndProblems } from './composables/useOjAuthAndProblems'
 
 const activeTab = ref('home')
@@ -169,8 +171,6 @@ const selectedProblemDescription = computed(() => {
 })
 
 const selectedProblemDescriptionHtml = computed(() => sanitizeHtmlContent(selectedProblemDescription.value))
-
-const renderMessageHtml = (content) => sanitizeHtmlContent(String(content || ''))
 
 const handleGoToAuth = () => {
   if (ojUser.value.loggedIn) {
@@ -450,6 +450,9 @@ watch(authMode, async (mode) => {
 })
 
 onMounted(async () => {
+  // Initialize Markdown/HTML message renderer
+  initMessageRenderer(marked, DOMPurify)
+
   loadSessions()
   await hydrateAuthSession()
 

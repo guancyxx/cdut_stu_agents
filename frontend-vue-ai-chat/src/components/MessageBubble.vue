@@ -1,5 +1,6 @@
 <script setup>
 import { computed } from 'vue'
+import { renderMessageContent } from '../utils/validators'
 
 const props = defineProps({
   message: {
@@ -14,7 +15,7 @@ const props = defineProps({
 
 const agentInfo = computed(() => {
   if (!props.message.agent) return null
-  
+
   return {
     name: props.message.agent.name || 'AI助手',
     icon: props.message.agent.icon || '🤖',
@@ -25,13 +26,22 @@ const agentInfo = computed(() => {
 const shouldShowAgent = computed(() => {
   return agentInfo.value && props.isLast
 })
+
+// Render message content as safe HTML (Markdown / HTML / plain text)
+const renderedMessage = computed(() => {
+  // Skip trace system messages
+  if (props.message.role === 'trace') return { html: '', contentType: 'text' }
+
+  const result = renderMessageContent(props.message.content)
+  return result
+})
 </script>
 
 <template>
-  <div class="message-bubble" :class="{ 
-    assistant: message.role === 'assistant', 
+  <div class="message-bubble" :class="{
+    assistant: message.role === 'assistant',
     user: message.role === 'user',
-    'has-agent': shouldShowAgent 
+    'has-agent': shouldShowAgent
   }">
     <!-- Agent header for assistant messages -->
     <div v-if="message.role === 'assistant' && shouldShowAgent" class="agent-header">
@@ -39,12 +49,14 @@ const shouldShowAgent = computed(() => {
       <span class="agent-name" :style="{ color: agentInfo.color }">{{ agentInfo.name }}</span>
       <span class="agent-badge" :style="{ backgroundColor: agentInfo.color }">当前处理中</span>
     </div>
-    
-    <!-- Message content -->
-    <div class="message-content">
-      {{ message.content }}
-    </div>
-    
+
+    <!-- Message content: rendered Markdown/HTML -->
+    <div
+      class="message-content"
+      :class="`content-${renderedMessage.contentType}`"
+      v-html="renderedMessage.html"
+    />
+
     <!-- Message time -->
     <div class="message-time">
       {{ message.time }}
@@ -115,11 +127,179 @@ const shouldShowAgent = computed(() => {
 }
 
 .message-content {
-  white-space: pre-wrap;
-  line-height: 1.5;
+  line-height: 1.6;
   word-break: break-word;
   font-size: 14px;
   letter-spacing: -0.165px;
+}
+
+/* Plain text: preserve line breaks */
+.message-content.content-text {
+  white-space: pre-wrap;
+}
+
+/* Markdown/HTML content: let the markup control line breaks */
+.message-content.content-markdown,
+.message-content.content-html {
+  white-space: normal;
+}
+
+/* --- Markdown typography styles (scoped deep for v-html children) --- */
+
+.message-content.content-markdown :deep(h1),
+.message-content.content-html :deep(h1) {
+  font-size: 1.4em;
+  font-weight: 700;
+  margin: 0.6em 0 0.3em;
+  line-height: 1.3;
+}
+
+.message-content.content-markdown :deep(h2),
+.message-content.content-html :deep(h2) {
+  font-size: 1.25em;
+  font-weight: 700;
+  margin: 0.5em 0 0.25em;
+  line-height: 1.3;
+}
+
+.message-content.content-markdown :deep(h3),
+.message-content.content-html :deep(h3) {
+  font-size: 1.1em;
+  font-weight: 600;
+  margin: 0.4em 0 0.2em;
+  line-height: 1.3;
+}
+
+.message-content.content-markdown :deep(h4),
+.message-content.content-markdown :deep(h5),
+.message-content.content-markdown :deep(h6),
+.message-content.content-html :deep(h4),
+.message-content.content-html :deep(h5),
+.message-content.content-html :deep(h6) {
+  font-size: 1em;
+  font-weight: 600;
+  margin: 0.3em 0 0.15em;
+}
+
+.message-content.content-markdown :deep(p),
+.message-content.content-html :deep(p) {
+  margin: 0.4em 0;
+}
+
+.message-content.content-markdown :deep(ul),
+.message-content.content-markdown :deep(ol),
+.message-content.content-html :deep(ul),
+.message-content.content-html :deep(ol) {
+  padding-left: 1.5em;
+  margin: 0.4em 0;
+}
+
+.message-content.content-markdown :deep(li),
+.message-content.content-html :deep(li) {
+  margin: 0.15em 0;
+}
+
+.message-content.content-markdown :deep(pre),
+.message-content.content-html :deep(pre) {
+  background: var(--code-bg, #1e1e2e);
+  color: var(--code-fg, #cdd6f4);
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin: 0.5em 0;
+  overflow-x: auto;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.message-content.content-markdown :deep(code),
+.message-content.content-html :deep(code) {
+  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 0.9em;
+}
+
+.message-content.content-markdown :deep(:not(pre) > code),
+.message-content.content-html :deep(:not(pre) > code) {
+  background: var(--code-inline-bg, rgba(135, 135, 135, 0.15));
+  color: var(--code-inline-fg, inherit);
+  padding: 2px 5px;
+  border-radius: 4px;
+}
+
+.message-content.content-markdown :deep(blockquote),
+.message-content.content-html :deep(blockquote) {
+  border-left: 3px solid var(--brand, #4a9eff);
+  margin: 0.5em 0;
+  padding: 0.3em 1em;
+  color: var(--text-tertiary, #888);
+}
+
+.message-content.content-markdown :deep(table),
+.message-content.content-html :deep(table) {
+  border-collapse: collapse;
+  margin: 0.5em 0;
+  width: 100%;
+}
+
+.message-content.content-markdown :deep(th),
+.message-content.content-markdown :deep(td),
+.message-content.content-html :deep(th),
+.message-content.content-html :deep(td) {
+  border: 1px solid var(--border-standard, #ddd);
+  padding: 6px 10px;
+  font-size: 13px;
+}
+
+.message-content.content-markdown :deep(th),
+.message-content.content-html :deep(th) {
+  background: var(--bg-soft, #f5f5f5);
+  font-weight: 600;
+}
+
+.message-content.content-markdown :deep(a),
+.message-content.content-html :deep(a) {
+  color: var(--brand, #4a9eff);
+  text-decoration: none;
+}
+
+.message-content.content-markdown :deep(a:hover),
+.message-content.content-html :deep(a:hover) {
+  text-decoration: underline;
+}
+
+.message-content.content-markdown :deep(img),
+.message-content.content-html :deep(img) {
+  max-width: 100%;
+  border-radius: 6px;
+}
+
+.message-content.content-markdown :deep(hr),
+.message-content.content-html :deep(hr) {
+  border: none;
+  border-top: 1px solid var(--border-subtle, #eee);
+  margin: 0.8em 0;
+}
+
+.message-content.content-markdown :deep(strong),
+.message-content.content-html :deep(strong) {
+  font-weight: 700;
+}
+
+.message-content.content-markdown :deep(em),
+.message-content.content-html :deep(em) {
+  font-style: italic;
+}
+
+.message-content.content-markdown :deep(del),
+.message-content.content-html :deep(del) {
+  text-decoration: line-through;
+  opacity: 0.7;
+}
+
+/* Task list checkbox styling */
+.message-content.content-markdown :deep(input[type="checkbox"]),
+.message-content.content-html :deep(input[type="checkbox"]) {
+  margin-right: 6px;
+  pointer-events: none;
 }
 
 .message-time {
@@ -127,5 +307,41 @@ const shouldShowAgent = computed(() => {
   color: var(--text-secondary);
   margin-top: 4px;
   text-align: right;
+}
+
+/* User bubble: adjust code/inline colors for contrast on brand bg */
+.message-bubble.user .message-content.content-markdown :deep(pre),
+.message-bubble.user .message-content.content-html :deep(pre) {
+  background: rgba(0, 0, 0, 0.2);
+  color: #f0f0f0;
+}
+
+.message-bubble.user .message-content.content-markdown :deep(:not(pre) > code),
+.message-bubble.user .message-content.content-html :deep(:not(pre) > code) {
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
+}
+
+.message-bubble.user .message-content.content-markdown :deep(a),
+.message-bubble.user .message-content.content-html :deep(a) {
+  color: #d0e8ff;
+}
+
+.message-bubble.user .message-content.content-markdown :deep(blockquote),
+.message-bubble.user .message-content.content-html :deep(blockquote) {
+  border-left-color: rgba(255, 255, 255, 0.5);
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.message-bubble.user .message-content.content-markdown :deep(th),
+.message-bubble.user .message-content.content-html :deep(th) {
+  background: rgba(0, 0, 0, 0.1);
+}
+
+.message-bubble.user .message-content.content-markdown :deep(th),
+.message-bubble.user .message-content.content-markdown :deep(td),
+.message-bubble.user .message-content.content-html :deep(th),
+.message-bubble.user .message-content.content-html :deep(td) {
+  border-color: rgba(255, 255, 255, 0.2);
 }
 </style>
