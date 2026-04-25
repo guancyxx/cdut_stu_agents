@@ -41,6 +41,7 @@ def get_workers() -> dict:
     """Return the dict of worker agent instances (lazy-initialized)."""
     global _workers
     if _workers is None:
+        from app.models.enums import AgentType
         from app.workers import (
             CodeReviewerAgent,
             ProblemAnalyzerAgent,
@@ -86,5 +87,4 @@ def get_agent_display_name(agent_type) -> str:
     return info.name if info else key
 
 
-# Late import to avoid circular dependency
-from app.models.enums import AgentType as _AT  # noqa: E402
+

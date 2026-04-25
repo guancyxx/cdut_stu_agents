@@ -5,8 +5,18 @@ from typing import Optional
 from fastapi import WebSocket
 
 from app.models.enums import AgentType
+from app.i18n import AGENT_DISPLAY
 
 logger = logging.getLogger("ai-agent-lite.stream")
+
+# Default agent styling for frontend display
+_AGENT_STYLING = {
+    "code_reviewer": {"icon": "\U0001f50d", "color": "#4CAF50"},
+    "problem_analyzer": {"icon": "\U0001f4ca", "color": "#2196F3"},
+    "contest_coach": {"icon": "\U0001f3c6", "color": "#FF9800"},
+    "learning_partner": {"icon": "\U0001f91d", "color": "#9C27B0"},
+    "learning_manager": {"icon": "\U0001f4da", "color": "#607D8B"},
+}
 
 
 async def send_text_stream(
@@ -22,22 +32,17 @@ async def send_text_stream(
 
     # Send agent info at the beginning if available
     if agent_type:
-        from app.di import AGENT_DISPLAY_INFO
         agent_key = agent_type.value
-        agent_data = AGENT_DISPLAY_INFO.get(agent_key, {
-            "name": agent_key.replace("_", " ").title(),
-            "description": "",
-            "icon": "🤖",
-            "color": "#666666",
-        })
+        display = AGENT_DISPLAY.get(agent_key)
+        styling = _AGENT_STYLING.get(agent_key, {"icon": "\U0001f916", "color": "#666666"})
         await websocket.send_json({
             "type": "agent_info",
             "data": {
                 "agent_type": agent_key,
-                "agent_name": agent_data["name"],
-                "agent_description": agent_data["description"],
-                "agent_icon": agent_data["icon"],
-                "agent_color": agent_data["color"],
+                "agent_name": display.name if display else agent_key.replace("_", " ").title(),
+                "agent_description": display.description if display else "",
+                "agent_icon": styling["icon"],
+                "agent_color": styling["color"],
             },
         })
 
