@@ -26,7 +26,7 @@ async def lifespan(app: FastAPI):
     """Initialize database tables on startup."""
     logger.info("Initializing database...")
     await init_db()
-    from app.services.stream_service import get_llm_client
+    from app.di import get_llm_client
     llm = get_llm_client()
     logger.info("Database initialized. LLM enabled=%s model=%s", llm.enabled, llm.model)
     yield

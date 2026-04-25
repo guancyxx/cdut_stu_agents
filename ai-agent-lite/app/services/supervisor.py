@@ -2,9 +2,13 @@
 
 Routes student requests to specialized workers based on intent classification,
 emotional state, and conversation continuity.
+
+NOTE: Knowledge delta assessment and suggestion generation have been moved
+to their own services (KnowledgeAssessor, NextStepSuggester) and are
+orchestrated by conversation_orchestrator.py directly.
 """
 import logging
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, List
 
 from app.models.enums import AgentType
 from app.models.schemas import StudentState
@@ -28,21 +32,15 @@ class Supervisor:
         message_history: List[Dict[str, str]] = None,
     ) -> AgentType:
         """Determine which agent should handle this request."""
-        # Store user input for downstream suggestion context
         self._last_user_input = user_input
         self._message_history = message_history or []
 
-        # Update state from context (async — includes LLM emotion analysis)
         await self._update_state_from_context(session_context)
 
-        # Intent classification with LLM (now context-aware)
         intent = await self._classify_intent(user_input, self._message_history)
         self._last_intent = intent
 
-        # State-aware routing logic (now continuity-aware)
         agent_type = self._determine_agent(intent, user_input, self._message_history)
-
-        # Track which agent handled this turn
         self.state.last_agent_type = agent_type.value
 
         logger.info(
@@ -68,19 +66,15 @@ class Supervisor:
         message_history: List[Dict[str, str]] = None,
     ) -> AgentType:
         """Context-aware agent selection with teaching flow continuity."""
-        # Emotional state override — always prioritize emotional support
         if self._needs_emotional_support():
             return AgentType.LEARNING_PARTNER
 
-        # Performance-based routing (efficiency drop) — overrides continuity
         if self._needs_difficulty_adjustment():
             return AgentType.LEARNING_MANAGER
 
-        # Casual intent: student is chatting, NOT asking for teaching
         if intent == "casual":
             return AgentType.LEARNING_PARTNER
 
-        # Topic anchoring: when a problem is selected, pull off-topic back
         if self._problem_context and intent in ("off_topic", "general_question"):
             if self.state.last_agent_type and self.state.last_agent_type in (
                 "problem_analyzer", "learning_manager", "code_reviewer"
@@ -91,7 +85,6 @@ class Supervisor:
                     pass
             return AgentType.PROBLEM_ANALYZER
 
-        # Continuity-first routing
         if intent == "answer_to_coach" and self.state.last_agent_type:
             try:
                 return AgentType(self.state.last_agent_type)
@@ -104,7 +97,6 @@ class Supervisor:
             except ValueError:
                 pass
 
-        # Intent-based routing (standard mapping)
         intent_mapping = {
             "code_review": AgentType.CODE_REVIEWER,
             "problem_help": AgentType.PROBLEM_ANALYZER,
@@ -152,7 +144,6 @@ class Supervisor:
             self.state.last_agent_type = context["last_agent_type"]
         if "problem_context" in context and context["problem_context"]:
             self._problem_context = context["problem_context"]
-        # Use LLM-based emotion analysis instead of keyword matching
         await self._analyze_emotional_state_async(
             context.get("user_input", ""),
             context.get("message_history", []),
@@ -168,25 +159,3 @@ class Supervisor:
                 self.state.emotion_tags[key] = val
         except Exception as exc:
             logger.warning("Emotion analysis failed, keeping previous state: %s", exc)
-
-    async def assess_knowledge_delta(self, user_input: str, agent_response: str, agent_type: str) -> Dict[str, float]:
-        """Delegate knowledge delta assessment to the KnowledgeAssessor service."""
-        from app.services.knowledge_assessor import KnowledgeAssessor
-        assessor = KnowledgeAssessor(self.llm)
-        return await assessor.assess(user_input, agent_response, agent_type)
-
-    async def get_next_actions(self, agent_response: str, agent_type: AgentType, suggester=None, state_delta: dict = None) -> list:
-        """Generate next action suggestions via NextStepSuggester."""
-        if suggester is None:
-            return []
-        return await suggester.suggest(
-            user_input=getattr(self, "_last_user_input", ""),
-            agent_response=agent_response,
-            agent_type=agent_type.value,
-            state={
-                "current_problem_id": self.state.current_problem_id,
-                "emotion_tags": dict(self.state.emotion_tags),
-                "efficiency_trend": self.state.efficiency_trend,
-            },
-            state_delta=state_delta,
-        )

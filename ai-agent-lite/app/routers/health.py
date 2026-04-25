@@ -6,7 +6,7 @@ from app.config import settings
 router = APIRouter()
 
 # LLM client is injected at app startup; resolved lazily via module import.
-from app.services.stream_service import get_llm_client  # noqa: E402
+from app.di import get_llm_client  # noqa: E402
 
 
 @router.get("/healthz")
