@@ -273,6 +273,9 @@ export function useChatFeature() {
     }
   })
 
+  // Expose the current agent indicator from the socket driver
+  const currentAgent = computed(() => socketDriver.currentAgent.value)
+
   const createMappedSession = (title, metadata = {}) => {
     const youtuSessionId = metadata.youtuSessionId || `yt_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
     return createSession(title, {
@@ -421,6 +424,7 @@ export function useChatFeature() {
     input,
     listRef,
     sending,
+    currentAgent,
     sessions,
     currentSessionId,
     messages,

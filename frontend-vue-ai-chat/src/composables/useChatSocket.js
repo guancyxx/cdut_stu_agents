@@ -16,6 +16,7 @@ export function useChatSocket({
   onFinish
 }) {
   const sending = ref(false)
+  const currentAgent = ref(null)
 
   let socket = null
   let socketBindingKey = ''
@@ -40,6 +41,7 @@ export function useChatSocket({
 
   const resetStreamState = () => {
     sending.value = false
+    currentAgent.value = null
     setSending(false)
     currentAssistantIndex = -1
   }
@@ -116,7 +118,10 @@ export function useChatSocket({
       if (eventData.type === 'agent_info') {
         const agentType = eventData.data?.agent_type
         const agentInfo = getAgentInfo(agentType)
-        
+
+        // Set the active agent indicator (cleared on finish)
+        currentAgent.value = agentInfo
+
         // Store agent info in the current assistant message
         if (currentAssistantIndex !== -1) {
           targetSession.messages[currentAssistantIndex].agent = agentInfo
@@ -262,6 +267,7 @@ export function useChatSocket({
 
   return {
     sending,
+    currentAgent,
     sendQuery,
     closeSocket,
     resetStreamState

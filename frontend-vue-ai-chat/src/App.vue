@@ -85,6 +85,7 @@ const {
   input,
   listRef,
   sending,
+  currentAgent,
   sessions,
   currentSessionId,
   messages,
