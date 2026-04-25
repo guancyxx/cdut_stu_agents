@@ -81,7 +81,34 @@ export function useOjAuthAndProblems() {
   const problemLoading = ref(false)
   const problemError = ref('')
   const submitLoading = ref(false)
-  const submitResult = ref(null)
+
+  // Per-session submit results — prevents stale result from polluting new sessions
+  const submitResultBySessionId = ref({})
+
+  const ensureSubmitResultForSession = (sessionId) => {
+    if (!sessionId) return null
+    if (submitResultBySessionId.value[sessionId] === undefined) {
+      submitResultBySessionId.value[sessionId] = null
+    }
+    return submitResultBySessionId.value[sessionId]
+  }
+
+  const getSubmitResultForSession = (sessionId) => {
+    if (!sessionId) return null
+    return submitResultBySessionId.value[sessionId] ?? null
+  }
+
+  const setSubmitResultForSession = (sessionId, result) => {
+    if (!sessionId) return
+    submitResultBySessionId.value[sessionId] = result ?? null
+  }
+
+  const pruneSubmitResults = (validSessionIds) => {
+    const valid = new Set(validSessionIds)
+    submitResultBySessionId.value = Object.fromEntries(
+      Object.entries(submitResultBySessionId.value).filter(([sid]) => valid.has(sid))
+    )
+  }
   const keyword = ref('')
   const difficulty = ref('')
 
@@ -300,52 +327,98 @@ export function useOjAuthAndProblems() {
     }
   }
 
+  const JUDGE_STATUS_MAP = {
+    '-2': { label: 'COMPILING', display: 'Compiling', icon: '⏳', color: '#fbbf24' },
+    '-1': { label: 'SYSTEM_ERROR', display: 'System Error', icon: '⚠️', color: '#ef4444' },
+    '0': { label: 'PENDING', display: 'Pending', icon: '⏳', color: '#9ca3af' },
+    '1': { label: 'JUDGING', display: 'Judging', icon: '🔄', color: '#60a5fa' },
+    '2': { label: 'COMPILING', display: 'Compiling', icon: '⏳', color: '#fbbf24' },
+    '3': { label: 'COMPILE_ERROR', display: 'Compile Error', icon: '❌', color: '#ef4444' },
+    '4': { label: 'ACCEPTED', display: 'Accepted', icon: '✅', color: '#10b981' },
+    '5': { label: 'PRESENTATION_ERROR', display: 'Presentation Error', icon: '⚠️', color: '#f59e0b' },
+    '6': { label: 'WRONG_ANSWER', display: 'Wrong Answer', icon: '❌', color: '#ef4444' },
+    '7': { label: 'TIME_LIMIT_EXCEEDED', display: 'Time Limit Exceeded', icon: '⏰', color: '#f59e0b' },
+    '8': { label: 'MEMORY_LIMIT_EXCEEDED', display: 'Memory Limit Exceeded', icon: '💾', color: '#f59e0b' },
+    '9': { label: 'RUNTIME_ERROR', display: 'Runtime Error', icon: '💥', color: '#ef4444' },
+    '10': { label: 'SYSTEM_ERROR', display: 'System Error', icon: '⚠️', color: '#ef4444' }
+  }
+
   const normalizeSubmissionResult = (row) => {
     if (!row || typeof row !== 'object') {
       return {
         status: null,
         label: 'UNKNOWN',
+        display: 'Unknown',
+        icon: '❓',
+        color: '#9ca3af',
         score: 0,
         timeCost: 0,
         memoryCost: 0,
-        submissionId: ''
+        submissionId: '',
+        errInfo: '',
+        testCases: []
       }
     }
 
     const status = Number(row.result)
-    const statusMap = {
-      '-2': 'COMPILING',
-      '-1': 'SYSTEM_ERROR',
-      '0': 'PENDING',
-      '1': 'JUDGING',
-      '2': 'COMPILING',
-      '3': 'COMPILE_ERROR',
-      '4': 'ACCEPTED',
-      '5': 'PRESENTATION_ERROR',
-      '6': 'WRONG_ANSWER',
-      '7': 'TIME_LIMIT_EXCEEDED',
-      '8': 'MEMORY_LIMIT_EXCEEDED',
-      '9': 'RUNTIME_ERROR',
-      '10': 'SYSTEM_ERROR'
-    }
-
+    const statusInfo = JUDGE_STATUS_MAP[String(status)] || { label: 'UNKNOWN', display: 'Unknown', icon: '❓', color: '#9ca3af' }
     const statisticInfo = row.statistic_info && typeof row.statistic_info === 'object' ? row.statistic_info : {}
+    const errInfo = typeof statisticInfo.err_info === 'string' ? statisticInfo.err_info : ''
 
     return {
       status,
-      label: statusMap[String(status)] || 'UNKNOWN',
+      label: statusInfo.label,
+      display: statusInfo.display,
+      icon: statusInfo.icon,
+      color: statusInfo.color,
       score: Number(statisticInfo.score || 0),
       timeCost: Number(statisticInfo.time_cost || 0),
       memoryCost: Number(statisticInfo.memory_cost || 0),
-      submissionId: sanitizeTextInput(String(row.id || ''), 64)
+      submissionId: sanitizeTextInput(String(row.id || ''), 64),
+      errInfo,
+      testCases: []
     }
   }
 
   const isFinalSubmissionStatus = (status) => ![0, 1, 2, -2].includes(status)
 
-  const submitSolution = async ({ problemId, problemQueryId, language, code }) => {
+  // Parse test case detail from submission detail API response
+  const parseTestCases = (detailData) => {
+    if (!detailData || !detailData.info) return []
+    const infoData = detailData.info
+    if (!infoData) return []
+
+    // Handle compile error: info = {err: "compile error message", data: "compiler output"}
+    const infoErr = typeof infoData.err === 'string' ? infoData.err : ''
+
+    const testCases = infoData.data
+    // If data is a string (e.g. compile error output), return empty but preserve error
+    if (!Array.isArray(testCases)) return []
+
+    return testCases.map((tc) => {
+      const tcStatus = Number(tc.result)
+      const tcStatusInfo = JUDGE_STATUS_MAP[String(tcStatus)] || { label: 'UNKNOWN', display: 'Unknown', icon: '❓', color: '#9ca3af' }
+      return {
+        index: Number(tc.test_case || 0),
+        status: tcStatus,
+        label: tcStatusInfo.label,
+        display: tcStatusInfo.display,
+        icon: tcStatusInfo.icon,
+        color: tcStatusInfo.color,
+        cpuTime: Number(tc.cpu_time || 0),
+        realTime: Number(tc.real_time || 0),
+        memory: Number(tc.memory || 0),
+        score: Number(tc.score || 0),
+        signal: tc.signal != null ? Number(tc.signal) : null,
+        exitCode: tc.exit_code != null ? Number(tc.exit_code) : null
+      }
+    })
+  }
+
+  const submitSolution = async ({ problemId, problemQueryId, language, code, sessionId }) => {
+    const sid = sessionId || '_default'
     submitLoading.value = true
-    submitResult.value = null
+    setSubmitResultForSession(sid, null)
 
     try {
       const parsedProblemId = Number(problemId)
@@ -392,12 +465,17 @@ export function useOjAuthAndProblems() {
       let normalized = {
         status: 0,
         label: 'PENDING',
+        display: 'Pending',
+        icon: '⏳',
+        color: '#9ca3af',
         score: 0,
         timeCost: 0,
         memoryCost: 0,
-        submissionId: submittedId
+        submissionId: submittedId,
+        errInfo: '',
+        testCases: []
       }
-      submitResult.value = normalized
+      setSubmitResultForSession(sid, normalized)
 
       while (Date.now() - startTimestamp <= timeoutMs) {
         const listResponse = await apiClient.fetchSubmissions(query)
@@ -414,9 +492,43 @@ export function useOjAuthAndProblems() {
         }
 
         normalized = normalizeSubmissionResult(matchedRow)
-        submitResult.value = normalized
+        setSubmitResultForSession(sid, normalized)
 
         if (isFinalSubmissionStatus(normalized.status)) {
+          // Submission finished — fetch detailed test case results
+          try {
+            const detailResponse = await apiClient.fetchSubmissionDetail(submittedId)
+            const detailData = detailResponse.data?.data
+            if (detailData) {
+              const info = detailData.info
+              // Check for compile/system error in info.err
+              if (info && typeof info === 'object' && typeof info.err === 'string' && info.err) {
+                normalized.errInfo = info.err
+              }
+              // Handle compile error: info.data may be a string (compiler output)
+              if (info && typeof info === 'object' && typeof info.data === 'string' && info.data) {
+                normalized.errInfo = normalized.errInfo
+                  ? normalized.errInfo + '\n\n' + info.data
+                  : info.data
+              }
+              // Enrich with test case details from the detail API
+              const testCases = parseTestCases(detailData)
+              if (testCases.length > 0) {
+                normalized.testCases = testCases
+              }
+              // Also update errInfo from statistic_info if available
+              const detailStatInfo = detailData.statistic_info
+              if (detailStatInfo && typeof detailStatInfo.err_info === 'string' && detailStatInfo.err_info) {
+                normalized.errInfo = normalized.errInfo
+                  ? normalized.errInfo + '\n\n' + detailStatInfo.err_info
+                  : detailStatInfo.err_info
+              }
+              setSubmitResultForSession(sid, { ...normalized })
+            }
+          } catch (detailErr) {
+            // Non-critical: test case detail is best-effort
+            console.warn('Failed to fetch submission detail for test case info.', detailErr)
+          }
           return normalized
         }
 
@@ -426,22 +538,32 @@ export function useOjAuthAndProblems() {
       return normalized || {
         status: null,
         label: 'TIMEOUT',
+        display: 'Timeout',
+        icon: '⏰',
+        color: '#f59e0b',
         score: 0,
         timeCost: 0,
         memoryCost: 0,
-        submissionId: ''
+        submissionId: '',
+        errInfo: '',
+        testCases: []
       }
     } catch (error) {
       const failedResult = {
         status: null,
         label: 'ERROR',
+        display: 'Error',
+        icon: '❌',
+        color: '#ef4444',
         score: 0,
         timeCost: 0,
         memoryCost: 0,
         submissionId: '',
+        errInfo: error.message || String(error),
+        testCases: [],
         message: error.message || String(error)
       }
-      submitResult.value = failedResult
+      setSubmitResultForSession(sid, failedResult)
       return failedResult
     } finally {
       submitLoading.value = false
@@ -458,7 +580,10 @@ export function useOjAuthAndProblems() {
     problemLoading,
     problemError,
     submitLoading,
-    submitResult,
+    submitResultBySessionId,
+    getSubmitResultForSession,
+    setSubmitResultForSession,
+    pruneSubmitResults,
     keyword,
     difficulty,
     currentPage,

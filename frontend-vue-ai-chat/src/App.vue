@@ -122,7 +122,10 @@ const {
   problemLoading,
   problemError,
   submitLoading,
-  submitResult,
+  submitResultBySessionId,
+  getSubmitResultForSession,
+  setSubmitResultForSession,
+  pruneSubmitResults,
   keyword,
   difficulty,
   currentPage,
@@ -147,6 +150,29 @@ const isProfileTab = computed(() => activeTab.value === 'profile')
 const requiresAuth = computed(() => authReady.value && !ojUser.value.loggedIn)
 const sessionCount = computed(() => sessions.value.length)
 const hasSessions = computed(() => sessionCount.value > 0)
+
+// Per-session submit result — switches automatically when session changes
+const submitResult = computed(() => getSubmitResultForSession(currentSessionId.value))
+
+// Auto-search when keyword looks like a problem ID pattern (e.g. LQ1273, fps-28e2, 1273)
+let keywordSearchTimer = null
+watch(keyword, (newVal) => {
+  if (keywordSearchTimer) clearTimeout(keywordSearchTimer)
+  if (!newVal || !newVal.trim()) return
+
+  const trimmed = newVal.trim()
+  // Auto-trigger on problem ID-like patterns: letter+digit, digit-only, or known prefixes
+  const looksLikeProblemId = /^(?:[A-Za-z]{1,4}[-_]?\d{1,5}|\d{2,6})$/.test(trimmed)
+
+  if (looksLikeProblemId) {
+    // Search immediately for ID-like input (no debounce needed, user likely entering full ID)
+    keywordSearchTimer = setTimeout(() => {
+      if (keyword.value === newVal) {
+        searchProblems()
+      }
+    }, 400)
+  }
+})
 
 const visiblePages = computed(() => {
   const total = totalPages.value
@@ -285,6 +311,8 @@ const handleClearAllSessions = () => {
   activeTab.value = 'problemset'
   activeSubmitCode.value = ''
   activeSubmitState.value = { type: '', message: '' }
+  // Clear all per-session submit results since all sessions are gone
+  submitResultBySessionId.value = {}
   pruneOrphanAttachments()
   pruneOrphanSuggestions()
 }
@@ -354,19 +382,48 @@ const handleSubmitCode = async () => {
     problemId: selectedProblem.value.id,
     problemQueryId: selectedProblem.value._id,
     language: activeSubmitLanguage.value,
-    code: normalizedCode
+    code: normalizedCode,
+    sessionId: currentSessionId.value
   })
 
   activeSubmitState.value = mapSubmissionLabelToUiMessage(result)
+}
 
-  // Auto-stage submission result as attachment when a result is available
-  if (activeSubmitState.value.message) {
-    addPendingAttachment({
-      filename: 'submit-result.txt',
-      content: `[${activeSubmitState.value.type?.toUpperCase() || 'INFO'}] ${activeSubmitState.value.message}`,
-      type: 'result'
+const buildResultAttachmentContent = (result) => {
+  if (!result) return ''
+  const lines = []
+  lines.push(`[${result.label}] ${result.display || result.label}`)
+  if (result.submissionId) lines.push(`Submission: ${result.submissionId}`)
+  if (result.score) lines.push(`Score: ${result.score}`)
+  lines.push(`Time: ${result.timeCost}ms | Memory: ${formatMemory(result.memoryCost)}`)
+  if (result.errInfo) lines.push(`\nError: ${result.errInfo}`)
+  if (result.testCases && result.testCases.length > 0) {
+    lines.push(`\nTest Cases:`)
+    result.testCases.forEach((tc) => {
+      lines.push(`  #${tc.index} ${tc.icon} ${tc.display} | ${tc.cpuTime}ms | ${formatMemory(tc.memory)}${tc.score > 0 ? ` | ${tc.score}pts` : ''}`)
     })
   }
+  return lines.join('\n')
+}
+
+const getResultClass = (result) => {
+  if (!result || !result.label) return 'result-unknown'
+  if (result.label === 'ACCEPTED') return 'result-accepted'
+  if (result.label === 'COMPILE_ERROR') return 'result-compile-error'
+  if (['WRONG_ANSWER', 'RUNTIME_ERROR', 'TIME_LIMIT_EXCEEDED', 'MEMORY_LIMIT_EXCEEDED', 'PRESENTATION_ERROR'].includes(result.label)) return 'result-wrong'
+  if (result.label === 'ERROR') return 'result-error'
+  return 'result-unknown'
+}
+
+const getTestCaseClass = (tc) => {
+  if (tc.status === 0 || tc.label === 'ACCEPTED') return 'tc-passed'
+  return 'tc-failed'
+}
+
+const formatMemory = (kb) => {
+  if (!kb || kb <= 0) return '0KB'
+  if (kb >= 1024) return `${(kb / 1024).toFixed(1)}MB`
+  return `${kb}KB`
 }
 
 const handleSubmitCodeToAi = () => {
@@ -383,8 +440,8 @@ const handleSubmitCodeToAi = () => {
     return
   }
 
-  // Capture previous submit state BEFORE resetting
-  const previousResult = activeSubmitState.value
+  // Capture previous submit result BEFORE resetting
+  const previousResult = submitResult.value
 
   // Stage code as attachment
   const language = activeSubmitLanguage.value
@@ -395,13 +452,16 @@ const handleSubmitCodeToAi = () => {
     type: 'code'
   })
 
-  // If there is a submission result (success or error), stage it as attachment too
-  if (previousResult && previousResult.message) {
-    addPendingAttachment({
-      filename: 'submit-result.txt',
-      content: `[${previousResult.type?.toUpperCase() || 'INFO'}] ${previousResult.message}`,
-      type: 'result'
-    })
+  // If there is a submission result, stage it with rich detail
+  if (previousResult) {
+    const resultContent = buildResultAttachmentContent(previousResult)
+    if (resultContent) {
+      addPendingAttachment({
+        filename: 'submit-result.txt',
+        content: resultContent,
+        type: 'result'
+      })
+    }
   }
 
   activeSubmitState.value = { type: 'info', message: 'Attachment staged. Click 发送 in chat when ready.' }
@@ -413,6 +473,7 @@ watch(
     pruneSubmitDrafts()
     pruneOrphanAttachments()
     pruneOrphanSuggestions()
+    pruneSubmitResults(sessionList.map((s) => s.id))
 
     if (!sessionId) {
       selectedProblemId.value = ''
@@ -666,7 +727,7 @@ onBeforeUnmount(() => {
 
       <section class="main-panel problem-panel" v-else>
         <div class="problem-toolbar">
-          <input v-model="keyword" placeholder="关键词搜索题目" @keyup.enter="searchProblems" />
+          <input v-model="keyword" placeholder="搜索题目编号或关键词 (如 LQ1273)" @keyup.enter="searchProblems" />
           <select v-model="difficulty" @change="searchProblems">
             <option :value="''">全部难度</option>
             <option v-for="level in OJ_DIFFICULTY_OPTIONS.filter((item) => item)" :key="level" :value="level">
@@ -795,8 +856,115 @@ onBeforeUnmount(() => {
                 </div>
               </div>
               <div class="submit-result-area">
-                <div class="empty" :class="activeSubmitState.type" v-if="activeSubmitState.message">{{ activeSubmitState.message }}</div>
-                <div class="empty" v-else>提交结果和错误信息将在此显示</div>
+                <!-- Loading state -->
+                <div class="submit-result-empty" v-if="submitLoading">
+                  <div class="result-spinner"></div>
+                  <span>Judging...</span>
+                </div>
+
+                <!-- Detailed result panel -->
+                <div class="submit-result-panel" v-else-if="submitResult" :class="getResultClass(submitResult)">
+                  <!-- Status header -->
+                  <div class="result-header">
+                    <span class="result-icon">{{ submitResult.icon || '❓' }}</span>
+                    <span class="result-label">{{ submitResult.display || submitResult.label }}</span>
+                    <span class="result-submission-id" v-if="submitResult.submissionId">#{{ submitResult.submissionId }}</span>
+                  </div>
+
+                  <!-- Stats row -->
+                  <div class="result-stats-row">
+                    <div class="result-stat" v-if="submitResult.score > 0">
+                      <span class="stat-label">Score</span>
+                      <span class="stat-value">{{ submitResult.score }}</span>
+                    </div>
+                    <div class="result-stat">
+                      <span class="stat-label">Time</span>
+                      <span class="stat-value">{{ submitResult.timeCost }}ms</span>
+                    </div>
+                    <div class="result-stat">
+                      <span class="stat-label">Memory</span>
+                      <span class="stat-value">{{ formatMemory(submitResult.memoryCost) }}</span>
+                    </div>
+                  </div>
+
+                  <!-- Error details (compile error, runtime error, system error) -->
+                  <div class="result-error-block" v-if="submitResult.errInfo">
+                    <div class="error-block-header">
+                      <span class="error-block-icon">⚠</span>
+                      <span>{{ submitResult.label === 'COMPILE_ERROR' ? 'Compile Error' : 'Error Details' }}</span>
+                    </div>
+                    <pre class="error-block-content">{{ submitResult.errInfo }}</pre>
+                  </div>
+
+                  <!-- Test case results -->
+                  <div class="result-test-cases" v-if="submitResult.testCases && submitResult.testCases.length > 0">
+                    <!-- Summary bar -->
+                    <div class="test-cases-header">
+                      <span class="tc-summary-label">Test Cases</span>
+                      <span class="tc-pass-count">
+                        {{ submitResult.testCases.filter(tc => tc.status === 0 || tc.label === 'ACCEPTED').length }}/{{ submitResult.testCases.length }} passed
+                      </span>
+                    </div>
+                    <!-- Visual progress bar -->
+                    <div class="tc-progress-bar">
+                      <div
+                        v-for="tc in submitResult.testCases"
+                        :key="'bar-' + tc.index"
+                        class="tc-progress-segment"
+                        :class="getTestCaseClass(tc)"
+                        :title="`#${tc.index} ${tc.display}`"
+                      ></div>
+                    </div>
+                    <!-- Individual test case cards -->
+                    <div class="test-cases-list">
+                      <div
+                        v-for="tc in submitResult.testCases"
+                        :key="'card-' + tc.index"
+                        class="test-case-card"
+                        :class="getTestCaseClass(tc)"
+                      >
+                        <div class="tc-card-header">
+                          <span class="tc-index">#{{ tc.index }}</span>
+                          <span class="tc-icon">{{ tc.icon }}</span>
+                          <span class="tc-status-label">{{ tc.display }}</span>
+                        </div>
+                        <div class="tc-card-metrics">
+                          <span class="tc-metric" v-if="tc.cpuTime">
+                            <span class="tc-metric-label">Time</span>
+                            <span class="tc-metric-value">{{ tc.cpuTime }}ms</span>
+                          </span>
+                          <span class="tc-metric" v-if="tc.realTime && tc.realTime !== tc.cpuTime">
+                            <span class="tc-metric-label">Real</span>
+                            <span class="tc-metric-value">{{ tc.realTime }}ms</span>
+                          </span>
+                          <span class="tc-metric" v-if="tc.memory">
+                            <span class="tc-metric-label">Mem</span>
+                            <span class="tc-metric-value">{{ formatMemory(tc.memory) }}</span>
+                          </span>
+                          <span class="tc-metric" v-if="tc.score > 0">
+                            <span class="tc-metric-label">Score</span>
+                            <span class="tc-metric-value">{{ tc.score }}pts</span>
+                          </span>
+                          <span class="tc-metric" v-if="tc.signal != null">
+                            <span class="tc-metric-label">Signal</span>
+                            <span class="tc-metric-value">{{ tc.signal }}</span>
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Flat error message fallback -->
+                  <div class="result-fallback-message" v-if="activeSubmitState.message && !submitResult.errInfo && !(submitResult.testCases && submitResult.testCases.length > 0)">
+                    {{ activeSubmitState.message }}
+                  </div>
+                </div>
+
+                <!-- Placeholder -->
+                <div class="submit-result-empty" v-else>
+                  <span class="empty-icon">📋</span>
+                  <span>Submit code to see results</span>
+                </div>
               </div>
             </div>
           </template>

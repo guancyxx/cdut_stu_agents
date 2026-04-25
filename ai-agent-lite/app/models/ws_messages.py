@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field, field_validator
 
 class WsQueryContent(BaseModel):
     """Inner 'content' payload for a query message."""
-    query: str = Field(..., min_length=1, max_length=5000, description="User query text")
+    query: str = Field(..., min_length=1, max_length=50000, description="User query text")
 
     @field_validator("query")
     @classmethod

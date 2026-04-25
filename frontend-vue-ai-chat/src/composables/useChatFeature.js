@@ -301,10 +301,13 @@ export function useChatFeature() {
     }
 
     const title = `${problem._id} ${problem.title}`.slice(0, 24)
+    // Use unique youtuSessionId per session to prevent localStorage history pollution
+    // when a previous session for the same problem was cleared
+    const uniqueYotuSessionId = `problem_${problemId}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`
     const created = createMappedSession(title, {
       problemId,
       problemTitle: problem.title,
-      youtuSessionId: `problem_${problemId}`
+      youtuSessionId: uniqueYotuSessionId
     })
 
     restoreSessionHistory(created.id)
@@ -411,11 +414,15 @@ export function useChatFeature() {
   }
 
   const clearAllConversationData = () => {
-    sessions.value.forEach((session) => {
-      if (session?.youtuSessionId) {
-        localStorage.removeItem(createHistoryStorageKey(session.youtuSessionId))
+    // Remove all history localStorage keys (including orphaned ones from previous sessions)
+    const keysToRemove = []
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i)
+      if (key && key.startsWith('cdut-ai-chat-history-')) {
+        keysToRemove.push(key)
       }
-    })
+    }
+    keysToRemove.forEach((key) => localStorage.removeItem(key))
 
     clearAllSessions()
   }

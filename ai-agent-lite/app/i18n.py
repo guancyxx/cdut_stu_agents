@@ -1,7 +1,7 @@
 """User-facing string constants — centralized localization module.
 
 All end-user visible text (displayed in the frontend) is defined here.
-Chinese strings are written directly — no need for \uXXXX escapes.
+Chinese strings are written directly (no unicode-escape required).
 
 Internal trace/debug messages also use English strings stored here
 for consistency and future i18n support.

@@ -90,6 +90,9 @@ export function createApiClient(baseUrl = '/oj-api') {
     return requestJson(`/api/submissions?${query.toString()}`)
   }
 
+  const fetchSubmissionDetail = (submissionId) =>
+    requestJson(`/api/submission?id=${encodeURIComponent(submissionId)}`)
+
   return {
     fetchProfile,
     fetchCaptcha,
@@ -98,6 +101,7 @@ export function createApiClient(baseUrl = '/oj-api') {
     logout,
     fetchProblems,
     submitCode,
-    fetchSubmissions
+    fetchSubmissions,
+    fetchSubmissionDetail
   }
 }
