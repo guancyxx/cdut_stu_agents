@@ -41,11 +41,11 @@ class IntentClassifier:
         last_agent_ctx = ""
         if self.state.last_agent_type:
             agent_name_map = {
-                "code_reviewer": "Code Reviewer (代码审查专家)",
-                "problem_analyzer": "Problem Analyzer (问题解析专家)",
-                "contest_coach": "Contest Coach (竞赛教练)",
-                "learning_partner": "Learning Partner (学习伙伴)",
-                "learning_manager": "Learning Manager (学习管理专家)",
+                "code_reviewer": "Code Reviewer",
+                "problem_analyzer": "Problem Analyzer",
+                "contest_coach": "Contest Coach",
+                "learning_partner": "Learning Partner",
+                "learning_manager": "Learning Manager",
             }
             last_agent_ctx = agent_name_map.get(self.state.last_agent_type, self.state.last_agent_type)
 

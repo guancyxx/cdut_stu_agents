@@ -128,40 +128,40 @@ async def process_turn(
         detail={"agent_type": agent_type.value},
     )
 
-    suggestion_summary = ", ".join(a.get("title", "") for a in next_actions) if next_actions else "无"
+    suggestion_summary = ", ".join(a.get("title", "") for a in next_actions) if next_actions else "none"
 
     return {
         "agent_type": agent_type,
         "agent_content": agent_response.content,
         "intent_trace": {
             "stage": "intent_classification",
-            "title": "意图识别",
-            "detail": "正在分析用户意图，确定路由目标...",
+            "title": "Intent Classification",
+            "detail": "Analyzing user intent and determining routing target...",
             "output": "",
         },
         "intent_result_trace": {
             "stage": "intent_result",
-            "title": "意图识别完成",
-            "detail": f"已路由至 {agent_type.value} 处理",
+            "title": "Intent Classified",
+            "detail": f"Routed to {agent_type.value}",
             "output": f"Intent: {getattr(supervisor, '_last_intent', 'N/A')}\nAgent: {agent_type.value}",
         },
         "worker_trace": {
             "stage": "worker_processing",
-            "title": f"{get_agent_display_name(agent_type)} 处理中",
-            "detail": "正在生成回复...",
+            "title": f"{get_agent_display_name(agent_type)} Processing",
+            "detail": "Generating response...",
             "output": "",
         },
         "suggestion_trace": {
             "stage": "suggestion_generation",
-            "title": "生成下一步建议",
-            "detail": "正在分析知识变化，生成个性化建议...",
+            "title": "Generating Suggestions",
+            "detail": "Analyzing knowledge changes and generating personalized suggestions...",
             "output": "",
         },
         "suggestion_result_trace": {
             "stage": "suggestion_result",
-            "title": "建议生成完成",
-            "detail": f"已生成 {len(next_actions)} 条建议",
-            "output": suggestion_summary,
+            "title": "Suggestions Ready",
+            "detail": f"Generated {len(next_actions)} suggestions",
+            "output": f"Suggestions: {suggestion_summary}",
         },
         "next_actions": next_actions,
         "updated_state": current_state,

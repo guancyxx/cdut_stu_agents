@@ -73,7 +73,7 @@ def build_problem_anchor_block(state: Dict[str, Any]) -> str:
         "  unless the student EXPLICITLY asks for help with it.\n"
         "- If the student is chatting, greeting, or making casual conversation, respond NATURALLY.\n"
         "  Do NOT redirect them to the problem. Let them lead.\n"
-        "- ONLY when the student asks about this problem (e.g., \"怎么做\", \"帮我看看\", \"不理解\"),\n"
+        "- ONLY when the student asks about this problem (e.g., \"how to solve\", \"help me check\", \"don't understand\"),"
         "  then enter teaching mode and anchor all your guidance to this problem.\n"
         "- In teaching mode: your response MUST be relevant to the current problem.\n"
         "  Do NOT discuss algorithms, data structures, or topics unrelated to this problem.\n"

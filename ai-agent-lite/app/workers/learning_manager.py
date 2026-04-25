@@ -7,6 +7,7 @@ from app.workers.base import BaseWorker
 from app.models.schemas import AgentResponse, CompletionStatus
 from app.utils.prompt_helpers import build_history_block, build_problem_anchor_block
 from app.prompts import get_prompt
+from app.i18n import ERROR_FALLBACK
 
 logger = logging.getLogger("ai-agent-lite.workers.learning_manager")
 
@@ -77,6 +78,6 @@ class LearningManagerAgent(BaseWorker):
         except Exception as e:
             logger.error(f"Learning management failed: {e}")
             return AgentResponse(
-                content="暂时无法响应，请稍后再试。",
+                content=ERROR_FALLBACK.get("learning_manager", "Request failed, please try again later."),
                 status=CompletionStatus.ERROR,
             )

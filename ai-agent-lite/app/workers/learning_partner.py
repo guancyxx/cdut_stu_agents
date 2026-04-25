@@ -7,6 +7,7 @@ from app.workers.base import BaseWorker
 from app.models.schemas import AgentResponse, CompletionStatus
 from app.utils.prompt_helpers import build_history_block, build_problem_anchor_block
 from app.prompts import get_prompt
+from app.i18n import ERROR_FALLBACK
 
 logger = logging.getLogger("ai-agent-lite.workers.learning_partner")
 
@@ -52,6 +53,6 @@ class LearningPartnerAgent(BaseWorker):
         except Exception as e:
             logger.error(f"Learning partner response failed: {e}")
             return AgentResponse(
-                content="我在这儿，随时可以继续。",
+                content=ERROR_FALLBACK.get("learning_partner", "I'm here, we can keep going whenever you're ready."),
                 status=CompletionStatus.COMPLETE,
             )

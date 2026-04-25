@@ -130,8 +130,8 @@ async def ws_handler(websocket: WebSocket) -> None:
 
                 # --- Normal query: full turn pipeline ---
                 await websocket.send_json({"type": "trace", "data": {
-                    "stage": "intent_classification", "title": "意图识别",
-                    "detail": "正在分析用户意图，确定路由目标...", "output": "",
+                    "stage": "intent_classification", "title": "Intent Classification",
+                    "detail": "Analyzing user intent and determining routing target...", "output": "",
                 }})
 
                 turn = await process_turn(

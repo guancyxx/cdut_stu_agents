@@ -1,4 +1,9 @@
-"""Next-step suggestion service — generates contextual follow-up actions for students."""
+"""Next-step suggestion service — generates contextual follow-up actions for students.
+
+Each suggestion represents what the student would naturally say or ask next,
+guiding their learning direction.  The student clicks a suggestion to send it
+as their next message.
+"""
 import json
 import logging
 from string import Template
@@ -11,27 +16,53 @@ logger = logging.getLogger("ai-agent-lite.next_step_suggester")
 
 # Fallback prompts — used only when .md template files are missing
 _INLINE_DELTA_PROMPT = (
-    "You are a study buddy, not a teacher. Based on the conversation, "
-    "suggest 2-3 natural next steps.\n\n"
-    "Student said: $user_input\nAgent role: $agent_type\n"
+    "You are a study buddy suggesting what the STUDENT should say next. "
+    "Based on the conversation, propose 2-3 short utterances the student "
+    "would naturally say to continue learning.\n\n"
+    "Student just said: $user_input\nAgent role: $agent_type\n"
     "Current problem: $current_problem_id\nStudent mood: $emotion_hint\n"
     "Knowledge change this turn:\n$delta_section\n\n"
-    "Speak like a friend, not a textbook. Be specific and actionable.\n"
-    'Return JSON: {"suggestions":[{"type":"practice|learn|review|debug|compete|encourage",'
-    '"title":"short casual suggestion in Chinese","target":"specific target",'
-    '"reason":"casual 1-2 sentence reason in Chinese"}]}'
+    "CRITICAL: Each suggestion is what the STUDENT would type next — "
+    "phrased in first person, like a natural follow-up question or request.\n"
+    "Examples: 'Can you walk me through the BFS approach?', "
+    "'I think my loop condition is wrong, can you check?', "
+    "'That makes sense, got any practice problems for this?'\n\n"
+    'Return JSON (no markdown): {"suggestions":[{"type":"practice|learn|review|debug|compete|encourage",'
+    '"title":"what the student would say (max 50 chars)",'
+    '"target":"specific topic or problem",'
+    '"reason":"why this is useful now (max 100 chars)"}]}\n\n'
+    "type meanings:\n"
+    "- practice: hands-on coding exercise\n"
+    "- learn: study a new concept or method\n"
+    "- review: revisit something just learned\n"
+    "- debug: investigate a bug or wrong answer\n"
+    "- compete: contest or competition related\n"
+    "- encourage: motivational nudge (prioritize when student is struggling)"
 )
 
 _INLINE_FALLBACK_PROMPT = (
-    "You are a study buddy, not a teacher. Based on the conversation, "
-    "suggest 2-3 natural next steps.\n\n"
-    "Student said: $user_input\nAgent role: $agent_type\n"
+    "You are a study buddy suggesting what the STUDENT should say next. "
+    "Based on the conversation, propose 2-3 short utterances the student "
+    "would naturally say to continue learning.\n\n"
+    "Student just said: $user_input\nAgent role: $agent_type\n"
     "AI response summary: $agent_response\n"
     "Current problem: $current_problem_id\nStudent mood: $emotion_hint\n\n"
-    "Speak like a friend, not a textbook. Be specific and actionable.\n"
-    'Return JSON: {"suggestions":[{"type":"practice|learn|review|debug|compete|encourage",'
-    '"title":"short casual suggestion in Chinese","target":"specific target",'
-    '"reason":"casual 1-2 sentence reason in Chinese"}]}'
+    "CRITICAL: Each suggestion is what the STUDENT would type next — "
+    "phrased in first person, like a natural follow-up question or request.\n"
+    "Examples: 'Can you walk me through the BFS approach?', "
+    "'I think my loop condition is wrong, can you check?', "
+    "'That makes sense, got any practice problems for this?'\n\n"
+    'Return JSON (no markdown): {"suggestions":[{"type":"practice|learn|review|debug|compete|encourage",'
+    '"title":"what the student would say (max 50 chars)",'
+    '"target":"specific topic or problem",'
+    '"reason":"why this is useful now (max 100 chars)"}]}\n\n'
+    "type meanings:\n"
+    "- practice: hands-on coding exercise\n"
+    "- learn: study a new concept or method\n"
+    "- review: revisit something just learned\n"
+    "- debug: investigate a bug or wrong answer\n"
+    "- compete: contest or competition related\n"
+    "- encourage: motivational nudge"
 )
 
 
@@ -51,7 +82,10 @@ class NextStepSuggester:
         state: Dict[str, Any],
         state_delta: Dict[str, Any] = None,
     ) -> List[Dict[str, str]]:
-        """Return 2-3 structured next-step suggestions based on state delta."""
+        """Return 2-3 structured next-step suggestions based on state delta.
+
+        Each suggestion's 'title' is phrased as what the student would say next.
+        """
         # Build delta section
         delta_section = ""
         if state_delta:
@@ -63,29 +97,29 @@ class NextStepSuggester:
             delta_lines = []
             if gained:
                 items = ", ".join(f"{k}({v})" for k, v in gained.items())
-                delta_lines.append(f"新掌握: {items}")
+                delta_lines.append(f"Newly mastered: {items}")
             if improved:
-                items = ", ".join(f"{k}: {v['before']}→{v['after']}" for k, v in improved.items())
-                delta_lines.append(f"进步: {items}")
+                items = ", ".join(f"{k}: {v['before']}->{v['after']}" for k, v in improved.items())
+                delta_lines.append(f"Improved: {items}")
             if weakened:
-                items = ", ".join(f"{k}: {v['before']}→{v['after']}" for k, v in weakened.items())
-                delta_lines.append(f"退步: {items}")
+                items = ", ".join(f"{k}: {v['before']}->{v['after']}" for k, v in weakened.items())
+                delta_lines.append(f"Weakened: {items}")
             if delta_lines:
                 delta_section = "\n".join(delta_lines)
             elif stable_topics:
                 stable_list = ", ".join(f"{k}({v})" for k, v in stable_topics.items())
-                delta_section = f"已掌握(无明显变化): {stable_list}"
+                delta_section = f"Stable (no significant change): {stable_list}"
 
         # Build emotion hint from state
         emotion_tags = state.get("emotion_tags", {})
         if emotion_tags:
             high = [(k, v) for k, v in emotion_tags.items() if v > 0.3]
             if high:
-                emotion_hint = "、".join(f"{k}({v:.1f})" for k, v in high)
+                emotion_hint = ", ".join(f"{k}({v:.1f})" for k, v in high)
             else:
-                emotion_hint = "平稳"
+                emotion_hint = "calm"
         else:
-            emotion_hint = "未知"
+            emotion_hint = "neutral"
 
         # Load prompt templates from .md files, fallback to inline
         if delta_section:
