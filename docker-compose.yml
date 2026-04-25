@@ -25,9 +25,9 @@ services:
       - LITE_DB_SCHEMA=ai_agent
       - LITE_CELERY_BROKER=redis://oj-redis:6379/1
       - LITE_CELERY_BACKEND=redis://oj-redis:6379/2
-      - LITE_OLLAMA_BASE_URL=http://host.docker.internal:11434
+      - LITE_OLLAMA_BASE_URL=http://172.17.0.1:11435
       - LITE_OLLAMA_MODEL=gemma4:31b
-      - LITE_OLLAMA_TIMEOUT=300
+      - LITE_OLLAMA_TIMEOUT=600
       - OJ_ADMIN_USER=root
       - OJ_ADMIN_PASS=rootroot
     env_file:
@@ -48,7 +48,7 @@ services:
       context: ./ai-agent-lite
       dockerfile: Dockerfile
     container_name: cdut-ai-agent-celery-worker
-    command: ["celery", "-A", "app.celery_app", "worker", "--loglevel=info", "-Q", "audit", "--concurrency=3"]
+    command: ["celery", "-A", "app.celery_app", "worker", "--loglevel=info", "-Q", "audit", "--concurrency=1"]
     volumes:
       - ./ai-agent-lite/app:/app/app
     environment:
@@ -57,9 +57,9 @@ services:
       - LITE_DB_SCHEMA=ai_agent
       - LITE_CELERY_BROKER=redis://oj-redis:6379/1
       - LITE_CELERY_BACKEND=redis://oj-redis:6379/2
-      - LITE_OLLAMA_BASE_URL=http://host.docker.internal:11434
+      - LITE_OLLAMA_BASE_URL=http://172.17.0.1:11435
       - LITE_OLLAMA_MODEL=gemma4:31b
-      - LITE_OLLAMA_TIMEOUT=300
+      - LITE_OLLAMA_TIMEOUT=600
       - OJ_API_URL=http://oj-backend:8000
       - OJ_ADMIN_USER=root
       - OJ_ADMIN_PASS=rootroot

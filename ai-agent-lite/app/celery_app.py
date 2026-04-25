@@ -1,7 +1,7 @@
 """Celery application instance for ai-agent-lite background tasks.
 
 The worker process runs this as its entry point:
-    celery -A app.celery_app worker --loglevel=info
+    celery -A app.celery_app worker --loglevel=info -Q audit
 
 Beat scheduler for periodic tasks:
     celery -A app.celery_app beat --loglevel=info
@@ -28,16 +28,20 @@ celery_app.conf.update(
     # reliability
     task_acks_late=True,
     task_reject_on_worker_lost=True,
-    # concurrency — use eventlet/gevent for many I/O-bound tasks
+    # concurrency
     worker_concurrency=settings.audit_concurrency,
     # timeouts
     task_soft_time_limit=int(settings.ollama_timeout) + 30,
     task_time_limit=int(settings.ollama_timeout) + 60,
     # result expiry — audit results kept for 7 days
     result_expires=86400 * 7,
-    # auto-discover tasks module
+    # route all audit tasks to the audit queue
     task_routes={"app.tasks.problem_auditor.*": {"queue": "audit"}},
 )
 
-# Auto-discover tasks from app.tasks package
-celery_app.autodiscover_tasks(["app.tasks"])
+# Explicitly import task modules so they register with this Celery app.
+# autodiscover_tasks relies on a specific package layout that may not
+# resolve correctly inside Docker containers; explicit imports are more robust.
+celery_app.autodiscover_tasks(["app.tasks"], related_name=None)
+# Also force-import to guarantee registration
+from app.tasks import problem_auditor  # noqa: E402, F401

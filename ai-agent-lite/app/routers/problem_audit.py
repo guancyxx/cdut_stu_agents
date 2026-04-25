@@ -52,17 +52,21 @@ class BatchAuditSummary(BaseModel):
 # ---------------------------------------------------------------------------
 
 @router.post("/run", response_model=AuditTriggerResponse)
-async def trigger_audit(force: bool = Query(False, description="Force re-audit all problems")):
+async def trigger_audit(
+    force: bool = Query(False, description="Force re-audit all problems"),
+    limit: int = Query(0, ge=0, description="Max problems to audit. 0 = use default batch size (50)"),
+):
     """Trigger a batch audit of all (or all un-audited) problems.
 
     With force=false (default): only audits problems that have no pass record.
     With force=true: re-audits all problems regardless.
+    limit=0 means use the default audit_batch_size from config (50).
     """
-    task = audit_all_problems.apply_async(kwargs={"force": force}, queue="audit")
-    logger.info("Triggered batch audit task_id=%s force=%s", task.id, force)
+    task = audit_all_problems.apply_async(kwargs={"force": force, "limit": limit}, queue="audit")
+    logger.info("Triggered batch audit task_id=%s force=%s limit=%s", task.id, force, limit)
     return AuditTriggerResponse(
         task_id=task.id,
-        message=f"Batch audit {'(force)' if force else ''} started",
+        message=f"Batch audit {'(force)' if force else ''} started (limit={limit or 'default'})",
     )
 
 

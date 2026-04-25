@@ -16,12 +16,10 @@ Key design decisions:
 """
 import json
 import logging
-import time
 import uuid
 from datetime import datetime, timezone
 
 import httpx
-from celery import group
 
 from app.celery_app import celery_app
 from app.config import settings
@@ -51,14 +49,20 @@ def _oj_login() -> tuple[httpx.Client, str]:
     return client, csrf
 
 
-def _fetch_all_problems(client: httpx.Client, csrf: str) -> list[dict]:
-    """Paginate through /api/admin/problem and return all problems."""
+def _fetch_problem_list(client: httpx.Client, csrf: str, limit: int = 0) -> list[dict]:
+    """Fetch problem summaries from the OJ Admin API.
+
+    Args:
+        limit: Maximum number of problems to fetch. 0 means all.
+               For large OJ instances, use a reasonable limit (e.g. 50-200).
+    """
     problems = []
     page = 1
+    per_page = 100
     while True:
         r = client.get(
             "/api/admin/problem",
-            params={"limit": 100, "page": page},
+            params={"limit": per_page, "page": page},
             headers={"X-CSRFToken": csrf},
         )
         r.raise_for_status()
@@ -69,7 +73,20 @@ def _fetch_all_problems(client: httpx.Client, csrf: str) -> list[dict]:
         if not results:
             break
         problems.extend(results)
+        # Stop if we have enough
+        if limit > 0 and len(problems) >= limit:
+            problems = problems[:limit]
+            break
+        # Stop if this page was not full (no more pages)
+        if len(results) < per_page:
+            break
         page += 1
+
+        # Safety: avoid runaway pagination on very large databases
+        if limit == 0 and page > 5000:
+            logger.warning("Pagination safety limit reached at page %d, stopping fetch", page)
+            break
+
     logger.info("Fetched %d problems from OJ", len(problems))
     return problems
 
@@ -140,7 +157,6 @@ def _build_audit_prompt(problem: dict) -> str:
     from app.prompts import get_prompt
     template = get_prompt("problem_auditor")
     if not template:
-        # Fallback inline prompt
         template = _FALLBACK_PROMPT
 
     # Serialize the problem data for the LLM to inspect
@@ -191,14 +207,14 @@ Problem data:
 
 
 # ---------------------------------------------------------------------------
-# Database helpers (sync — Celery worker uses sync SQLAlchemy)
+# Database helpers (sync — Celery worker uses psycopg2 directly)
 # ---------------------------------------------------------------------------
 
-def _get_audit_record(problem_display_id: str) -> dict | None:
-    """Check if a problem has already been audited in the audit table.
+def _get_all_audited_ids() -> set[str]:
+    """Fetch all problem_display_ids that have a successful audit record.
 
-    Uses raw SQL via asyncpg imported synchronously as a stopgap.
-    The Celery worker cannot use async SQLAlchemy directly.
+    Returns a set of display IDs for fast membership checking.
+    Only includes records with status 'pass' (skip on 'fail' so they get retried).
     """
     import psycopg2
     db_url = settings.db_url.replace("+asyncpg", "")
@@ -206,21 +222,10 @@ def _get_audit_record(problem_display_id: str) -> dict | None:
     try:
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT status, issues, fixes, created_at, updated_at "
-                "FROM {schema}.problem_audit WHERE problem_display_id = %s "
-                "ORDER BY updated_at DESC LIMIT 1".format(schema=settings.db_schema),
-                (problem_display_id,),
+                "SELECT problem_display_id FROM {schema}.problem_audit "
+                "WHERE status = 'pass'".format(schema=settings.db_schema)
             )
-            row = cur.fetchone()
-            if row:
-                return {
-                    "status": row[0],
-                    "issues": row[1],
-                    "fixes": row[2],
-                    "created_at": row[3].isoformat() if row[3] else None,
-                    "updated_at": row[4].isoformat() if row[4] else None,
-                }
-            return None
+            return {row[0] for row in cur.fetchall()}
     finally:
         conn.close()
 
@@ -239,8 +244,7 @@ def _upsert_audit_record(
     conn = psycopg2.connect(db_url)
     try:
         with conn.cursor() as cur:
-            # Check if record exists
-            cur.execute(
+            existing = cur.execute(
                 "SELECT id FROM {schema}.problem_audit WHERE problem_display_id = %s "
                 "ORDER BY created_at DESC LIMIT 1".format(schema=settings.db_schema),
                 (problem_display_id,),
@@ -338,6 +342,50 @@ DEFAULT_TEMPLATES = {
 
 
 # ---------------------------------------------------------------------------
+# Quick pre-check: skip problems that are clearly fine without LLM
+# ---------------------------------------------------------------------------
+
+def _quick_check_problem(problem: dict) -> list[str]:
+    """Fast heuristic check for obvious issues. Returns list of issue strings.
+
+    Empty list means no obvious issues detected (still needs LLM audit).
+    This is used to skip problems that are trivially incomplete.
+    """
+    issues = []
+
+    # Check title
+    if not problem.get("title") or not problem["title"].strip():
+        issues.append("Missing or empty title")
+
+    # Check description
+    desc = problem.get("description") or ""
+    if not desc.strip() or len(desc.strip()) < 10:
+        issues.append("Description too short or empty")
+
+    # Check samples
+    samples = problem.get("samples") or []
+    if not samples:
+        issues.append("No sample input/output")
+
+    # Check template (starter code)
+    template = problem.get("template") or {}
+    missing_langs = []
+    for lang in ("C", "C++", "Java", "Python3"):
+        code = template.get(lang, "") or ""
+        if not code.strip():
+            missing_langs.append(lang)
+    if missing_langs:
+        issues.append(f"Missing starter code for: {', '.join(missing_langs)}")
+
+    # Check test_case_id
+    tc_id = problem.get("test_case_id") or ""
+    if not tc_id.strip():
+        issues.append("Empty test_case_id")
+
+    return issues
+
+
+# ---------------------------------------------------------------------------
 # Core audit task
 # ---------------------------------------------------------------------------
 
@@ -347,6 +395,8 @@ DEFAULT_TEMPLATES = {
     max_retries=2,
     default_retry_delay=60,
     queue="audit",
+    soft_time_limit=360,  # 6 min soft limit
+    time_limit=420,       # 7 min hard limit
 )
 def audit_single_problem(self, problem_summary: dict) -> dict:
     """Audit a single problem via LLM and auto-fix if needed.
@@ -363,6 +413,7 @@ def audit_single_problem(self, problem_summary: dict) -> dict:
     logger.info("Auditing problem _id=%s (db_id=%d, title=%s)", display_id, db_id, title)
 
     # Step 1: Login to OJ and fetch full problem detail
+    client = None
     try:
         client, csrf = _oj_login()
         problem = _fetch_problem_detail(client, csrf, db_id)
@@ -371,59 +422,60 @@ def audit_single_problem(self, problem_summary: dict) -> dict:
     except Exception as exc:
         logger.exception("OJ login/fetch failed for _id=%s", display_id)
         raise self.retry(exc=exc)
-    finally:
-        client.close()
 
-    # Step 2: Ask LLM to audit
-    prompt = _build_audit_prompt(problem)
     try:
-        raw_response = _call_ollama(prompt)
-    except Exception as exc:
-        logger.exception("Ollama call failed for _id=%s", display_id)
-        raise self.retry(exc=exc)
-
-    # Step 3: Parse LLM response
-    audit_result = _parse_llm_response(raw_response)
-
-    # Step 4: Save audit record
-    try:
-        _upsert_audit_record(
-            problem_display_id=display_id,
-            problem_db_id=db_id,
-            audit_status=audit_result["status"],
-            issues=audit_result.get("issues", []),
-            fixes=audit_result.get("fixes", {}),
-            llm_raw_response=raw_response,
-        )
-    except Exception as exc:
-        logger.exception("DB save failed for _id=%s", display_id)
-        # Don't retry — audit is done, just DB write failed
-
-    # Step 5: Auto-fix if status is "fail"
-    if audit_result["status"] == "fail" and audit_result.get("fixes"):
+        # Step 2: Ask LLM to audit
+        prompt = _build_audit_prompt(problem)
         try:
-            _apply_fixes(client, csrf, problem, audit_result["fixes"])
-            logger.info("Auto-fixed problem _id=%s", display_id)
-        except Exception:
-            logger.exception("Auto-fix failed for _id=%s", display_id)
-            # Record that fix attempt failed
-            try:
-                _upsert_audit_record(
-                    problem_display_id=display_id,
-                    problem_db_id=db_id,
-                    audit_status="fix_failed",
-                    issues=audit_result.get("issues", []),
-                    fixes=audit_result.get("fixes", {}),
-                    llm_raw_response=raw_response,
-                )
-            except Exception:
-                pass
+            raw_response = _call_ollama(prompt)
+        except Exception as exc:
+            logger.exception("Ollama call failed for _id=%s", display_id)
+            raise self.retry(exc=exc)
 
-    return {
-        "_id": display_id,
-        "status": audit_result["status"],
-        "issues": audit_result.get("issues", []),
-    }
+        # Step 3: Parse LLM response
+        audit_result = _parse_llm_response(raw_response)
+
+        # Step 4: Save audit record
+        try:
+            _upsert_audit_record(
+                problem_display_id=display_id,
+                problem_db_id=db_id,
+                audit_status=audit_result["status"],
+                issues=audit_result.get("issues", []),
+                fixes=audit_result.get("fixes", {}),
+                llm_raw_response=raw_response,
+            )
+        except Exception:
+            logger.exception("DB save failed for _id=%s", display_id)
+
+        # Step 5: Auto-fix if status is "fail"
+        if audit_result["status"] == "fail" and audit_result.get("fixes"):
+            try:
+                _apply_fixes(client, csrf, problem, audit_result["fixes"])
+                logger.info("Auto-fixed problem _id=%s", display_id)
+            except Exception:
+                logger.exception("Auto-fix failed for _id=%s", display_id)
+                # Record that fix attempt failed
+                try:
+                    _upsert_audit_record(
+                        problem_display_id=display_id,
+                        problem_db_id=db_id,
+                        audit_status="fix_failed",
+                        issues=audit_result.get("issues", []),
+                        fixes=audit_result.get("fixes", {}),
+                        llm_raw_response=raw_response,
+                    )
+                except Exception:
+                    pass
+
+        return {
+            "_id": display_id,
+            "status": audit_result["status"],
+            "issues": audit_result.get("issues", []),
+        }
+    finally:
+        if client:
+            client.close()
 
 
 def _parse_llm_response(raw: str) -> dict:
@@ -497,23 +549,29 @@ def _apply_fixes(client: httpx.Client, csrf: str, problem: dict, fixes: dict) ->
     name="app.tasks.problem_auditor.audit_all_problems",
     bind=True,
     queue="audit",
+    soft_time_limit=7200,  # 2 hours soft limit for the full batch
+    time_limit=7800,       # 2h10m hard limit
 )
-def audit_all_problems(self, force: bool = False) -> dict:
+def audit_all_problems(self, force: bool = False, limit: int = 0) -> dict:
     """Orchestrate batch audit of all (or all un-audited) problems.
 
     Args:
         force: If True, re-audit all problems regardless of existing records.
+        limit: Maximum number of problems to audit. 0 means all (but capped
+               at what _fetch_problem_list returns).
 
     Returns:
-        dict with batch_id, total count, and per-problem results.
+        dict with batch_id, total count, and dispatched task IDs.
     """
     batch_id = str(uuid.uuid4())[:8]
-    logger.info("Batch audit %s started (force=%s)", batch_id, force)
+    logger.info("Batch audit %s started (force=%s, limit=%s)", batch_id, force, limit)
 
     # Step 1: Login and fetch problem list
     try:
         client, csrf = _oj_login()
-        problems = _fetch_all_problems(client, csrf)
+        # When limit is 0 (default), apply a reasonable cap for first run
+        effective_limit = limit if limit > 0 else settings.audit_batch_size
+        problems = _fetch_problem_list(client, csrf, limit=effective_limit)
     except Exception as exc:
         logger.exception("OJ login/fetch failed for batch audit %s", batch_id)
         raise self.retry(exc=exc)
@@ -522,18 +580,13 @@ def audit_all_problems(self, force: bool = False) -> dict:
 
     # Step 2: Filter out already-audited problems (unless force)
     if not force:
-        un_audited = []
-        for p in problems:
-            existing = _get_audit_record(p["_id"])
-            if existing is None or existing["status"] in ("error", "fix_failed"):
-                un_audited.append(p)
-        target_problems = un_audited
-        logger.info("Batch %s: %d of %d problems need auditing",
-                     batch_id, len(target_problems), len(problems))
+        audited_ids = _get_all_audited_ids()
+        target_problems = [p for p in problems if p["_id"] not in audited_ids]
+        logger.info("Batch %s: %d of %d problems need auditing (already passed: %d)",
+                     batch_id, len(target_problems), len(problems), len(audited_ids))
     else:
         target_problems = problems
-        logger.info("Batch %s (force): re-auditing all %d problems",
-                     batch_id, len(target_problems))
+        logger.info("Batch %s (force): re-auditing %d problems", batch_id, len(target_problems))
 
     if not target_problems:
         return {
@@ -544,37 +597,25 @@ def audit_all_problems(self, force: bool = False) -> dict:
             "message": "All problems already audited",
         }
 
-    # Step 3: Dispatch individual audit tasks in a chord
-    summaries = [
-        {"_id": p["_id"], "id": p["id"], "title": p.get("title", "")}
-        for p in target_problems
-    ]
+    # Step 3: Dispatch individual audit tasks — don't wait for completion.
+    # Each task runs independently and reports its own results.
+    # Progress can be tracked via the /audit/records and /audit/summary APIs.
+    task_ids = []
+    for i, p in enumerate(target_problems):
+        summary = {"_id": p["_id"], "id": p["id"], "title": p.get("title", "")}
+        result = audit_single_problem.apply_async(args=(summary,), queue="audit")
+        task_ids.append(result.id)
+        if (i + 1) % 10 == 0:
+            logger.info("Batch %s progress: dispatched %d/%d tasks",
+                        batch_id, i + 1, len(target_problems))
 
-    # Run tasks sequentially within the batch to avoid overloading Ollama
-    results = []
-    for summary in summaries:
-        try:
-            result = audit_single_problem.apply_async(args=(summary,), queue="audit")
-            # Wait for each task (with timeout)
-            task_result = result.get(timeout=settings.ollama_timeout + 60)
-            results.append(task_result)
-        except Exception as exc:
-            logger.exception("Audit task failed for _id=%s", summary["_id"])
-            results.append({"_id": summary["_id"], "status": "error", "message": str(exc)})
-
-    passed = sum(1 for r in results if r.get("status") == "pass")
-    failed = sum(1 for r in results if r.get("status") == "fail")
-    errors = sum(1 for r in results if r.get("status") in ("error", "fix_failed"))
-
-    logger.info("Batch %s complete: %d passed, %d failed, %d errors",
-                batch_id, passed, failed, errors)
+    logger.info("Batch %s: dispatched %d audit tasks (task_ids: %s...)",
+                batch_id, len(task_ids), task_ids[:3])
 
     return {
         "batch_id": batch_id,
         "total": len(problems),
-        "audited": len(results),
-        "passed": passed,
-        "failed": failed,
-        "errors": errors,
-        "results": results,
+        "dispatched": len(task_ids),
+        "skipped": len(problems) - len(target_problems),
+        "task_ids": task_ids[:50],  # only return first 50 for safety
     }
