@@ -9,11 +9,13 @@ import logging
 import uuid
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from pydantic import ValidationError
 
 from app.config import settings
 from app.errors import AppError, ErrorCode
 from app.metrics import ws_connections_active
 from app.models.enums import AgentType
+from app.models.ws_messages import WsRawMessage, WsQueryContent, WsQueryMessage
 from app.repositories import audit_repo, message_repo
 from app.services.session_service import get_or_create_session, load_context, extract_problem_context
 from app.services.stream_service import send_text_stream
@@ -61,6 +63,38 @@ def _ensure_agents():
     _suggester = NextStepSuggester(llm)
 
 
+def _parse_ws_message(raw: str):
+    """Parse and validate an inbound WS message.
+
+    Returns (req_type, validated_query_content) on success.
+    Returns AppError on validation failure.
+    """
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        return AppError(ErrorCode.INVALID_INPUT, "Invalid JSON"), None
+
+    # First pass: determine message type
+    try:
+        raw_msg = WsRawMessage(type=data.get("type", ""))
+    except ValidationError:
+        return AppError(ErrorCode.INVALID_INPUT, f"Unsupported request type: {data.get('type')}"), None
+
+    if raw_msg.type == "list_agents":
+        return "list_agents", None
+
+    # Second pass: full query validation
+    try:
+        query_msg = WsQueryMessage.model_validate(data)
+        return "query", query_msg.content
+    except ValidationError as exc:
+        # Flatten pydantic errors into a readable string
+        details = "; ".join(
+            f"{e['loc'][-1]}: {e['msg']}" for e in exc.errors()
+        )
+        return AppError(ErrorCode.INVALID_INPUT, f"Validation error: {details}"), None
+
+
 @router.websocket("/ws")
 async def ws_handler(websocket: WebSocket) -> None:
     """Main WebSocket handler — thin orchestration layer."""
@@ -99,14 +133,15 @@ async def ws_handler(websocket: WebSocket) -> None:
                 raw_message = await websocket.receive_text()
                 request_id = uuid.uuid4()
 
-                try:
-                    request = json.loads(raw_message)
-                except json.JSONDecodeError:
-                    await websocket.send_json(AppError(ErrorCode.INVALID_INPUT, "Invalid JSON").to_ws_dict())
+                # ---- Parse & validate inbound message ----
+                result, query_content = _parse_ws_message(raw_message)
+
+                if isinstance(result, AppError):
+                    await websocket.send_json(result.to_ws_dict())
                     await websocket.send_json({"type": "finish"})
                     continue
 
-                req_type = request.get("type")
+                req_type = result
 
                 if req_type == "list_agents":
                     await websocket.send_json({
@@ -115,19 +150,8 @@ async def ws_handler(websocket: WebSocket) -> None:
                     })
                     continue
 
-                if req_type != "query":
-                    await websocket.send_json(
-                        AppError(ErrorCode.INVALID_INPUT, f"Unsupported request type: {req_type}").to_ws_dict())
-                    await websocket.send_json({"type": "finish"})
-                    continue
-
-                content = request.get("content") or {}
-                query_text = str(content.get("query", "")).strip()
-                if not query_text:
-                    await websocket.send_json(
-                        AppError(ErrorCode.INVALID_INPUT, "Query cannot be empty").to_ws_dict())
-                    await websocket.send_json({"type": "finish"})
-                    continue
+                # req_type == "query" — guaranteed by validation
+                query_text = query_content.query
 
                 # Load conversation context
                 context = await load_context(db, session_id)

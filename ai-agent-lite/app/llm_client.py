@@ -22,7 +22,8 @@ def _mask_key(key: str) -> str:
 class LlmClient:
     """Async LLM client with retry and streaming support."""
 
-    SYSTEM_PROMPT = (
+    # Fallback system prompt — loaded from prompts.yaml at runtime when available.
+    _INLINE_SYSTEM_PROMPT = (
         "You are part of an AI tutoring system for programming competitions. "
         "All your responses to the student MUST be in Chinese (简体中文). "
         "Code, variable names, and technical terms may remain in English, "
@@ -34,16 +35,24 @@ class LlmClient:
         self.api_key = settings.llm_api_key
         self.model = settings.llm_model
         self.timeout_seconds = settings.llm_timeout
+        self._system_prompt = None  # Lazy-loaded from YAML
 
     @property
     def enabled(self) -> bool:
         return bool(self.base_url and self.api_key)
 
+    def _get_system_prompt(self) -> str:
+        """Load system prompt from YAML, fallback to inline default."""
+        if self._system_prompt is None:
+            from app.prompts import get_prompt
+            self._system_prompt = get_prompt("system", "llm_system") or self._INLINE_SYSTEM_PROMPT
+        return self._system_prompt
+
     def _inject_system(self, messages: list[dict]) -> list[dict]:
         """Prepend system prompt if no system message is already present."""
         if messages and messages[0].get("role") == "system":
             return messages
-        return [{"role": "system", "content": self.SYSTEM_PROMPT}] + messages
+        return [{"role": "system", "content": self._get_system_prompt()}] + messages
 
     async def complete(self, messages: list[dict]) -> str:
         """Non-streaming completion with retry logic."""

@@ -4,21 +4,36 @@ import logging
 from typing import Dict, Any, List
 
 from app.models.schemas import AgentResponse, CompletionStatus
+from app.prompts import get_prompt_section
 
 logger = logging.getLogger("ai-agent-lite.next_step_suggester")
 
+_INLINE_DELTA_PROMPT = (
+    "You are an AI programming-competition coach. Based on the student's "
+    "knowledge state change this turn, suggest 2-3 concrete next actions "
+    "that directly build on their new capabilities or address weaknesses.\n\n"
+    "Student asked: {user_input}\nAgent type: {agent_type}\n"
+    "Current problem: {current_problem_id}\n"
+    "Knowledge change this turn:\n{delta_section}\n\n"
+    '- Return JSON ONLY. Format: {"suggestions":[{"type":"practice|learn|review|debug|compete",'
+    '"title":"short title in Chinese","target":"specific target","reason":"why in Chinese"}]}\n'
+    "Keep titles under 20 chars, reasons under 40 chars. MUST be in Chinese (简体中文)."
+)
+
+_INLINE_FALLBACK_PROMPT = (
+    "You are an AI programming-competition coach. Based on the conversation "
+    "below, suggest 2-3 concrete next actions the student could take.\n\n"
+    "Student's last message: {user_input}\nAI agent role: {agent_type}\n"
+    "AI response summary: {agent_response}\n"
+    "Current context: problem_id={current_problem_id}\n\n"
+    '- Return JSON ONLY. Format: {"suggestions":[{"type":"practice|learn|review|debug|compete",'
+    '"title":"short title in Chinese","target":"target","reason":"reason in Chinese"}]}\n'
+    "Keep titles under 20 chars, reasons under 40 chars. MUST be in Chinese (简体中文)."
+)
+
 
 class NextStepSuggester:
-    """Generates contextual next-step suggestions at the end of a conversation turn.
-
-    This agent runs ONLY after the primary worker has finished producing content.
-    It does not generate message content — it returns structured suggestion items
-    that the WebSocket handler sends as a separate ``next_suggestions`` event.
-    Suggestion titles and reasons are in Chinese for user-facing display.
-
-    The prompt is driven by state_delta (knowledge_graph_position diff) rather than
-    a generic summary of the agent response, producing targeted next actions.
-    """
+    """Generates contextual next-step suggestions at the end of a conversation turn."""
 
     SUGGESTION_TYPES = ("practice", "learn", "review", "debug", "compete")
 
@@ -34,7 +49,7 @@ class NextStepSuggester:
         state_delta: Dict[str, Any] = None,
     ) -> List[Dict[str, str]]:
         """Return 2-3 structured next-step suggestions based on state delta."""
-        # Build delta-human-readable section
+        # Build delta section
         delta_section = ""
         if state_delta:
             gained = state_delta.get("gained", {})
@@ -47,14 +62,10 @@ class NextStepSuggester:
                 items = ", ".join(f"{k}({v})" for k, v in gained.items())
                 delta_lines.append(f"新掌握: {items}")
             if improved:
-                items = ", ".join(
-                    f"{k}: {v['before']}→{v['after']}" for k, v in improved.items()
-                )
+                items = ", ".join(f"{k}: {v['before']}→{v['after']}" for k, v in improved.items())
                 delta_lines.append(f"进步: {items}")
             if weakened:
-                items = ", ".join(
-                    f"{k}: {v['before']}→{v['after']}" for k, v in weakened.items()
-                )
+                items = ", ".join(f"{k}: {v['before']}→{v['after']}" for k, v in weakened.items())
                 delta_lines.append(f"退步: {items}")
             if delta_lines:
                 delta_section = "\n".join(delta_lines)
@@ -62,43 +73,23 @@ class NextStepSuggester:
                 stable_list = ", ".join(f"{k}({v})" for k, v in stable_topics.items())
                 delta_section = f"已掌握(无明显变化): {stable_list}"
 
+        # Load prompt templates from YAML, fallback to inline
+        section = get_prompt_section("next_step_suggester")
         if delta_section:
-            prompt = (
-                "You are an AI programming-competition coach. Based on the student's "
-                "knowledge state change this turn, suggest 2-3 concrete next actions "
-                "that directly build on their new capabilities or address weaknesses.\n\n"
-                f"Student asked: {user_input}\n"
-                f"Agent type: {agent_type}\n"
-                f"Current problem: {state.get('current_problem_id', 'N/A')}\n"
-                f"Knowledge change this turn:\n{delta_section}\n\n"
-                "Rules:\n"
-                "- Target the SPECIFIC topics that just improved or appeared (gained/improved).\n"
-                "- If topics weakened, suggest review/debug on those exact topics.\n"
-                "- If no meaningful change, suggest a NEW related topic to explore.\n"
-                "- DO NOT suggest vague general actions.\n"
-                '- Return JSON ONLY — no markdown, no explanation. Format:\n'
-                '{"suggestions":[{"type":"practice|learn|review|debug|compete",'
-                '"title":"short action title in Chinese (简体中文)",'
-                '"target":"specific target or problem id",'
-                '"reason":"why this helps — refer to the specific knowledge change, in Chinese (简体中文)"}]}\n'
-                "Keep titles under 20 characters. Keep reasons under 40 characters. "
-                "Title and reason MUST be in Chinese (简体中文)."
+            template = section.get("delta_template") or _INLINE_DELTA_PROMPT
+            prompt = template.format(
+                user_input=user_input,
+                agent_type=agent_type,
+                current_problem_id=state.get("current_problem_id", "N/A"),
+                delta_section=delta_section,
             )
         else:
-            prompt = (
-                "You are an AI programming-competition coach. Based on the conversation "
-                "below, suggest 2-3 concrete next actions the student could take.\n\n"
-                f"Student's last message: {user_input}\n"
-                f"AI agent role: {agent_type}\n"
-                f"AI response summary: {agent_response[:600]}\n"
-                f"Current context: problem_id={state.get('current_problem_id', 'N/A')}\n\n"
-                '- Return JSON ONLY — no markdown, no explanation. Format:\n'
-                '{"suggestions":[{"type":"practice|learn|review|debug|compete",'
-                '"title":"short action title in Chinese (简体中文)",'
-                '"target":"specific target or problem id",'
-                '"reason":"why this helps, in Chinese (简体中文)"}]}\n'
-                "Keep titles under 20 characters. Keep reasons under 40 characters. "
-                "Title and reason MUST be in Chinese (简体中文)."
+            template = section.get("fallback_template") or _INLINE_FALLBACK_PROMPT
+            prompt = template.format(
+                user_input=user_input,
+                agent_type=agent_type,
+                agent_response=agent_response[:600],
+                current_problem_id=state.get("current_problem_id", "N/A"),
             )
 
         try:

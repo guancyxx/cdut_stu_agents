@@ -5,18 +5,13 @@ from typing import Dict, Any, List
 from app.workers.base import BaseWorker
 from app.models.schemas import AgentResponse, CompletionStatus
 from app.utils.prompt_helpers import build_history_block, build_problem_anchor_block
+from app.prompts import get_prompt
 
 logger = logging.getLogger("ai-agent-lite.workers.learning_manager")
 
 
 class LearningManagerAgent(BaseWorker):
-    """Micro-stepping learning coach that guides students through atomic tasks.
-
-    This agent does NOT produce full lesson plans or information dumps.
-    Instead, it follows a strict THOUGHT → GUIDANCE → INTERACTION protocol,
-    delivering one atomic concept per turn and always ending with a question
-    or micro-exercise that requires the student's active response.
-    """
+    """Micro-stepping learning coach that guides students through atomic tasks."""
 
     async def process(
         self,
@@ -59,36 +54,16 @@ class LearningManagerAgent(BaseWorker):
 
         problem_anchor = build_problem_anchor_block(state)
 
-        prompt = (
-            "You are a pragmatic, precise programming-competition learning coach. "
-            "Your role is to guide students through micro-steps, NOT to lecture.\n\n"
-            "ABSOLUTE RULES:\n"
-            "- NEVER dump large amounts of information in one turn. Cover only 1 concept "
-            "or 1 exercise per turn, keeping your response concise and focused.\n"
-            "- NEVER list more than 1 new concept or 1 exercise per turn.\n"
-            "- NEVER give complete source code unless the student has asked 3+ times "
-            "on the same logical point.\n"
-            "- NEVER use empty praise like \"太棒了\" or \"令人惊叹\". Evaluate logic and "
-            "code efficiency, not effort.\n"
-            "- ALWAYS end your response with a concrete question or micro-task "
-            "that requires the student to act. No exceptions.\n"
-            "- Be warm and patient. Acknowledge struggle honestly — don't pretend "
-            "difficult things are easy.\n"
-            "- When a student is wrong, point out the specific gap and provide a "
-            "minimal hint, not the full correction.\n\n"
-            f"{problem_anchor}"
-            f"Student's current knowledge profile: {knowledge_graph or 'new student'}\n"
-            f"Current problem: {problem_id}\n"
-            f"Efficiency trend: {efficiency:.2f}{emotion_context}{frustration_level}\n"
-            f"{history_section}"
-            f"Student says: {user_input}\n\n"
-            "CRITICAL: If the conversation history shows you previously asked the student "
-            "a question or gave them an exercise, the student's current message is likely "
-            "their ANSWER to that question. In that case:\n"
-            "- Evaluate their answer first (correct/partially correct/wrong)\n"
-            "- Give targeted feedback on their specific answer\n"
-            "- Then give the NEXT micro-step or question\n"
-            "- Do NOT repeat the previous question or restart the explanation\n"
+        template = get_prompt("learning_manager")
+        prompt = template.format(
+            knowledge_graph=knowledge_graph or "new student",
+            problem_id=problem_id,
+            efficiency=f"{efficiency:.2f}",
+            emotion_context=emotion_context,
+            frustration_level=frustration_level,
+            problem_anchor=problem_anchor,
+            history_section=history_section,
+            user_input=user_input,
         )
 
         try:

@@ -5,6 +5,7 @@ from typing import Dict, Any, List
 from app.workers.base import BaseWorker
 from app.models.schemas import AgentResponse, CompletionStatus
 from app.utils.prompt_helpers import build_history_block, build_problem_anchor_block
+from app.prompts import get_prompt
 
 logger = logging.getLogger("ai-agent-lite.workers.contest_coach")
 
@@ -28,18 +29,10 @@ class ContestCoachAgent(BaseWorker):
 
         problem_anchor = build_problem_anchor_block(state)
 
-        prompt = (
-            f"As a programming competition coach, provide strategic advice.\n"
-            f"{problem_anchor}\n"
-            f"Student's Situation: {user_input}\n"
-            f"{history_section}"
-            "MICRO-STEP TEACHING RULES:\n"
-            "- Do NOT list all strategies at once. Cover ONE concrete tip or strategy per turn.\n"
-            "- ALWAYS end with a concrete question or small action for the student.\n"
-            "- When the student follows up, evaluate their thinking, then give the next tip.\n"
-            "- Be competitive but supportive. Brief and direct.\n\n"
-            "If the student is following up on previous coaching advice, respond to "
-            "their specific situation first, then advance to the next strategy point."
+        template = get_prompt("contest_coach")
+        prompt = template.format(
+            user_input=user_input, history_section=history_section,
+            problem_anchor=problem_anchor,
         )
 
         try:

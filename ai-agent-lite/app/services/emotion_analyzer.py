@@ -4,26 +4,30 @@ import logging
 from typing import Dict, List, Any
 
 from app.models.schemas import AgentResponse, CompletionStatus
+from app.prompts import get_prompt
 
 logger = logging.getLogger("ai-agent-lite.emotion_analyzer")
 
+_INLINE_PROMPT = (
+    "You are analyzing a programming-competition student's emotional state. "
+    "Based on their latest message and recent conversation context, "
+    "estimate their current emotional levels.\n\n"
+    "Recent context:\n{context_block}\n"
+    "Current message: {user_input}\n\n"
+    'Return JSON ONLY — no markdown, no explanation. Format:\n'
+    '{"emotions":{"frustration":0.0,"confusion":0.0,"excitement":0.0,"confidence":0.0}}\n'
+    "Rules:\n- Each value is between 0.0 and 1.0\n- If the message is neutral, all values should be close to 0.3"
+)
+
 
 class EmotionAnalyzer:
-    """Analyzes student emotional state using LLM instead of keyword matching.
-
-    Returns structured emotion scores used by the supervisor for routing
-    and by other agents for adaptive behavior. This agent does NOT produce
-    user-facing content — it returns a metadata-only AgentResponse.
-    """
+    """Analyzes student emotional state using LLM instead of keyword matching."""
 
     def __init__(self, llm_client):
         self.llm = llm_client
 
     async def analyze(self, user_input: str, recent_messages: list = None) -> Dict[str, float]:
-        """Return emotion scores {frustration, confusion, excitement, confidence}.
-
-        Each score is 0.0–1.0. On failure returns a neutral baseline.
-        """
+        """Return emotion scores {frustration, confusion, excitement, confidence}."""
         ctx_lines = []
         if recent_messages:
             for msg in recent_messages[-3:]:
@@ -32,22 +36,8 @@ class EmotionAnalyzer:
                 ctx_lines.append(f"{role}: {content}")
         context_block = "\n".join(ctx_lines) if ctx_lines else "(no prior context)"
 
-        prompt = (
-            "You are analyzing a programming-competition student's emotional state. "
-            "Based on their latest message and recent conversation context, "
-            "estimate their current emotional levels.\n\n"
-            f"Recent context:\n{context_block}\n"
-            f"Current message: {user_input}\n\n"
-            "Return JSON ONLY — no markdown, no explanation. Format:\n"
-            '{"emotions":{"frustration":0.0,"confusion":0.0,"excitement":0.0,"confidence":0.0}}\n'
-            "Rules:\n"
-            "- Each value is between 0.0 and 1.0\n"
-            "- frustration: annoyance, impatience, wanting to give up\n"
-            "- confusion: not understanding, feeling lost\n"
-            "- excitement: enthusiasm, insight, satisfaction\n"
-            "- confidence: self-assurance in their ability\n"
-            "- If the message is neutral, all values should be close to 0.3\n"
-        )
+        template = get_prompt("emotion_analyzer") or _INLINE_PROMPT
+        prompt = template.format(context_block=context_block, user_input=user_input)
 
         try:
             raw = await self.llm.complete([{"role": "user", "content": prompt}])
