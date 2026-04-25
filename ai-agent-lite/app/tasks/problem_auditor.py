@@ -13,6 +13,9 @@ Key design decisions:
 - Supports ``force=true`` to re-audit everything regardless of status.
 - Each problem is audited as an individual Celery sub-task for
   fine-grained progress tracking and automatic retry on failure.
+- The beat-scheduled ``audit_next_problem`` runs every 10 minutes and
+  picks exactly ONE un-audited problem at a time, ensuring the local
+  GPU is never overloaded with concurrent LLM inference requests.
 """
 import json
 import logging
@@ -230,6 +233,74 @@ def _get_all_audited_ids() -> set[str]:
         conn.close()
 
 
+def _get_next_unaudited_problem() -> dict | None:
+    """Fetch ONE un-audited problem from the OJ.
+
+    Strategy:
+    1. Get all already-audited display_ids from the DB.
+    2. Fetch the latest page of problems from the OJ.
+    3. Return the first problem whose _id is not in the audit table.
+       If all on the first page are audited, fetch more pages.
+    Returns None if all problems are audited.
+    """
+    import psycopg2
+
+    # Step 1: get audited ids
+    db_url = settings.db_url.replace("+asyncpg", "")
+    conn = psycopg2.connect(db_url)
+    audited_ids: set[str] = set()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT problem_display_id FROM {schema}.problem_audit".format(
+                    schema=settings.db_schema
+                )
+            )
+            audited_ids = {row[0] for row in cur.fetchall()}
+    finally:
+        conn.close()
+
+    # Step 2: paginate through OJ to find an un-audited problem
+    try:
+        client, csrf = _oj_login()
+    except Exception:
+        logger.exception("OJ login failed in _get_next_unaudited_problem")
+        return None
+
+    try:
+        page = 1
+        per_page = 100
+        max_pages = 100  # safety: don't scan more than 100 pages
+        while page <= max_pages:
+            r = client.get(
+                "/api/admin/problem",
+                params={"limit": per_page, "page": page},
+                headers={"X-CSRFToken": csrf},
+            )
+            r.raise_for_status()
+            data = r.json()
+            if data.get("error") is not None or not data.get("data", {}).get("results"):
+                break
+
+            results = data["data"]["results"]
+            for p in results:
+                if p["_id"] not in audited_ids:
+                    logger.info("Found un-audited problem: _id=%s (page %d)", p["_id"], page)
+                    return p
+
+            if len(results) < per_page:
+                break
+            page += 1
+    except Exception:
+        logger.exception("OJ fetch failed in _get_next_unaudited_problem")
+        return None
+    finally:
+        client.close()
+
+    logger.info("All problems are audited (scanned %d pages)", page)
+    return None
+
+
 def _upsert_audit_record(
     problem_display_id: str,
     problem_db_id: int,
@@ -386,7 +457,7 @@ def _quick_check_problem(problem: dict) -> list[str]:
 
 
 # ---------------------------------------------------------------------------
-# Core audit task
+# Core audit task — audits exactly ONE problem per invocation
 # ---------------------------------------------------------------------------
 
 @celery_app.task(
@@ -395,8 +466,8 @@ def _quick_check_problem(problem: dict) -> list[str]:
     max_retries=2,
     default_retry_delay=60,
     queue="audit",
-    soft_time_limit=360,  # 6 min soft limit
-    time_limit=420,       # 7 min hard limit
+    soft_time_limit=600,   # 10 min soft (matches the beat interval)
+    time_limit=660,         # 11 min hard limit
 )
 def audit_single_problem(self, problem_summary: dict) -> dict:
     """Audit a single problem via LLM and auto-fix if needed.
@@ -409,7 +480,26 @@ def audit_single_problem(self, problem_summary: dict) -> dict:
     display_id = problem_summary["_id"]
     db_id = problem_summary["id"]
     title = problem_summary.get("title", display_id)
+    return _do_audit_problem(display_id, db_id, title, retry_on_failure=self)
 
+
+def _do_audit_problem(
+    display_id: str,
+    db_id: int,
+    title: str,
+    retry_on_failure=None,
+) -> dict:
+    """Core audit logic: fetch problem detail -> LLM audit -> save -> auto-fix.
+
+    Args:
+        display_id: Problem display ID (e.g. "LQ1273").
+        db_id: Problem database ID.
+        title: Problem title.
+        retry_on_failure: Optional Celery self reference for retry support.
+            Pass None when called from non-Celery context (e.g. beat task).
+    Returns:
+        dict with audit result.
+    """
     logger.info("Auditing problem _id=%s (db_id=%d, title=%s)", display_id, db_id, title)
 
     # Step 1: Login to OJ and fetch full problem detail
@@ -421,7 +511,9 @@ def audit_single_problem(self, problem_summary: dict) -> dict:
             return {"_id": display_id, "status": "error", "message": "Failed to fetch problem detail"}
     except Exception as exc:
         logger.exception("OJ login/fetch failed for _id=%s", display_id)
-        raise self.retry(exc=exc)
+        if retry_on_failure:
+            raise retry_on_failure.retry(exc=exc)
+        raise
 
     try:
         # Step 2: Ask LLM to audit
@@ -430,7 +522,9 @@ def audit_single_problem(self, problem_summary: dict) -> dict:
             raw_response = _call_ollama(prompt)
         except Exception as exc:
             logger.exception("Ollama call failed for _id=%s", display_id)
-            raise self.retry(exc=exc)
+            if retry_on_failure:
+                raise retry_on_failure.retry(exc=exc)
+            raise
 
         # Step 3: Parse LLM response
         audit_result = _parse_llm_response(raw_response)
@@ -455,7 +549,6 @@ def audit_single_problem(self, problem_summary: dict) -> dict:
                 logger.info("Auto-fixed problem _id=%s", display_id)
             except Exception:
                 logger.exception("Auto-fix failed for _id=%s", display_id)
-                # Record that fix attempt failed
                 try:
                     _upsert_audit_record(
                         problem_display_id=display_id,
@@ -476,6 +569,45 @@ def audit_single_problem(self, problem_summary: dict) -> dict:
     finally:
         if client:
             client.close()
+
+
+# ---------------------------------------------------------------------------
+# Beat-scheduled task: audit exactly ONE problem per tick (every 10 min)
+# ---------------------------------------------------------------------------
+
+@celery_app.task(
+    name="app.tasks.problem_auditor.audit_next_problem",
+    queue="audit",
+    soft_time_limit=600,
+    time_limit=660,
+)
+def audit_next_problem() -> dict:
+    """Find and audit exactly ONE un-audited problem.
+
+    This is the task triggered by Celery Beat every 10 minutes.
+    It picks the next un-audited problem from OJ, runs the full
+    audit+fix pipeline on it, and returns the result.
+
+    The design ensures only one LLM inference runs at a time,
+    keeping the local GPU fully available for interactive use.
+
+    IMPORTANT: We run the audit logic directly (not via apply_async)
+    because concurrency=1 means calling .get() on a sub-task would
+    deadlock the sole worker.
+    """
+    problem = _get_next_unaudited_problem()
+    if problem is None:
+        logger.info("No un-audited problems found — all done")
+        return {"status": "no_work", "message": "All problems audited"}
+
+    display_id = problem["_id"]
+    db_id = problem["id"]
+    title = problem.get("title", display_id)
+    logger.info("Beat tick: auditing problem _id=%s (db_id=%d, title=%s)",
+                display_id, db_id, title)
+
+    # Run the audit logic directly (no sub-task delegation)
+    return _do_audit_problem(display_id, db_id, title)
 
 
 def _parse_llm_response(raw: str) -> dict:
@@ -542,7 +674,7 @@ def _apply_fixes(client: httpx.Client, csrf: str, problem: dict, fixes: dict) ->
 
 
 # ---------------------------------------------------------------------------
-# Batch audit task — orchestrator
+# Manual batch audit task — for on-demand use via API
 # ---------------------------------------------------------------------------
 
 @celery_app.task(
@@ -554,6 +686,10 @@ def _apply_fixes(client: httpx.Client, csrf: str, problem: dict, fixes: dict) ->
 )
 def audit_all_problems(self, force: bool = False, limit: int = 0) -> dict:
     """Orchestrate batch audit of all (or all un-audited) problems.
+
+    DISCLAIMER: This task dispatches multiple sub-tasks concurrently.
+    For steady background processing, prefer the beat-scheduled
+    ``audit_next_problem`` which processes one problem per tick.
 
     Args:
         force: If True, re-audit all problems regardless of existing records.
@@ -597,17 +733,23 @@ def audit_all_problems(self, force: bool = False, limit: int = 0) -> dict:
             "message": "All problems already audited",
         }
 
-    # Step 3: Dispatch individual audit tasks — don't wait for completion.
-    # Each task runs independently and reports its own results.
-    # Progress can be tracked via the /audit/records and /audit/summary APIs.
+    # Step 3: Dispatch individual audit tasks with rate limiting.
+    # We add a countdown between tasks so the GPU isn't overwhelmed.
+    # With concurrency=1 and 10min beat interval, this is mainly for manual batch runs.
     task_ids = []
     for i, p in enumerate(target_problems):
         summary = {"_id": p["_id"], "id": p["id"], "title": p.get("title", "")}
-        result = audit_single_problem.apply_async(args=(summary,), queue="audit")
+        # Stagger tasks: each task starts 10 minutes after the previous one
+        countdown = i * 600  # 600 seconds = 10 minutes
+        result = audit_single_problem.apply_async(
+            args=(summary,),
+            queue="audit",
+            countdown=countdown,
+        )
         task_ids.append(result.id)
         if (i + 1) % 10 == 0:
-            logger.info("Batch %s progress: dispatched %d/%d tasks",
-                        batch_id, i + 1, len(target_problems))
+            logger.info("Batch %s progress: dispatched %d/%d tasks (next in %ds)",
+                        batch_id, i + 1, len(target_problems), countdown)
 
     logger.info("Batch %s: dispatched %d audit tasks (task_ids: %s...)",
                 batch_id, len(task_ids), task_ids[:3])

@@ -28,8 +28,8 @@ celery_app.conf.update(
     # reliability
     task_acks_late=True,
     task_reject_on_worker_lost=True,
-    # concurrency
-    worker_concurrency=settings.audit_concurrency,
+    # concurrency — single worker processes one task at a time
+    worker_concurrency=1,
     # timeouts
     task_soft_time_limit=int(settings.ollama_timeout) + 30,
     task_time_limit=int(settings.ollama_timeout) + 60,
@@ -37,6 +37,13 @@ celery_app.conf.update(
     result_expires=86400 * 7,
     # route all audit tasks to the audit queue
     task_routes={"app.tasks.problem_auditor.*": {"queue": "audit"}},
+    # Beat schedule: audit one problem every 10 minutes
+    beat_schedule={
+        "audit-next-problem-every-10-min": {
+            "task": "app.tasks.problem_auditor.audit_next_problem",
+            "schedule": 600,  # 600 seconds = 10 minutes
+        },
+    },
 )
 
 # Explicitly import task modules so they register with this Celery app.
