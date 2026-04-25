@@ -30,7 +30,7 @@ def build_default_suggestions(problem_title: str) -> list[dict[str, str]]:
 
     Suggestions are phrased as what the student would naturally say next.
     """
-    target = problem_title or "\u5f53\u524d\u9898\u76ee"
+    target = problem_title or "当前题目"
     return [
         {**s, "target": target, "reason": s["reason"]}
         for s in DEFAULT_SUGGESTIONS
@@ -43,6 +43,6 @@ def build_trace_payload(problem_title: str) -> dict:
     return {
         "stage": "intent_result",
         "title": pl["title"],
-        "detail": pl["detail"].format(title=problem_title or "\u672a\u77e5"),
+        "detail": pl["detail"].format(title=problem_title or "未知"),
         "output": "Intent: system_context_load (skipped routing)",
     }

@@ -129,7 +129,7 @@ async def process_turn(
         detail={"agent_type": agent_type.value},
     )
 
-    suggestion_summary = "\u3001".join(a.get("title", "") for a in next_actions) if next_actions else "\u65e0"
+    suggestion_summary = "、".join(a.get("title", "") for a in next_actions) if next_actions else "无"
 
     # --- Build trace payloads from i18n constants ---
     ic = TRACE["intent_classification"]
