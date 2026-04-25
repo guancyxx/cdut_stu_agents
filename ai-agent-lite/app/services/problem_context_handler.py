@@ -23,16 +23,16 @@ def extract_problem_title(context_text: str) -> str:
 def build_confirmation_message(problem_title: str) -> str:
     """Build the Chinese confirmation message shown to the student."""
     if problem_title:
-        return f"已加载题目「{problem_title}」，有什么想了解的随时问我。"
-    return "已加载题目，有什么想了解的随时问我。"
+        return f"好的，题目「{problem_title}」已经加载了，咱们一起看看怎么入手吧～"
+    return "题目已加载，有什么不明白的随时问我！"
 
 
 def build_default_suggestions(problem_title: str) -> list[dict[str, str]]:
     """Return the default suggestion list shown after a problem is loaded."""
     target = problem_title or "当前题目"
     return [
-        {"type": "learn", "title": "帮我分析题意", "target": target, "reason": "理解题目是解题的第一步"},
-        {"type": "practice", "title": "给我一个提示", "target": target, "reason": "从提示开始思考"},
+        {"type": "learn", "title": "这道题在考什么？", "target": target, "reason": "先搞懂题目想让你干嘛"},
+        {"type": "practice", "title": "给个思路提示", "target": target, "reason": "从一个小提示开始想，比自己硬啃强"},
     ]
 
 
