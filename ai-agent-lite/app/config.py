@@ -18,13 +18,27 @@ class Settings:
     )
     db_schema: str = os.getenv("LITE_DB_SCHEMA", "ai_agent")
 
-    # LLM
+    # LLM (cloud API — used by chat agents)
     llm_base_url: str = os.getenv("LITE_LLM_BASE_URL", "").strip()
     llm_api_key: str = os.getenv("LITE_LLM_API_KEY", "").strip()
     llm_model: str = os.getenv("LITE_LLM_MODEL", "deepseek-chat").strip()
     llm_timeout: float = float(os.getenv("LITE_LLM_TIMEOUT", "30"))
     llm_max_retries: int = 2
     llm_retry_delay: float = 2.0
+
+    # LLM (local Ollama — used by background audit tasks)
+    ollama_base_url: str = os.getenv("LITE_OLLAMA_BASE_URL", "http://host.docker.internal:11434").strip()
+    ollama_model: str = os.getenv("LITE_OLLAMA_MODEL", "gemma4:31b").strip()
+    ollama_timeout: float = float(os.getenv("LITE_OLLAMA_TIMEOUT", "300"))
+
+    # OJ Admin API (used by problem auditor to fetch/patch problems)
+    oj_api_url: str = os.getenv("OJ_API_URL", "http://oj-backend:8000").strip()
+    oj_admin_user: str = os.getenv("OJ_ADMIN_USER", "root")
+    oj_admin_pass: str = os.getenv("OJ_ADMIN_PASS", "rootroot")
+
+    # Celery / Redis
+    celery_broker_url: str = os.getenv("LITE_CELERY_BROKER", "redis://oj-redis:6379/1")
+    celery_result_backend: str = os.getenv("LITE_CELERY_BACKEND", "redis://oj-redis:6379/2")
 
     # Application
     max_context_messages: int = int(os.getenv("LITE_MAX_CONTEXT_MESSAGES", "20"))
@@ -34,6 +48,10 @@ class Settings:
 
     # WebSocket
     ws_chunk_size: int = int(os.getenv("LITE_WS_CHUNK_SIZE", "80"))
+
+    # Problem auditor
+    audit_batch_size: int = int(os.getenv("LITE_AUDIT_BATCH_SIZE", "10"))
+    audit_concurrency: int = int(os.getenv("LITE_AUDIT_CONCURRENCY", "3"))
 
 
 settings = Settings()

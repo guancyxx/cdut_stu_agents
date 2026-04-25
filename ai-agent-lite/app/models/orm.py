@@ -69,3 +69,38 @@ class AuditLog(Base):
     created_at = Column(
         DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc)
     )
+
+
+class ProblemAudit(Base):
+    """Audit records for OJ problem quality checks by LLM.
+
+    Each row records the result of one audit pass for a problem.
+    The auditor skips problems that already have a 'pass' status
+    unless the force flag is set.
+    """
+    __tablename__ = "problem_audit"
+    __table_args__ = (
+        Index("idx_problem_audit_display_id", "problem_display_id"),
+        Index("idx_problem_audit_status", "status"),
+        {"schema": settings.db_schema},
+    )
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    problem_display_id = Column(String(64), nullable=False, index=True)
+    problem_db_id = Column(BigInteger, nullable=False)
+    # Audit result: pass | fail | error | fix_failed
+    status = Column(String(32), nullable=False, default="pending")
+    # JSON list of issue descriptions
+    issues = Column(JSONB, nullable=True)
+    # JSON dict of LLM-suggested fixes
+    fixes = Column(JSONB, nullable=True)
+    # Raw LLM response for debugging
+    llm_raw_response = Column(Text, nullable=True)
+    created_at = Column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at = Column(
+        DateTime(timezone=True), nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
