@@ -90,12 +90,17 @@ export function useChatSocket({
 
       if (eventData.type === 'raw' && eventData.data?.type === 'text') {
         if (currentAssistantIndex === -1) {
-          targetSession.messages.push({
+          const newMsg = {
             role: 'assistant',
             content: '',
             time: createTimeLabel(),
             streamingDone: false
-          })
+          }
+          // Attach previously received agent info if available
+          if (currentAgent.value) {
+            newMsg.agent = currentAgent.value
+          }
+          targetSession.messages.push(newMsg)
           currentAssistantIndex = targetSession.messages.length - 1
         }
 
@@ -114,30 +119,21 @@ export function useChatSocket({
         return
       }
 
-      // Handle agent information
+      // Handle agent information — store in current message or prepare for next one
       if (eventData.type === 'agent_info') {
         const agentType = eventData.data?.agent_type
         const agentInfo = getAgentInfo(agentType)
 
-        // Set the active agent indicator (cleared on finish)
+        // Set the active agent indicator (cleared on finish/reset)
         currentAgent.value = agentInfo
 
-        // Store agent info in the current assistant message
+        // Attach agent info to the current streaming message if one exists
         if (currentAssistantIndex !== -1) {
           targetSession.messages[currentAssistantIndex].agent = agentInfo
-        } else {
-          // Create a new message with agent info
-          targetSession.messages.push({
-            role: 'assistant',
-            content: '',
-            time: createTimeLabel(),
-            agent: agentInfo,
-            streamingDone: false
-          })
-          currentAssistantIndex = targetSession.messages.length - 1
+          saveSessions()
         }
-        
-        saveSessions()
+        // If no streaming message exists yet, don't create an empty one.
+        // The agent info will be applied when the 'raw' event creates the message.
         return
       }
 

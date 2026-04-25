@@ -85,7 +85,6 @@ const {
   input,
   listRef,
   sending,
-  currentAgent,
   sessions,
   currentSessionId,
   messages,
@@ -607,12 +606,6 @@ onBeforeUnmount(() => {
       </aside>
 
       <section class="main-panel" v-if="activeTab === 'home'">
-        <!-- Agent Status Indicator -->
-        <div v-if="currentAgent" class="agent-status-indicator" :style="{ backgroundColor: currentAgent.color }">
-          <span class="agent-status-icon">{{ currentAgent.icon }}</span>
-          <span class="agent-status-text">{{ currentAgent.name }} 正在处理中...</span>
-        </div>
-
         <main class="chat-main" ref="listRef">
           <MessageBubble 
             v-for="(msg, idx) in chatMessages" 
@@ -815,31 +808,4 @@ onBeforeUnmount(() => {
 </template>
 
 <style>
-  /* Agent Status Indicator */
-  .agent-status-indicator {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 8px 16px;
-    border-radius: 8px;
-    margin: 0 16px 12px;
-    color: white;
-    font-size: 13px;
-    font-weight: 500;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-    animation: pulse 1.5s infinite;
-  }
-
-  .agent-status-icon {
-    font-size: 16px;
-  }
-
-  .agent-status-text {
-    flex: 1;
-  }
-
-  @keyframes pulse {
-    0%, 100% { opacity: 0.95; }
-    50% { opacity: 1; }
-  }
   </style>
