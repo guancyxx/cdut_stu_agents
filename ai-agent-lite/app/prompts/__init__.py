@@ -1,46 +1,52 @@
-"""Prompt template loader — reads prompts from prompts.yaml at startup."""
+"""Prompt template loader — reads .md files from the prompts directory.
+
+Each prompt is a single Markdown file using $variable placeholders
+(compatible with string.Template). No YAML, nobrace escaping issues.
+"""
 import logging
 from pathlib import Path
+from string import Template
 from typing import Dict
-
-import yaml
 
 logger = logging.getLogger("ai-agent-lite.prompts")
 
-_PROMPTS: Dict[str, dict] = {}
+_PROMPTS_DIR = Path(__file__).parent
+_CACHE: Dict[str, str] = {}
 
 
-def _load_prompts() -> Dict[str, dict]:
-    """Load all prompt templates from the YAML file."""
-    yaml_path = Path(__file__).parent / "prompts.yaml"
+def _load_prompt(name: str) -> str:
+    """Load a single .md prompt file by name (without extension)."""
+    md_path = _PROMPTS_DIR / f"{name}.md"
     try:
-        with open(yaml_path, "r", encoding="utf-8") as f:
-            data = yaml.safe_load(f)
-        logger.info("Loaded %d prompt sections from %s", len(data), yaml_path)
-        return data or {}
-    except Exception as exc:
-        logger.warning("Failed to load prompts.yaml, will use inline fallbacks: %s", exc)
-        return {}
+        text = md_path.read_text(encoding="utf-8")
+        logger.debug("Loaded prompt %s (%d bytes)", name, len(text))
+        return text
+    except FileNotFoundError:
+        logger.warning("Prompt file not found: %s", md_path)
+        return ""
 
 
-def get_prompt(section: str, key: str = "template") -> str:
-    """Get a prompt template string by section and key.
+def get_prompt(name: str) -> str:
+    """Get a prompt template string by file name (without .md extension).
 
-    Falls back to empty string if not found (callers should have their
-    own inline fallback for resilience).
+    Returns the raw template text with $variable placeholders.
+    Callers should use string.Template to substitute variables,
+    or fall back to their own inline template.
     """
-    global _PROMPTS
-    if not _PROMPTS:
-        _PROMPTS = _load_prompts()
-    section_data = _PROMPTS.get(section, {})
-    if isinstance(section_data, str):
-        return section_data
-    return section_data.get(key, "")
+    global _CACHE
+    if name not in _CACHE:
+        _CACHE[name] = _load_prompt(name)
+    return _CACHE[name]
 
 
-def get_prompt_section(section: str) -> dict:
-    """Get an entire prompt section (e.g., next_step_suggester with multiple templates)."""
-    global _PROMPTS
-    if not _PROMPTS:
-        _PROMPTS = _load_prompts()
-    return _PROMPTS.get(section, {})
+
+def render_prompt(name: str, **kwargs) -> str:
+    """Load a prompt template and substitute variables in one call.
+
+    Uses string.Template.safe_substitute() so missing variables
+    are left as-is instead of raising KeyError.
+    """
+    template_text = get_prompt(name)
+    if not template_text:
+        return ""
+    return Template(template_text).safe_substitute(**kwargs)

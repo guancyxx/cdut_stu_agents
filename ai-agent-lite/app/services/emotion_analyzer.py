@@ -1,6 +1,7 @@
 """Emotion analysis service — LLM-based student emotional state detection."""
 import json
 import logging
+from string import Template
 from typing import Dict, List, Any
 
 from app.models.schemas import AgentResponse, CompletionStatus
@@ -8,12 +9,12 @@ from app.prompts import get_prompt
 
 logger = logging.getLogger("ai-agent-lite.emotion_analyzer")
 
-_INLINE_PROMPT = (
+_INLINE_PROMPT = Template(
     "You are analyzing a programming-competition student's emotional state. "
     "Based on their latest message and recent conversation context, "
     "estimate their current emotional levels.\n\n"
-    "Recent context:\n{context_block}\n"
-    "Current message: {user_input}\n\n"
+    "Recent context:\n$context_block\n"
+    "Current message: $user_input\n\n"
     'Return JSON ONLY — no markdown, no explanation. Format:\n'
     '{"emotions":{"frustration":0.0,"confusion":0.0,"excitement":0.0,"confidence":0.0}}\n'
     "Rules:\n- Each value is between 0.0 and 1.0\n- If the message is neutral, all values should be close to 0.3"
@@ -36,8 +37,10 @@ class EmotionAnalyzer:
                 ctx_lines.append(f"{role}: {content}")
         context_block = "\n".join(ctx_lines) if ctx_lines else "(no prior context)"
 
-        template = get_prompt("emotion_analyzer") or _INLINE_PROMPT
-        prompt = template.format(context_block=context_block, user_input=user_input)
+        template_text = get_prompt("emotion_analyzer") or _INLINE_PROMPT.template
+        prompt = Template(template_text).safe_substitute(
+            context_block=context_block, user_input=user_input
+        )
 
         try:
             raw = await self.llm.complete([{"role": "user", "content": prompt}])

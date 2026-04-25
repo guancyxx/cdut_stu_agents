@@ -1,5 +1,6 @@
 """Learning Partner Agent — provides warm, targeted emotional support and positive framing."""
 import logging
+from string import Template
 from typing import Dict, Any, List
 
 from app.workers.base import BaseWorker
@@ -35,8 +36,8 @@ class LearningPartnerAgent(BaseWorker):
 
         problem_anchor = build_problem_anchor_block(state)
 
-        template = get_prompt("learning_partner")
-        prompt = template.format(
+        template_text = get_prompt("learning_partner")
+        prompt = Template(template_text).safe_substitute(
             user_input=user_input, emotion_desc=emotion_desc,
             problem_anchor=problem_anchor, history_section=history_section,
         )

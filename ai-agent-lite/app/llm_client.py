@@ -45,7 +45,7 @@ class LlmClient:
         """Load system prompt from YAML, fallback to inline default."""
         if self._system_prompt is None:
             from app.prompts import get_prompt
-            self._system_prompt = get_prompt("system", "llm_system") or self._INLINE_SYSTEM_PROMPT
+            self._system_prompt = get_prompt("system") or self._INLINE_SYSTEM_PROMPT
         return self._system_prompt
 
     def _inject_system(self, messages: list[dict]) -> list[dict]:

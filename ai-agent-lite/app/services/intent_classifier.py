@@ -1,18 +1,19 @@
 """Intent classification service — LLM-based intent recognition with context awareness."""
 import logging
+from string import Template
 from typing import Dict, List
 
 from app.prompts import get_prompt
 
 logger = logging.getLogger("ai-agent-lite.intent_classifier")
 
-# Inline fallback — used when prompts.yaml is unavailable
+# Fallback used only when prompts/intent_classifier.md is missing
 _INLINE_PROMPT = (
     "Classify the student's intent from a programming competition training session.\n"
-    "Current problem: {problem_hint}\n"
-    "Current student message: \"{user_input}\"\n"
-    "Previous conversation (most recent messages):\n{history_summary}\n"
-    "Previous AI agent: {last_agent_ctx}\n"
+    "Current problem: $problem_hint\n"
+    "Current student message: \"$user_input\"\n"
+    "Previous conversation (most recent messages):\n$history_summary\n"
+    "Previous AI agent: $last_agent_ctx\n"
     "Return ONLY the intent name (one word or phrase, lowercase with underscores)."
 )
 
@@ -57,9 +58,8 @@ class IntentClassifier:
             if not problem_hint:
                 problem_hint = "(a specific OJ problem is selected)"
 
-        # Load prompt template from YAML, fallback to inline
-        template = get_prompt("intent_classifier") or _INLINE_PROMPT
-        prompt = template.format(
+        template_text = get_prompt("intent_classifier") or _INLINE_PROMPT
+        prompt = Template(template_text).safe_substitute(
             user_input=user_input,
             history_summary=history_summary or "(start of conversation)",
             last_agent_ctx=last_agent_ctx or "none — first message",

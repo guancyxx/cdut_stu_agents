@@ -1,5 +1,6 @@
 """Problem Analyzer Agent — deep analysis of competition problems and solution guidance."""
 import logging
+from string import Template
 from typing import Dict, Any, List
 
 from app.workers.base import BaseWorker
@@ -32,8 +33,8 @@ class ProblemAnalyzerAgent(BaseWorker):
 
         problem_anchor = build_problem_anchor_block(state)
 
-        template = get_prompt("problem_analyzer")
-        prompt = template.format(
+        template_text = get_prompt("problem_analyzer")
+        prompt = Template(template_text).safe_substitute(
             problem_id=problem_id, user_input=user_input,
             history_section=history_section, problem_anchor=problem_anchor,
         )

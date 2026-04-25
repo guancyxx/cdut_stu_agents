@@ -1,5 +1,6 @@
 """Learning Manager Agent — micro-stepping learning coach for atomic concept delivery."""
 import logging
+from string import Template
 from typing import Dict, Any, List
 
 from app.workers.base import BaseWorker
@@ -54,8 +55,8 @@ class LearningManagerAgent(BaseWorker):
 
         problem_anchor = build_problem_anchor_block(state)
 
-        template = get_prompt("learning_manager")
-        prompt = template.format(
+        template_text = get_prompt("learning_manager")
+        prompt = Template(template_text).safe_substitute(
             knowledge_graph=knowledge_graph or "new student",
             problem_id=problem_id,
             efficiency=f"{efficiency:.2f}",

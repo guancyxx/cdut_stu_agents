@@ -1,21 +1,23 @@
 """Next-step suggestion service — generates contextual follow-up actions for students."""
 import json
 import logging
+from string import Template
 from typing import Dict, Any, List
 
 from app.models.schemas import AgentResponse, CompletionStatus
-from app.prompts import get_prompt_section
+from app.prompts import get_prompt
 
 logger = logging.getLogger("ai-agent-lite.next_step_suggester")
 
+# Fallback prompts — used only when .md template files are missing
 _INLINE_DELTA_PROMPT = (
     "You are an AI programming-competition coach. Based on the student's "
     "knowledge state change this turn, suggest 2-3 concrete next actions "
     "that directly build on their new capabilities or address weaknesses.\n\n"
-    "Student asked: {user_input}\nAgent type: {agent_type}\n"
-    "Current problem: {current_problem_id}\n"
-    "Knowledge change this turn:\n{delta_section}\n\n"
-    '- Return JSON ONLY. Format: {"suggestions":[{"type":"practice|learn|review|debug|compete",'
+    "Student asked: $user_input\nAgent type: $agent_type\n"
+    "Current problem: $current_problem_id\n"
+    "Knowledge change this turn:\n$delta_section\n\n"
+    'Return JSON ONLY. Format: {"suggestions":[{"type":"practice|learn|review|debug|compete",'
     '"title":"short title in Chinese","target":"specific target","reason":"why in Chinese"}]}\n'
     "Keep titles under 20 chars, reasons under 40 chars. MUST be in Chinese (简体中文)."
 )
@@ -23,10 +25,10 @@ _INLINE_DELTA_PROMPT = (
 _INLINE_FALLBACK_PROMPT = (
     "You are an AI programming-competition coach. Based on the conversation "
     "below, suggest 2-3 concrete next actions the student could take.\n\n"
-    "Student's last message: {user_input}\nAI agent role: {agent_type}\n"
-    "AI response summary: {agent_response}\n"
-    "Current context: problem_id={current_problem_id}\n\n"
-    '- Return JSON ONLY. Format: {"suggestions":[{"type":"practice|learn|review|debug|compete",'
+    "Student's last message: $user_input\nAI agent role: $agent_type\n"
+    "AI response summary: $agent_response\n"
+    "Current context: problem_id=$current_problem_id\n\n"
+    'Return JSON ONLY. Format: {"suggestions":[{"type":"practice|learn|review|debug|compete",'
     '"title":"short title in Chinese","target":"target","reason":"reason in Chinese"}]}\n'
     "Keep titles under 20 chars, reasons under 40 chars. MUST be in Chinese (简体中文)."
 )
@@ -73,19 +75,18 @@ class NextStepSuggester:
                 stable_list = ", ".join(f"{k}({v})" for k, v in stable_topics.items())
                 delta_section = f"已掌握(无明显变化): {stable_list}"
 
-        # Load prompt templates from YAML, fallback to inline
-        section = get_prompt_section("next_step_suggester")
+        # Load prompt templates from .md files, fallback to inline
         if delta_section:
-            template = section.get("delta_template") or _INLINE_DELTA_PROMPT
-            prompt = template.format(
+            template_text = get_prompt("next_step_suggester_delta") or _INLINE_DELTA_PROMPT
+            prompt = Template(template_text).safe_substitute(
                 user_input=user_input,
                 agent_type=agent_type,
                 current_problem_id=state.get("current_problem_id", "N/A"),
                 delta_section=delta_section,
             )
         else:
-            template = section.get("fallback_template") or _INLINE_FALLBACK_PROMPT
-            prompt = template.format(
+            template_text = get_prompt("next_step_suggester_fallback") or _INLINE_FALLBACK_PROMPT
+            prompt = Template(template_text).safe_substitute(
                 user_input=user_input,
                 agent_type=agent_type,
                 agent_response=agent_response[:600],

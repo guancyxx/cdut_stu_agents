@@ -1,5 +1,6 @@
 """Code Reviewer Agent — specialized in code quality, efficiency, and style evaluation."""
 import logging
+from string import Template
 from typing import Dict, Any, List
 
 from app.workers.base import BaseWorker
@@ -9,11 +10,11 @@ from app.prompts import get_prompt
 
 logger = logging.getLogger("ai-agent-lite.workers.code_reviewer")
 
-_INLINE_PROMPT = (
-    "As an expert code reviewer for programming competitions, analyze this {language} code.\n"
-    "{problem_anchor}\nProblem ID: {problem_id}\n\n"
-    "Code:\n```{language}\n{code}\n```\n\n"
-    "Student's question: {user_input}\n{history_section}"
+_INLINE_PROMPT = Template(
+    "As an expert code reviewer for programming competitions, analyze this $language code.\n"
+    "$problem_anchor\nProblem ID: $problem_id\n\n"
+    "Code:\n```$language\n$code\n```\n\n"
+    "Student's question: $user_input\n$history_section"
     "MICRO-STEP TEACHING RULES:\n"
     "- Do NOT dump all analysis in one response. Cover ONE aspect per turn only.\n"
     "- Start with the most critical issue (logic correctness).\n"
@@ -49,8 +50,8 @@ class CodeReviewerAgent(BaseWorker):
 
         problem_anchor = build_problem_anchor_block(state)
 
-        template = get_prompt("code_reviewer") or _INLINE_PROMPT
-        prompt = template.format(
+        template_text = get_prompt("code_reviewer") or _INLINE_PROMPT.template
+        prompt = Template(template_text).safe_substitute(
             language=language, code=code, problem_id=problem_id,
             user_input=user_input, history_section=history_section,
             problem_anchor=problem_anchor,
