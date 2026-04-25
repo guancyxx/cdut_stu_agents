@@ -10,6 +10,9 @@ Core principles:
 - Stay tightly connected to what was just discussed — no topic jumps
 - If the student seems frustrated or stuck, prioritize encouragement and
   small achievable next steps over ambitious tasks
+- CRITICAL: The "title" and "reason" fields MUST be in Chinese (Simplified).
+  The student will see these directly in the UI — they should read naturally
+  in Chinese, as if the student typed them.
 
 Conversation context:
 Student just said: $user_input
@@ -20,7 +23,7 @@ Knowledge change this turn:
 $delta_section
 
 Return JSON (no markdown wrapping):
-{"suggestions":[{"type":"practice|learn|review|debug|compete|encourage","title":"what the student would say (max 50 chars)","target":"specific topic or problem name","reason":"why this is useful right now (max 100 chars)"}]}
+{"suggestions":[{"type":"practice|learn|review|debug|compete|encourage","title":"student next utterance in Chinese (max 50 chars)","target":"specific topic or problem name","reason":"why this is useful right now, in Chinese (max 100 chars)"}]}
 
 type meanings:
 - practice: student wants hands-on coding exercise

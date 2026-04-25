@@ -4,7 +4,7 @@ When a student selects an OJ problem, the frontend sends a structured
 message starting with "SYSTEM CONTEXT:".  This module isolates that
 special-case handling from the main conversation flow.
 """
-from app.i18n import DEFAULT_SUGGESTIONS, problem_loaded_msg
+from app.i18n import DEFAULT_SUGGESTIONS, problem_loaded_msg, TRACE
 
 
 def is_system_context(text: str) -> bool:
@@ -21,7 +21,7 @@ def extract_problem_title(context_text: str) -> str:
 
 
 def build_confirmation_message(problem_title: str) -> str:
-    """Build the confirmation message shown to the student."""
+    """Build the Chinese confirmation message shown to the student."""
     return problem_loaded_msg(problem_title)
 
 
@@ -30,7 +30,7 @@ def build_default_suggestions(problem_title: str) -> list[dict[str, str]]:
 
     Suggestions are phrased as what the student would naturally say next.
     """
-    target = problem_title or "this problem"
+    target = problem_title or "\u5f53\u524d\u9898\u76ee"
     return [
         {**s, "target": target, "reason": s["reason"]}
         for s in DEFAULT_SUGGESTIONS
@@ -39,9 +39,10 @@ def build_default_suggestions(problem_title: str) -> list[dict[str, str]]:
 
 def build_trace_payload(problem_title: str) -> dict:
     """Build the trace event payload sent after processing SYSTEM CONTEXT."""
+    pl = TRACE["problem_loaded"]
     return {
         "stage": "intent_result",
-        "title": "Problem Loaded",
-        "detail": f"Loaded problem: {problem_title or 'unknown'}",
+        "title": pl["title"],
+        "detail": pl["detail"].format(title=problem_title or "\u672a\u77e5"),
         "output": "Intent: system_context_load (skipped routing)",
     }

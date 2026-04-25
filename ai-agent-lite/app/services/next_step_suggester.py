@@ -18,19 +18,18 @@ logger = logging.getLogger("ai-agent-lite.next_step_suggester")
 _INLINE_DELTA_PROMPT = (
     "You are a study buddy suggesting what the STUDENT should say next. "
     "Based on the conversation, propose 2-3 short utterances the student "
-    "would naturally say to continue learning.\n\n"
+    "would naturally type as their next message to continue learning.\n\n"
+    "CRITICAL: The \"title\" and \"reason\" fields MUST be in Chinese (Simplified). "
+    "The student will see these in the UI — they should read naturally in Chinese.\n\n"
     "Student just said: $user_input\nAgent role: $agent_type\n"
     "Current problem: $current_problem_id\nStudent mood: $emotion_hint\n"
     "Knowledge change this turn:\n$delta_section\n\n"
-    "CRITICAL: Each suggestion is what the STUDENT would type next — "
-    "phrased in first person, like a natural follow-up question or request.\n"
-    "Examples: 'Can you walk me through the BFS approach?', "
-    "'I think my loop condition is wrong, can you check?', "
-    "'That makes sense, got any practice problems for this?'\n\n"
+    "Each suggestion title is what the STUDENT would say — phrased as a natural "
+    "follow-up question or request, in Chinese.\n"
     'Return JSON (no markdown): {"suggestions":[{"type":"practice|learn|review|debug|compete|encourage",'
-    '"title":"what the student would say (max 50 chars)",'
+    '"title":"student next utterance in Chinese (max 50 chars)",'
     '"target":"specific topic or problem",'
-    '"reason":"why this is useful now (max 100 chars)"}]}\n\n'
+    '"reason":"why this is useful now, in Chinese (max 100 chars)"}]}\n\n'
     "type meanings:\n"
     "- practice: hands-on coding exercise\n"
     "- learn: study a new concept or method\n"
@@ -43,19 +42,18 @@ _INLINE_DELTA_PROMPT = (
 _INLINE_FALLBACK_PROMPT = (
     "You are a study buddy suggesting what the STUDENT should say next. "
     "Based on the conversation, propose 2-3 short utterances the student "
-    "would naturally say to continue learning.\n\n"
+    "would naturally type as their next message to continue learning.\n\n"
+    "CRITICAL: The \"title\" and \"reason\" fields MUST be in Chinese (Simplified). "
+    "The student will see these in the UI — they should read naturally in Chinese.\n\n"
     "Student just said: $user_input\nAgent role: $agent_type\n"
     "AI response summary: $agent_response\n"
     "Current problem: $current_problem_id\nStudent mood: $emotion_hint\n\n"
-    "CRITICAL: Each suggestion is what the STUDENT would type next — "
-    "phrased in first person, like a natural follow-up question or request.\n"
-    "Examples: 'Can you walk me through the BFS approach?', "
-    "'I think my loop condition is wrong, can you check?', "
-    "'That makes sense, got any practice problems for this?'\n\n"
+    "Each suggestion title is what the STUDENT would say — phrased as a natural "
+    "follow-up question or request, in Chinese.\n"
     'Return JSON (no markdown): {"suggestions":[{"type":"practice|learn|review|debug|compete|encourage",'
-    '"title":"what the student would say (max 50 chars)",'
+    '"title":"student next utterance in Chinese (max 50 chars)",'
     '"target":"specific topic or problem",'
-    '"reason":"why this is useful now (max 100 chars)"}]}\n\n'
+    '"reason":"why this is useful now, in Chinese (max 100 chars)"}]}\n\n'
     "type meanings:\n"
     "- practice: hands-on coding exercise\n"
     "- learn: study a new concept or method\n"

@@ -11,6 +11,7 @@ import uuid
 from typing import Any, Dict, List, Optional
 
 from app.di import get_supervisor, get_workers, get_suggester, get_agent_display_name
+from app.i18n import TRACE
 from app.models.enums import AgentType
 from app.repositories import message_repo
 from app.services.knowledge_assessor import KnowledgeAssessor
@@ -128,39 +129,46 @@ async def process_turn(
         detail={"agent_type": agent_type.value},
     )
 
-    suggestion_summary = ", ".join(a.get("title", "") for a in next_actions) if next_actions else "none"
+    suggestion_summary = "\u3001".join(a.get("title", "") for a in next_actions) if next_actions else "\u65e0"
+
+    # --- Build trace payloads from i18n constants ---
+    ic = TRACE["intent_classification"]
+    ir = TRACE["intent_result"]
+    wp = TRACE["worker_processing"]
+    sg = TRACE["suggestion_generation"]
+    sr = TRACE["suggestion_result"]
 
     return {
         "agent_type": agent_type,
         "agent_content": agent_response.content,
         "intent_trace": {
             "stage": "intent_classification",
-            "title": "Intent Classification",
-            "detail": "Analyzing user intent and determining routing target...",
+            "title": ic["title"],
+            "detail": ic["detail"],
             "output": "",
         },
         "intent_result_trace": {
             "stage": "intent_result",
-            "title": "Intent Classified",
-            "detail": f"Routed to {agent_type.value}",
+            "title": ir["title"],
+            "detail": ir["detail_routed"].format(agent=get_agent_display_name(agent_type)),
             "output": f"Intent: {getattr(supervisor, '_last_intent', 'N/A')}\nAgent: {agent_type.value}",
         },
         "worker_trace": {
             "stage": "worker_processing",
-            "title": f"{get_agent_display_name(agent_type)} Processing",
-            "detail": "Generating response...",
+            "title": wp["title_template"].format(agent=get_agent_display_name(agent_type)),
+            "detail": wp["detail"],
             "output": "",
         },
         "suggestion_trace": {
             "stage": "suggestion_generation",
-            "title": "Generating Suggestions",
-            "detail": "Analyzing knowledge changes and generating personalized suggestions...",
+            "title": sg["title"],
+            "detail": sg["detail"],
             "output": "",
         },
         "suggestion_result_trace": {
             "stage": "suggestion_result",
-            "title": "Suggestions Ready",
-            "detail": f"Generated {len(next_actions)} suggestions",
+            "title": sr["title"],
+            "detail": sr["detail_count"].format(count=len(next_actions)),
             "output": f"Suggestions: {suggestion_summary}",
         },
         "next_actions": next_actions,

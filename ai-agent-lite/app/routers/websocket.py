@@ -14,6 +14,7 @@ from pydantic import ValidationError
 
 from app.config import settings
 from app.errors import AppError, ErrorCode
+from app.i18n import TRACE
 from app.metrics import ws_connections_active
 from app.models.ws_messages import WsRawMessage, WsQueryContent, WsQueryMessage
 from app.repositories import audit_repo
@@ -129,9 +130,10 @@ async def ws_handler(websocket: WebSocket) -> None:
                     current_state["current_problem_context"] = current_problem_context
 
                 # --- Normal query: full turn pipeline ---
+                ic = TRACE["intent_classification"]
                 await websocket.send_json({"type": "trace", "data": {
-                    "stage": "intent_classification", "title": "Intent Classification",
-                    "detail": "Analyzing user intent and determining routing target...", "output": "",
+                    "stage": "intent_classification", "title": ic["title"],
+                    "detail": ic["detail"], "output": "",
                 }})
 
                 turn = await process_turn(
