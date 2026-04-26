@@ -327,20 +327,21 @@ export function useOjAuthAndProblems() {
     }
   }
 
+  // QDUOJ JudgeStatus enum — non-standard values.  See skill:qduoj-submission-judge-debugging
+  //   0=ACCEPTED, -1=WRONG_ANSWER, -2=COMPILE_ERROR, 1=CPU_TLE, 2=REAL_TLE, 3=MLE,
+  //   4=RUNTIME_ERROR, 5=SYSTEM_ERROR, 6=PENDING, 7=JUDGING, 8=PARTIALLY_ACCEPTED
   const JUDGE_STATUS_MAP = {
-    '-2': { label: 'COMPILING', display: 'Compiling', icon: '⏳', color: '#fbbf24' },
-    '-1': { label: 'SYSTEM_ERROR', display: 'System Error', icon: '⚠️', color: '#ef4444' },
-    '0': { label: 'PENDING', display: 'Pending', icon: '⏳', color: '#9ca3af' },
-    '1': { label: 'JUDGING', display: 'Judging', icon: '🔄', color: '#60a5fa' },
-    '2': { label: 'COMPILING', display: 'Compiling', icon: '⏳', color: '#fbbf24' },
-    '3': { label: 'COMPILE_ERROR', display: 'Compile Error', icon: '❌', color: '#ef4444' },
-    '4': { label: 'ACCEPTED', display: 'Accepted', icon: '✅', color: '#10b981' },
-    '5': { label: 'PRESENTATION_ERROR', display: 'Presentation Error', icon: '⚠️', color: '#f59e0b' },
-    '6': { label: 'WRONG_ANSWER', display: 'Wrong Answer', icon: '❌', color: '#ef4444' },
-    '7': { label: 'TIME_LIMIT_EXCEEDED', display: 'Time Limit Exceeded', icon: '⏰', color: '#f59e0b' },
-    '8': { label: 'MEMORY_LIMIT_EXCEEDED', display: 'Memory Limit Exceeded', icon: '💾', color: '#f59e0b' },
-    '9': { label: 'RUNTIME_ERROR', display: 'Runtime Error', icon: '💥', color: '#ef4444' },
-    '10': { label: 'SYSTEM_ERROR', display: 'System Error', icon: '⚠️', color: '#ef4444' }
+    '0': { label: 'ACCEPTED', display: 'Accepted', icon: '✅', color: '#10b981' },
+    '-1': { label: 'WRONG_ANSWER', display: 'Wrong Answer', icon: '❌', color: '#ef4444' },
+    '-2': { label: 'COMPILE_ERROR', display: 'Compile Error', icon: '❌', color: '#ef4444' },
+    '1': { label: 'CPU_TIME_LIMIT_EXCEEDED', display: 'Time Limit Exceeded', icon: '⏰', color: '#f59e0b' },
+    '2': { label: 'REAL_TIME_LIMIT_EXCEEDED', display: 'Time Limit Exceeded', icon: '⏰', color: '#f59e0b' },
+    '3': { label: 'MEMORY_LIMIT_EXCEEDED', display: 'Memory Limit Exceeded', icon: '💾', color: '#f59e0b' },
+    '4': { label: 'RUNTIME_ERROR', display: 'Runtime Error', icon: '💥', color: '#ef4444' },
+    '5': { label: 'SYSTEM_ERROR', display: 'System Error', icon: '⚠️', color: '#ef4444' },
+    '6': { label: 'PENDING', display: 'Pending', icon: '⏳', color: '#9ca3af' },
+    '7': { label: 'JUDGING', display: 'Judging', icon: '🔄', color: '#60a5fa' },
+    '8': { label: 'PARTIALLY_ACCEPTED', display: 'Partially Accepted', icon: '⚠️', color: '#f59e0b' }
   }
 
   const normalizeSubmissionResult = (row) => {
@@ -380,7 +381,8 @@ export function useOjAuthAndProblems() {
     }
   }
 
-  const isFinalSubmissionStatus = (status) => ![0, 1, 2, -2].includes(status)
+  // QDUOJ: only PENDING (6) and JUDGING (7) are non-terminal states
+  const isFinalSubmissionStatus = (status) => ![6, 7].includes(status)
 
   // Parse test case detail from submission detail API response
   const parseTestCases = (detailData) => {

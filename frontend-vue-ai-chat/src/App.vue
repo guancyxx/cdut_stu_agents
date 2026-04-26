@@ -410,7 +410,7 @@ const getResultClass = (result) => {
   if (!result || !result.label) return 'result-unknown'
   if (result.label === 'ACCEPTED') return 'result-accepted'
   if (result.label === 'COMPILE_ERROR') return 'result-compile-error'
-  if (['WRONG_ANSWER', 'RUNTIME_ERROR', 'TIME_LIMIT_EXCEEDED', 'MEMORY_LIMIT_EXCEEDED', 'PRESENTATION_ERROR'].includes(result.label)) return 'result-wrong'
+  if (['WRONG_ANSWER', 'RUNTIME_ERROR', 'CPU_TIME_LIMIT_EXCEEDED', 'REAL_TIME_LIMIT_EXCEEDED', 'MEMORY_LIMIT_EXCEEDED', 'SYSTEM_ERROR', 'PARTIALLY_ACCEPTED'].includes(result.label)) return 'result-wrong'
   if (result.label === 'ERROR') return 'result-error'
   return 'result-unknown'
 }
