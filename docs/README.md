@@ -7,32 +7,13 @@ docs/
 +-- README.md                 # This index
 +-- PROJECT_SPEC.md           # Full project specification (from official PDF)
 +-- CDUT_OJ_system_status.md  # System status overview
-+-- FPS_IMPORT_GUIDE.md       # FPS problem import guide
-+-- QDUOJ_DEPLOYED.md         # Deployment record
-+-- QDUOJ_DEPLOYMENT.md       # Deployment detailed doc
-+-- QDUOJ_INTEGRATION.md      # Integration doc
++-- AI_AGENT_PROMPT_CHAIN.md  # AI Agent prompt chain & routing logic
 +-- guides/
-|   +-- problem_admin_guide.md       # OJ admin guide
-|   +-- problem_recommendation_guide.md # Teaching guide
-+-- reports/
-|   +-- fps_import_report.md    # Phase 2: 609 problem import
-|   +-- fps_fix_report.md       # Phase 3: tag system
-|   +-- judge_test_report.md    # Phase 4: judge verification
-|   +-- test_data_report.md     # Phase 5: 24-problem test data
+|   +-- problem_recommendation_guide.md  # Teaching problem guide
+|   +-- problem_admin_guide.md           # OJ admin guide
 +-- plans/
-|   +-- ai-agent-lite-v1-tasks.md # V1 dev task list (completed)
-+-- archive/                  # Historical documents
-    +-- INTEGRATION_SUCCESS.md
-    +-- INTEGRATION_SUMMARY.md
-    +-- INTEGRATION_VERIFICATION.md
-    +-- INTEGRATED_DEPLOYMENT.md
-    +-- QDUOJ_DEPLOYMENT_SUCCESS.md
-    +-- milestone_table*.md
+    +-- ai-agent-lite-v1-tasks.md        # V1 dev task list (completed)
 ```
-
-> Note: Chinese-named files in guides/ and reports/ are being gradually
-> renamed to English for consistency. Both old and new names may coexist
-> during transition.
 
 ---
 
@@ -56,7 +37,7 @@ docs/
 1. Architecture -> ../README.md
 2. AI Agent API -> ../ai-agent-lite/README.md
 3. Frontend -> ../frontend-vue-ai-chat/README.md
-4. Integration -> QDUOJ_INTEGRATION.md
+4. AI prompt chain -> AI_AGENT_PROMPT_CHAIN.md
 5. Feature spec -> ../specs/001-ai-tutor/spec.md
 
 ---
@@ -69,13 +50,12 @@ docs/
 | OJ Backend API | http://localhost:8000/api |
 | OJ Admin Panel | http://localhost:8000/admin |
 | AI Agent Health | http://localhost:8850/healthz |
-| Problem List | http://localhost:8000/problem |
 
 ---
 
 ## System Status Snapshot
 
-**Last updated**: 2026-04-24
+**Last updated**: 2026-04-26
 
 - OK System running
 - OK Judge service normal
@@ -83,7 +63,7 @@ docs/
 - OK ai-agent-lite persistence enabled (PostgreSQL schema: ai_agent)
 - OK ai-agent-lite readiness and metrics endpoints enabled
 - OK Supervisor pattern with 5 Worker Agents operational
-- OK 609 problems imported, 24 with test data
+- OK 2683 problems in database (backed up)
 - OK Frontend (vue-ai-chat) serving on port 5173
 - INFO ai-agent-lite is the sole AI agent service
 - INFO Project spec documented in PROJECT_SPEC.md
@@ -94,10 +74,9 @@ docs/
 
 ### Phase 1: Foundation (completed)
 - System deployment
-- 609-problem FPS import
+- Problem bank imported (2683 problems, backed up at backups/)
 - Tag classification (19 tags)
 - Judge verification
-- 24-problem test data
 - AI chat with WebSocket protocol
 - Supervisor + 5 Worker Agents
 
@@ -137,33 +116,23 @@ docs/
 ## For System Administrators
 
 1. Deployment & Maintenance
-   - QDUOJ_DEPLOYMENT.md
    - CDUT_OJ_system_status.md
 
 2. Problem Management
-   - FPS_IMPORT_GUIDE.md
    - guides/problem_admin_guide.md
 
 ## For Teachers
 
 1. Teaching Usage
    - guides/problem_recommendation_guide.md
-   - reports/test_data_report.md
-
-2. Problem Management
-   - guides/problem_admin_guide.md
 
 ## For Developers
 
 1. Technical
    - PROJECT_SPEC.md (project scope and research goals)
-   - FPS_IMPORT_GUIDE.md
-   - QDUOJ_INTEGRATION.md
+   - AI_AGENT_PROMPT_CHAIN.md
 
-2. Testing
-   - reports/judge_test_report.md
-
-3. AI Agent
+2. AI Agent
    - ../ai-agent-lite/README.md
    - ../specs/001-ai-tutor/spec.md
 
