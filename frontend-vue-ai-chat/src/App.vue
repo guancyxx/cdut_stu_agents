@@ -11,6 +11,15 @@ import { useOjAuthAndProblems } from './composables/useOjAuthAndProblems'
 const activeTab = ref('home')
 const rightPanelTab = ref('problem')
 const selectedProblemId = ref('')
+const langDropdownOpen = ref(false)
+
+// Close dropdown when clicking anywhere outside
+const handleClickOutside = (e) => {
+  const wrap = document.querySelector('.lang-select-wrap')
+  if (langDropdownOpen.value && wrap && !wrap.contains(e.target)) {
+    langDropdownOpen.value = false
+  }
+}
 
 // Each language gets its own editor instance; codes persist independently.
 // When user switches language, we just show/hide the relevant editor — no code copying.
@@ -532,6 +541,8 @@ onMounted(async () => {
   loadSessions()
   await hydrateAuthSession()
 
+  document.addEventListener('click', handleClickOutside)
+
   if (!ojUser.value.loggedIn) {
     await refreshCaptcha()
     activeTab.value = 'auth'
@@ -544,6 +555,7 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   closeSocket()
+  document.removeEventListener('click', handleClickOutside)
 })
 </script>
 
@@ -841,9 +853,27 @@ onBeforeUnmount(() => {
             <div class="submit-layout">
               <div class="submit-editor-area">
                 <div class="submit-form">
-                  <select v-model="activeSubmitLanguage">
-                    <option v-for="lang in ALL_LANGUAGES" :key="lang" :value="lang">{{ lang }}</option>
-                  </select>
+                  <!-- Custom language select (avoids native browser popup white background) -->
+                  <div class="lang-select-wrap" ref="langSelectWrap">
+                    <div class="lang-select-trigger" :class="{ open: langDropdownOpen }" @click="langDropdownOpen = !langDropdownOpen" @keydown.enter.prevent="langDropdownOpen = !langDropdownOpen" tabindex="0" role="combobox" aria-expanded="langDropdownOpen">
+                      <span class="lang-select-label">{{ activeSubmitLanguage }}</span>
+                      <span class="lang-select-arrow">▼</span>
+                    </div>
+                    <div v-if="langDropdownOpen" class="lang-select-dropdown" @mouseleave="langDropdownOpen = false">
+                      <div
+                        v-for="lang in ALL_LANGUAGES"
+                        :key="lang"
+                        class="lang-select-option"
+                        :class="{ selected: activeSubmitLanguage === lang }"
+                        @click="activeSubmitLanguage = lang; langDropdownOpen = false"
+                      >
+                        <span class="lang-select-option-icon" :class="{ cpp: lang === 'C++', c: lang === 'C', java: lang === 'Java', py: lang === 'Python3' }">
+                          {{ lang === 'C++' ? '++' : lang[0] }}
+                        </span>
+                        {{ lang }}
+                      </div>
+                    </div>
+                  </div>
                   <!-- Multiple editor instances — one per language, switched by v-show.
                        Each editor keeps its own CodeMirror state and code buffer.
                        No template copying needed on language switch. -->
