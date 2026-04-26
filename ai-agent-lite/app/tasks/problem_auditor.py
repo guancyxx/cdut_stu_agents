@@ -633,16 +633,154 @@ def _parse_llm_response(raw: str) -> dict:
     }
 
 
+def _ensure_template_markers(code: str, lang: str) -> str:
+    """Ensure a template string uses the //PREPEND/TEMPLATE/APPEND marker format.
+
+    If the code already contains the markers, return it unchanged.
+    Otherwise, wrap the bare code into the correct marker structure for QDUOJ.
+
+    QDUOJ's parse_problem_template() regex matches ONLY '//PREFIX BEGIN/END'
+    markers (not '#'). Templates without markers are silently treated as empty,
+    causing students to see a blank editor. This function prevents that.
+    """
+    if "//TEMPLATE BEGIN" in code:
+        # Already has markers — trust it
+        return code
+
+    # Split bare code into prepend / template / append sections
+    lines = code.split("\n")
+
+    if lang == "Python3":
+        # Python3: find def solve() -> template, if __name__ -> append
+        # Also strip any 'import sys' from prepend (use input() instead)
+        prepend_lines = []
+        template_lines = []
+        append_lines = []
+        in_append = False
+
+        for line in lines:
+            stripped = line.strip()
+            if stripped.startswith("if __name__") or stripped == "if __name__ == '__main__':":
+                in_append = True
+                append_lines.append(line)
+                continue
+            if in_append:
+                append_lines.append(line)
+                continue
+            # Skip 'import sys' lines — we prefer input() for beginners
+            if stripped == "import sys" or stripped.startswith("import sys #"):
+                continue
+            # Def solve starts the template section
+            if not template_lines and stripped.startswith("def solve"):
+                template_lines.append(line)
+                continue
+            if template_lines:
+                template_lines.append(line)
+            else:
+                prepend_lines.append(line)
+
+        # Filter out empty-only prepend
+        prepend_text = "\n".join(prepend_lines).strip()
+        template_text = "\n".join(template_lines)
+        append_text = "\n".join(append_lines)
+
+        # Build marked template
+        result = f"//PREPEND BEGIN\n{prepend_text}\n//PREPEND END\n\n"
+        result += f"//TEMPLATE BEGIN\n{template_text}\n//TEMPLATE END\n\n"
+        result += f"//APPEND BEGIN\n{append_text}\n//APPEND END"
+        return result
+
+    elif lang in ("C", "C++"):
+        # C/C++: lines before void solve() -> prepend, void solve() -> template,
+        # int main() -> append
+        prepend_lines = []
+        template_lines = []
+        append_lines = []
+        in_append = False
+
+        for line in lines:
+            stripped = line.strip()
+            if stripped.startswith("int main("):
+                in_append = True
+                append_lines.append(line)
+                continue
+            if in_append:
+                append_lines.append(line)
+                continue
+            # Check if we're in the function body
+            if not template_lines and (stripped.startswith("void solve") or stripped.startswith("int solve")):
+                template_lines.append(line)
+                continue
+            if template_lines:
+                template_lines.append(line)
+            else:
+                prepend_lines.append(line)
+
+        prepend_text = "\n".join(prepend_lines)
+        template_text = "\n".join(template_lines)
+        append_text = "\n".join(append_lines)
+
+        result = f"//PREPEND BEGIN\n{prepend_text}\n//PREPEND END\n\n"
+        result += f"//TEMPLATE BEGIN\n{template_text}\n//TEMPLATE END\n\n"
+        result += f"//APPEND BEGIN\n{append_text}\n//APPEND END"
+        return result
+
+    elif lang == "Java":
+        # Java: find 'public static void solve' -> template,
+        # 'public static void main' -> append, everything before -> prepend
+        prepend_lines = []
+        template_lines = []
+        append_lines = []
+        in_template = False
+        in_append = False
+        brace_depth = 0
+
+        for line in lines:
+            stripped = line.strip()
+            if stripped.startswith("public static void solve"):
+                in_template = True
+                brace_depth = 0
+                template_lines.append(line)
+                brace_depth += line.count("{") - line.count("}")
+                continue
+            if in_template and not in_append:
+                template_lines.append(line)
+                brace_depth += line.count("{") - line.count("}")
+                if brace_depth <= 0 and "{" in "".join(template_lines):
+                    in_template = False
+                continue
+            if stripped.startswith("public static void main"):
+                in_append = True
+            if in_append:
+                append_lines.append(line)
+                continue
+            prepend_lines.append(line)
+
+        # If prepend ends with class opening, ensure it's there
+        prepend_text = "\n".join(prepend_lines)
+        template_text = "\n".join(template_lines)
+        append_text = "\n".join(append_lines)
+
+        result = f"//PREPEND BEGIN\n{prepend_text}\n//PREPEND END\n\n"
+        result += f"//TEMPLATE BEGIN\n{template_text}\n//TEMPLATE END\n\n"
+        result += f"//APPEND BEGIN\n{append_text}\n//APPEND END"
+        return result
+
+    # For unknown languages, just wrap everything in TEMPLATE
+    return f"//PREPEND BEGIN\n\n//PREPEND END\n\n//TEMPLATE BEGIN\n{code}\n//TEMPLATE END\n\n//APPEND BEGIN\n\n//APPEND END"
+
+
 def _apply_fixes(client: httpx.Client, csrf: str, problem: dict, fixes: dict) -> None:
     """Apply LLM-suggested fixes to a problem via the OJ Admin API."""
     updated = dict(problem)  # shallow copy
 
-    # Apply template fixes
+    # Apply template fixes — ensure markers are present
     if fixes.get("template"):
         merged_template = dict(updated.get("template") or {})
         for lang, code in fixes["template"].items():
             if code and isinstance(code, str):
-                merged_template[lang] = code
+                # Auto-wrap bare code into //PREPEND/TEMPLATE/APPEND format
+                merged_template[lang] = _ensure_template_markers(code, lang)
         updated["template"] = merged_template
 
     # Apply text field fixes
