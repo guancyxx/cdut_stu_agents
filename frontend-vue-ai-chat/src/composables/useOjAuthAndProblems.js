@@ -384,7 +384,8 @@ export function useOjAuthAndProblems() {
   // QDUOJ: only PENDING (6) and JUDGING (7) are non-terminal states
   const isFinalSubmissionStatus = (status) => ![6, 7].includes(status)
 
-  // Parse test case detail from submission detail API response
+  // Parse test case detail from submission detail API response.
+  // Now includes per-test-case user output (output field) when available.
   const parseTestCases = (detailData) => {
     if (!detailData || !detailData.info) return []
     const infoData = detailData.info
@@ -412,9 +413,83 @@ export function useOjAuthAndProblems() {
         memory: Number(tc.memory || 0),
         score: Number(tc.score || 0),
         signal: tc.signal != null ? Number(tc.signal) : null,
-        exitCode: tc.exit_code != null ? Number(tc.exit_code) : null
+        exitCode: tc.exit_code != null ? Number(tc.exit_code) : null,
+        // User's actual output from judge server (available when output=True in dispatcher)
+        actualOutput: typeof tc.output === 'string' ? tc.output : null
       }
     })
+  }
+
+  // Enrich test cases with input/expected_output from the test case content API.
+  // Merges input/expected_output/actualOutput data into existing test case results.
+  // When testCases is empty (e.g. ACM mode hides info), builds a full list from the API.
+  const enrichTestCasesWithContent = async (testCases, problemId, problemQueryId, submissionId) => {
+    if (!problemId && !problemQueryId) return testCases
+
+    try {
+      const params = {}
+      if (problemId) params.problem_id = String(problemId)
+      if (submissionId) params.submission_id = String(submissionId)
+      // Also pass display _id for lookup fallback
+      if (problemQueryId) params.problem__id = String(problemQueryId)
+
+      const response = await apiClient.fetchTestCaseContent(params)
+      const data = response.data
+      if (!data || data.error) {
+        console.warn('Failed to fetch test case content:', data?.error || data?.data || 'unknown error')
+        return testCases
+      }
+
+      const contentCases = Array.isArray(data.test_cases) ? data.test_cases : []
+      if (!contentCases.length) return testCases
+
+      // When existing testCases from submission detail is empty (ACM mode hides info),
+      // build the full list entirely from the test case content API
+      if (!testCases.length) {
+        return contentCases.map((cc) => {
+          const status = cc.status != null ? Number(cc.status) : null
+          const statusInfo = status != null ? (JUDGE_STATUS_MAP[String(status)] || { label: 'UNKNOWN', display: 'Unknown', icon: '❓', color: '#9ca3af' }) : { label: 'PENDING', display: 'Pending', icon: '⏳', color: '#9ca3af' }
+          return {
+            index: Number(cc.index),
+            status: status ?? 6,
+            label: statusInfo.label,
+            display: statusInfo.display,
+            icon: statusInfo.icon,
+            color: statusInfo.color,
+            cpuTime: cc.cpu_time ?? 0,
+            memory: cc.memory ?? 0,
+            score: cc.score ?? 0,
+            signal: cc.signal != null ? Number(cc.signal) : null,
+            exitCode: cc.exit_code != null ? Number(cc.exit_code) : null,
+            input: typeof cc.input === 'string' ? cc.input : '',
+            expectedOutput: typeof cc.expected_output === 'string' ? cc.expected_output : '',
+            actualOutput: typeof cc.actual_output === 'string' ? cc.actual_output : null
+          }
+        })
+      }
+
+      // Build lookup by index
+      const contentByIndex = new Map()
+      for (const cc of contentCases) {
+        contentByIndex.set(Number(cc.index), cc)
+      }
+
+      return testCases.map((tc) => {
+        const content = contentByIndex.get(tc.index)
+        if (!content) return tc
+        return {
+          ...tc,
+          input: typeof content.input === 'string' ? content.input : '',
+          expectedOutput: typeof content.expected_output === 'string' ? content.expected_output : '',
+          // Prefer actualOutput from submission info (output=True in dispatcher),
+          // fall back to content from the test case API which also includes it
+          actualOutput: tc.actualOutput ?? (typeof content.actual_output === 'string' ? content.actual_output : null)
+        }
+      })
+    } catch (err) {
+      console.warn('Failed to enrich test cases with content:', err)
+      return testCases
+    }
   }
 
   const submitSolution = async ({ problemId, problemQueryId, language, code, sessionId }) => {
@@ -513,10 +588,26 @@ export function useOjAuthAndProblems() {
                   ? normalized.errInfo + '\n\n' + info.data
                   : info.data
               }
-              // Enrich with test case details from the detail API
+              // Always try to enrich — even if testCases is empty (ACM mode),
+              // the content API can build a full list including status/output
               const testCases = parseTestCases(detailData)
-              if (testCases.length > 0) {
-                normalized.testCases = testCases
+              // detailData.problem can be:
+              //   - numeric ID (admin/ModelSerializer)
+              //   - display _id string like "custom-uyga" (ACM/SafeModelSerializer)
+              // We pass both the raw value and the known problemQueryId
+              const problemIdFromDetail = detailData.problem
+              const numericProblemId = (typeof problemIdFromDetail === 'number' || /^\d+$/.test(String(problemIdFromDetail)))
+                ? String(problemIdFromDetail)
+                : ''
+              const displayProblemId = (numericProblemId) ? '' : String(problemIdFromDetail || '')
+              const enrichedCases = await enrichTestCasesWithContent(
+                testCases,
+                numericProblemId || parsedProblemId,
+                displayProblemId || problemQueryId,
+                submittedId
+              )
+              if (enrichedCases.length > 0) {
+                normalized.testCases = enrichedCases
               }
               // Also update errInfo from statistic_info if available
               const detailStatInfo = detailData.statistic_info

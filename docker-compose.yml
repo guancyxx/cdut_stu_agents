@@ -14,6 +14,7 @@ services:
       - ./data/training:/app/data/training
       - ./data/chat_history:/app/data/chat_history
       - ./data/problems:/app/data/problems
+      - ./qduoj/data/backend/test_case:/data/test_case:ro
     environment:
       - TZ=Asia/Shanghai
       - OJ_API_URL=http://oj-backend:8000

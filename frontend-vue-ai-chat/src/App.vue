@@ -950,6 +950,21 @@ onBeforeUnmount(() => {
                             <span class="tc-metric-value">{{ tc.signal }}</span>
                           </span>
                         </div>
+                        <!-- Test case I/O content -->
+                        <div class="tc-card-io" v-if="tc.input || tc.expectedOutput || tc.actualOutput">
+                          <div class="tc-io-section" v-if="tc.input">
+                            <div class="tc-io-label">Input</div>
+                            <pre class="tc-io-content tc-input">{{ tc.input }}</pre>
+                          </div>
+                          <div class="tc-io-section" v-if="tc.expectedOutput">
+                            <div class="tc-io-label">Expected</div>
+                            <pre class="tc-io-content tc-expected">{{ tc.expectedOutput }}</pre>
+                          </div>
+                          <div class="tc-io-section" v-if="tc.actualOutput">
+                            <div class="tc-io-label">Output</div>
+                            <pre class="tc-io-content tc-actual">{{ tc.actualOutput }}</pre>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   </div>

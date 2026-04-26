@@ -93,6 +93,23 @@ export function createApiClient(baseUrl = '/oj-api') {
   const fetchSubmissionDetail = (submissionId) =>
     requestJson(`/api/submission?id=${encodeURIComponent(submissionId)}`)
 
+  const fetchTestCaseContent = (params) => {
+    // Uses a separate base URL that routes through ai-agent-lite proxy
+    // Vite config rewrites /oj-test-cases/* -> ai-agent-lite:8848/oj/*
+    const query = new URLSearchParams(params)
+    return fetch(`/oj-test-cases/test_case_content?${query.toString()}`, {
+      credentials: 'include'
+    }).then(async (response) => {
+      const rawText = await response.text()
+      if (!rawText) return { ok: response.ok, status: response.status, data: { error: `Empty response (${response.status})`, data: '' } }
+      try {
+        return { ok: response.ok, status: response.status, data: JSON.parse(rawText) }
+      } catch {
+        return { ok: response.ok, status: response.status, data: { error: `Invalid JSON response (${response.status})`, data: rawText } }
+      }
+    })
+  }
+
   return {
     fetchProfile,
     fetchCaptcha,
@@ -102,6 +119,7 @@ export function createApiClient(baseUrl = '/oj-api') {
     fetchProblems,
     submitCode,
     fetchSubmissions,
-    fetchSubmissionDetail
+    fetchSubmissionDetail,
+    fetchTestCaseContent
   }
 }

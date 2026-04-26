@@ -1357,6 +1357,68 @@ button:disabled {
   font-weight: 500;
 }
 
+/* Test case I/O content blocks */
+.tc-card-io {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-left: 30px;
+  margin-top: 6px;
+}
+
+.tc-io-section {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tc-io-label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-tertiary);
+}
+
+.tc-io-content {
+  font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+  font-size: 11px;
+  line-height: 1.4;
+  padding: 6px 8px;
+  border-radius: 4px;
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 120px;
+  overflow-y: auto;
+  margin: 0;
+}
+
+.tc-input {
+  background: rgba(59, 130, 246, 0.08);
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  color: #93c5fd;
+}
+
+.tc-expected {
+  background: rgba(16, 185, 129, 0.08);
+  border: 1px solid rgba(16, 185, 129, 0.2);
+  color: #6ee7b7;
+}
+
+.tc-actual {
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  color: #fca5a5;
+}
+
+.tc-passed .tc-input { background: rgba(59, 130, 246, 0.04); }
+.tc-passed .tc-expected { background: rgba(16, 185, 129, 0.04); }
+.tc-passed .tc-actual {
+  background: rgba(16, 185, 129, 0.06);
+  border-color: rgba(16, 185, 129, 0.25);
+  color: #86efac;
+}
+
 /* Fallback message */
 .result-fallback-message {
   font-size: 12px;

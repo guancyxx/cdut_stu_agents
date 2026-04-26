@@ -31,6 +31,11 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/oj-api/, ''),
       },
+      '/oj-test-cases': {
+        target: 'http://ai-agent-lite:8848',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/oj-test-cases/, '/oj'),
+      },
     },
   },
 })
