@@ -12,9 +12,15 @@ const activeTab = ref('home')
 const rightPanelTab = ref('problem')
 const selectedProblemId = ref('')
 
+// Each language gets its own editor instance; codes persist independently.
+// When user switches language, we just show/hide the relevant editor — no code copying.
+const DEFAULT_LANGUAGE = 'C++'
+const ALL_LANGUAGES = ['C++', 'C', 'Java', 'Python3']
+
 const createSubmitDraft = () => ({
-  language: 'C++',
-  code: '',
+  language: DEFAULT_LANGUAGE,
+  // Per-language code buffers, one for each CodeEditor instance
+  codes: Object.fromEntries(ALL_LANGUAGES.map((lang) => [lang, ''])),
   state: { type: '', message: '' }
 })
 
@@ -48,22 +54,17 @@ const getStarterCode = (problem, language) => {
 
 const activeSubmitLanguage = computed({
   get: () => getActiveSubmitDraft().language,
-  set: (value) => {
-    const oldLang = getActiveSubmitDraft().language
-    const currentCode = getActiveSubmitDraft().code
-    const oldStarter = getStarterCode(null, oldLang)
-    getActiveSubmitDraft().language = String(value || 'C++')
-    // If current code is the old language's default starter, replace it
-    if (!currentCode || currentCode === oldStarter) {
-      getActiveSubmitDraft().code = getStarterCode(null, String(value || 'C++'))
-    }
-  }
+  set: (value) => { getActiveSubmitDraft().language = String(value || DEFAULT_LANGUAGE) }
 })
 
 const activeSubmitCode = computed({
-  get: () => getActiveSubmitDraft().code,
+  get: () => {
+    const draft = getActiveSubmitDraft()
+    return draft.codes[draft.language] || ''
+  },
   set: (value) => {
-    getActiveSubmitDraft().code = String(value || '')
+    const draft = getActiveSubmitDraft()
+    draft.codes[draft.language] = String(value || '')
   }
 })
 
@@ -284,12 +285,15 @@ const selectProblemForRightPanel = async (problem) => {
   rightPanelTab.value = 'problem'
   activeTab.value = 'home'
 
-  // Populate starter code from problem template or default skeleton
+  // Populate starter code for ALL languages from problem template or fallback skeleton.
+  // Each CodeEditor instance binds to its own codes[lang], so pre-populating all
+  // languages means switching language just shows/hides editors — no code copying.
   const draft = getActiveSubmitDraft()
-  const lang = draft.language || 'C++'
-  const templateCode = getStarterCode(problem, lang)
-  if (!activeSubmitCode.value) {
-    activeSubmitCode.value = templateCode
+  for (const lang of ALL_LANGUAGES) {
+    // Only populate if the buffer is empty (first time selecting this problem)
+    if (!draft.codes[lang]) {
+      draft.codes[lang] = getStarterCode(problem, lang)
+    }
   }
 
   ensureSessionMetadata(targetSession.id, {
@@ -838,15 +842,18 @@ onBeforeUnmount(() => {
               <div class="submit-editor-area">
                 <div class="submit-form">
                   <select v-model="activeSubmitLanguage">
-                    <option value="C++">C++</option>
-                    <option value="C">C</option>
-                    <option value="Java">Java</option>
-                    <option value="Python3">Python3</option>
+                    <option v-for="lang in ALL_LANGUAGES" :key="lang" :value="lang">{{ lang }}</option>
                   </select>
+                  <!-- Multiple editor instances — one per language, switched by v-show.
+                       Each editor keeps its own CodeMirror state and code buffer.
+                       No template copying needed on language switch. -->
                   <CodeEditor
-                    v-model="activeSubmitCode"
+                    v-for="lang in ALL_LANGUAGES"
+                    :key="lang"
+                    v-show="activeSubmitLanguage === lang"
+                    v-model="getActiveSubmitDraft().codes[lang]"
                     class="oj-code-editor"
-                    :language="activeSubmitLanguage"
+                    :language="lang"
                     placeholder="Enter your source code here"
                   />
                   <div class="submit-action-row">
