@@ -1,13 +1,12 @@
 # Git Submodule Usage Guide
 
-This project uses Git submodules to manage two external components.
+This project uses a Git submodule for the OJ deployment config.
 
 ## Submodule List
 
 | Submodule | Repository | Purpose |
 |-----------|-----------|---------|
 | qduoj | https://github.com/QingdaoU/OnlineJudgeDeploy.git | OJ system deployment config |
-| fps-problems | https://github.com/zhblue/freeproblemset.git | FPS problem set (609 problems) |
 
 ## Initial Clone
 
@@ -34,9 +33,6 @@ git submodule update --remote --merge
 ```bash
 # Update qduoj
 git submodule update --remote qduoj
-
-# Update fps-problems
-git submodule update --remote fps-problems
 ```
 
 ### Pull updates for main repo and submodules

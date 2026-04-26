@@ -1,6 +1,3 @@
 [submodule "qduoj"]
 	path = qduoj
 	url = https://github.com/guancyxx/OnlineJudgeDeploy.git
-[submodule "fps-problems"]
-	path = fps-problems
-	url = https://github.com/guancyxx/freeproblemset.git

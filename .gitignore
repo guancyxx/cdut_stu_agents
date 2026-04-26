@@ -12,9 +12,7 @@ data/problems/*
 !data/problems/.gitkeep
 
 # Database backups
-backups/*.dump
-backups/*.sql
-backups/*.tar.gz
+backups/
 
 # Python
 __pycache__/
