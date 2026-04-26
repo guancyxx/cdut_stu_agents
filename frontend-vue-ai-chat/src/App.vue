@@ -109,6 +109,7 @@ const {
   sendSuggestion,
   clearSuggestions,
   loadSessions,
+  switchToUser,
   selectSession,
   selectOrCreateProblemSession,
   ensureSessionMetadata,
@@ -239,6 +240,9 @@ const handleAuthSubmit = async () => {
   }
 
   if (ojUser.value.loggedIn) {
+    // Switch session storage to the newly authenticated user
+    switchToUser(ojUser.value.profileName || ojUser.value.username)
+
     await fetchProblems()
     activeTab.value = 'home'
     syncCurrentSessionUserId(ojUser.value.profileName || ojUser.value.username)
@@ -255,6 +259,9 @@ const handleAuthKeydown = (event) => {
 const handleLogout = async () => {
   const succeeded = await logout()
   if (!succeeded) return
+
+  // Switch to anonymous scope — clears in-memory sessions and WebSocket
+  switchToUser('')
 
   activeTab.value = 'auth'
   selectedProblemId.value = ''
@@ -538,6 +545,7 @@ onMounted(async () => {
   // Initialize Markdown/HTML message renderer
   initMessageRenderer(marked, DOMPurify)
 
+  // Start with anonymous scope; will switch after auth hydration
   loadSessions()
   await hydrateAuthSession()
 
@@ -548,6 +556,9 @@ onMounted(async () => {
     activeTab.value = 'auth'
     return
   }
+
+  // Switch session storage to the authenticated user
+  switchToUser(ojUser.value.profileName || ojUser.value.username)
 
   await fetchProblems()
   activeTab.value = 'home'

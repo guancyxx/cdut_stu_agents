@@ -3,7 +3,14 @@ import { useSessions } from './useSessions'
 import { useChatSocket } from './useChatSocket'
 import { validateChatInput } from '../utils/validators'
 
-const STORAGE_KEY = 'cdut-ai-chat-sessions-v2'
+// Storage key is user-scoped to prevent session data leakage between accounts.
+// Format: cdut-ai-chat-sessions-v2::<username>
+// When no user is logged in, a transient key is used (data not persisted across logout).
+const BASE_SESSIONS_KEY = 'cdut-ai-chat-sessions-v2'
+const buildSessionsStorageKey = (username) => {
+  const normalized = (username || '').trim().toLowerCase()
+  return normalized ? `${BASE_SESSIONS_KEY}::${normalized}` : `${BASE_SESSIONS_KEY}::_anon_`
+}
 
 const createHistoryStorageKey = (youtuSessionId) => `cdut-ai-chat-history-${youtuSessionId}`
 
@@ -209,6 +216,7 @@ export function useChatFeature() {
     saveSessions,
     createSession,
     loadSessions,
+    switchUserStorageKey,
     selectSession,
     findSessionByProblemId,
     getSessionById,
@@ -217,7 +225,7 @@ export function useChatFeature() {
     updateSessionMeta,
     clearAllSessions,
     createTimeLabel
-  } = useSessions(STORAGE_KEY)
+  } = useSessions(buildSessionsStorageKey(''))
 
   const scrollToBottom = async () => {
     await nextTick()
@@ -414,17 +422,38 @@ export function useChatFeature() {
   }
 
   const clearAllConversationData = () => {
-    // Remove all history localStorage keys (including orphaned ones from previous sessions)
+    // Remove history localStorage keys that belong to current user's sessions
+    const currentYtIds = new Set(sessions.value.map((s) => s.youtuSessionId).filter(Boolean))
     const keysToRemove = []
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i)
       if (key && key.startsWith('cdut-ai-chat-history-')) {
-        keysToRemove.push(key)
+        // Extract youtuSessionId suffix from key
+        const ytId = key.slice('cdut-ai-chat-history-'.length)
+        if (currentYtIds.has(ytId)) {
+          keysToRemove.push(key)
+        }
       }
     }
     keysToRemove.forEach((key) => localStorage.removeItem(key))
 
     clearAllSessions()
+  }
+
+  // Switch session storage to a new user scope (called on login/logout).
+  // Closes WebSocket, clears all in-memory auxiliary state, then loads
+  // the new user's persisted sessions (or starts fresh if none exist).
+  const switchToUser = (username) => {
+    closeSocket()
+
+    const newStorageKey = buildSessionsStorageKey(username)
+    switchUserStorageKey(newStorageKey)
+
+    // Reset all per-session auxiliary data to prevent cross-user leakage
+    attachmentsBySessionId.value = {}
+    suggestionsBySessionId.value = {}
+    input.value = ''
+    sending.value = false
   }
 
   return {
@@ -447,6 +476,7 @@ export function useChatFeature() {
     clearSuggestions,
     createSession: createMappedSession,
     loadSessions,
+    switchToUser,
     selectSession: selectSessionAndRestore,
     selectOrCreateProblemSession,
     ensureSessionMetadata,

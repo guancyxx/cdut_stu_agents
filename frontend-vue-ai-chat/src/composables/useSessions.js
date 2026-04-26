@@ -16,12 +16,13 @@ const createSessionEntity = (title = '新会话', metadata = {}) => ({
 export function useSessions(storageKey) {
   const sessions = ref([])
   const currentSessionId = ref('')
+  let activeStorageKey = storageKey
 
   const currentSession = computed(() => sessions.value.find((item) => item.id === currentSessionId.value) || null)
   const messages = computed(() => currentSession.value?.messages || [])
 
   const saveSessions = () => {
-    localStorage.setItem(storageKey, JSON.stringify(sessions.value))
+    localStorage.setItem(activeStorageKey, JSON.stringify(sessions.value))
   }
 
   const createSession = (title = '新会话', metadata = {}) => {
@@ -34,7 +35,7 @@ export function useSessions(storageKey) {
 
   const loadSessions = () => {
     try {
-      const raw = localStorage.getItem(storageKey)
+      const raw = localStorage.getItem(activeStorageKey)
       const parsed = raw ? JSON.parse(raw) : []
       if (Array.isArray(parsed) && parsed.length > 0) {
         sessions.value = parsed.map((session) => ({
@@ -51,13 +52,29 @@ export function useSessions(storageKey) {
     } catch (error) {
       sessions.value = []
       currentSessionId.value = ''
-      localStorage.removeItem(storageKey)
+      localStorage.removeItem(activeStorageKey)
       console.warn('Failed to parse saved sessions, storage was reset.', error)
     }
 
     sessions.value = []
     currentSessionId.value = ''
     saveSessions()
+  }
+
+  // Switch storage to a different user scope and reload sessions.
+  // Clears in-memory state first to prevent data leakage between accounts.
+  const switchUserStorageKey = (newStorageKey) => {
+    if (newStorageKey === activeStorageKey) return
+
+    // Persist current sessions for the outgoing user before switching
+    if (sessions.value.length > 0) {
+      saveSessions()
+    }
+
+    activeStorageKey = newStorageKey
+    sessions.value = []
+    currentSessionId.value = ''
+    loadSessions()
   }
 
   const selectSession = (sessionId) => {
@@ -122,6 +139,7 @@ export function useSessions(storageKey) {
     saveSessions,
     createSession,
     loadSessions,
+    switchUserStorageKey,
     selectSession,
     findSessionByProblemId,
     findSessionByYoutuSessionId,
