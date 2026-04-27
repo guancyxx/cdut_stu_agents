@@ -1111,7 +1111,7 @@ def clean_problem_statement(self, problem_summary: dict) -> dict:
         new_inp  = _deep_clean(data.get("input_description") or inp_clean)
         new_out  = _deep_clean(data.get("output_description") or out_clean)
 
-        # Write back to OJ
+        # Write back via OJ Admin API
         problem["description"] = new_desc
         problem["input_description"] = new_inp
         problem["output_description"] = new_out
@@ -1119,6 +1119,31 @@ def clean_problem_statement(self, problem_summary: dict) -> dict:
         ok = _update_problem(client, csrf, problem)
         if not ok:
             raise ValueError("PUT /api/admin/problem returned error")
+
+        # OJ backend re-escapes apostrophes to &#039; on save.
+        # Fix them directly in the DB via psycopg2 after the API write.
+        import os as _os
+        import psycopg2 as _pg
+        _db_url = _os.environ.get("LITE_DATABASE_URL", "")
+        # Convert asyncpg URL to psycopg2 URL
+        _pg_url = _db_url.replace("postgresql+asyncpg://", "postgresql://")
+        try:
+            _conn = _pg.connect(_pg_url)
+            _cur = _conn.cursor()
+            _cur.execute(
+                """UPDATE problem SET
+                     description        = replace(replace(replace(replace(replace(description,        '&#039;', ''''), '&quot;', '"'), '&amp;', '&'), '&lt;', '<'), '&gt;', '>'),
+                     input_description  = replace(replace(replace(replace(replace(input_description,  '&#039;', ''''), '&quot;', '"'), '&amp;', '&'), '&lt;', '<'), '&gt;', '>'),
+                     output_description = replace(replace(replace(replace(replace(output_description, '&#039;', ''''), '&quot;', '"'), '&amp;', '&'), '&lt;', '<'), '&gt;', '>')
+                   WHERE _id = %s""",
+                (display_id,),
+            )
+            _conn.commit()
+            _cur.close()
+            _conn.close()
+            logger.info("clean_problem_statement: post-fix unescape OK display_id=%s", display_id)
+        except Exception as _db_err:
+            logger.warning("clean_problem_statement: post-fix unescape failed: %s", _db_err)
 
         logger.info("clean_problem_statement: OK display_id=%s", display_id)
         return {"display_id": display_id, "status": "ok", "message": "Statement cleaned and written back"}
