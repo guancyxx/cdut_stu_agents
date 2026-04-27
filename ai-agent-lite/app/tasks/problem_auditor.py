@@ -1094,15 +1094,22 @@ def clean_problem_statement(self, problem_summary: dict) -> dict:
             raise ValueError(f"LLM did not return valid JSON. Response: {llm_response[:500]}")
         data = _json.loads(m.group())
 
-        new_desc = data.get("description") or desc_clean
-        new_inp  = data.get("input_description") or inp_clean
-        new_out  = data.get("output_description") or out_clean
-
         # Unescape any HTML entities the LLM may have reintroduced in its output
         import html as _html_mod
-        new_desc = _html_mod.unescape(new_desc)
-        new_inp  = _html_mod.unescape(new_inp)
-        new_out  = _html_mod.unescape(new_out)
+        import re as _re_clean
+        def _deep_clean(s: str) -> str:
+            # Multiple unescape passes to handle double-encoded entities
+            prev = None
+            while prev != s:
+                prev = s
+                s = _html_mod.unescape(s)
+            # Remove any residual HTML tags
+            s = _re_clean.sub(r"<[^>]+>", "", s)
+            return s.strip()
+
+        new_desc = _deep_clean(data.get("description") or desc_clean)
+        new_inp  = _deep_clean(data.get("input_description") or inp_clean)
+        new_out  = _deep_clean(data.get("output_description") or out_clean)
 
         # Write back to OJ
         problem["description"] = new_desc
