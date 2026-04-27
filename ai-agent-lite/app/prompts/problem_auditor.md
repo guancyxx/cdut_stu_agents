@@ -14,110 +14,235 @@ Your job is to **strictly evaluate** the problem against the criteria below and 
 - `test_case_id` must be non-empty (not a placeholder like all zeros).
 - If test cases are missing, flag it.
 
-### 3. Starter Code Templates
-- The `template` field MUST contain non-empty, functional starter code for ALL of: `C`, `C++`, `Java`, `Python3`.
-- Starter code MUST follow the function-style pattern with THREE-SECTION MARKERS:
-  - **C**: `//PREPEND BEGIN` with `#include <stdio.h>` + `//TEMPLATE BEGIN` with `void solve(void) { ... }` + `//APPEND BEGIN` with `int main(void) { solve(); return 0; }`
-  - **C++**: `//PREPEND BEGIN` with `#include <bits/stdc++.h>` + `using namespace std;` + `//TEMPLATE BEGIN` with `void solve() { ... }` + `//APPEND BEGIN` with `int main() { ios::sync_with_stdio(false); cin.tie(nullptr); solve(); return 0; }`
-  - **Java**: `//PREPEND BEGIN` with `import java.util.*;` + `public class Main {` + `//TEMPLATE BEGIN` with `public static void solve(Scanner sc) { ... }` + `//APPEND BEGIN` with `public static void main(String[] args) { ... } }`
-  - **Python3**: `//PREPEND BEGIN` (empty line) + `//TEMPLATE BEGIN` with `def solve() -> None:` function + `//APPEND BEGIN` with `if __name__ == '__main__': solve()`
+### 3. Starter Code Template Architecture
+
+**This is the most important rule.** The template follows a strict three-section marker format with I/O separation:
+
+```
+//PREPEND BEGIN
+<hidden: #include / imports / class opening>
+//PREPEND END
+
+//TEMPLATE BEGIN
+<visible to student: solve() function with typed params and return value>
+//TEMPLATE END
+
+//APPEND BEGIN
+<hidden: main() reads stdin, calls solve(), prints result>
+//APPEND END
+```
+
+**The key design principle:**
+- `solve()` in TEMPLATE takes problem-specific parameters as arguments and **returns** the result. It does NO I/O (no scanf, cin, input(), printf, cout, print).
+- `main()` in APPEND reads all input from stdin, passes values to `solve()`, and prints the return value.
+- Students only edit the TEMPLATE section — they implement the algorithm inside `solve()` without worrying about I/O.
+
+**This is WRONG (void solve with internal I/O):**
+```c
+// WRONG — solve() does its own I/O
+void solve(void) {
+    int n; scanf("%d", &n);
+    printf("%d\n", result);
+}
+int main(void) { solve(); return 0; }
+```
+
+**This is CORRECT (solve receives params, returns result, main does I/O):**
+```c
+// CORRECT — solve() is pure algorithm
+int solve(int n) {
+    // Example: solve(5) -> 25
+    // TODO: implement and return result
+    return 0;
+}
+int main(void) {
+    int n; scanf("%d", &n);
+    printf("%d\n", solve(n));
+    return 0;
+}
+```
 
 **CRITICAL MARKER FORMAT RULES:**
-1. ALL languages (including Python3) MUST use `//` comment markers, NOT `#`. The parser uses regex on `//PREPEND BEGIN`, `//TEMPLATE BEGIN`, `//APPEND BEGIN`.
-2. Each section MUST have both BEGIN and END markers (e.g. `//PREPEND BEGIN` and `//PREPEND END`).
+1. ALL languages (including Python3) MUST use `//` comment markers, NOT `#`. The parser regex matches `//PREPEND BEGIN`, `//TEMPLATE BEGIN`, `//APPEND BEGIN`.
+2. Each section MUST have both BEGIN and END markers.
 3. Template code with NO markers will be treated as empty by the parser — the student editor shows nothing.
 4. In the JSON response, use `\n` for newlines within template strings.
 
 ### 4. Template Customization Based on Problem I/O
-**This is the most important quality check.** Generic placeholder templates (e.g. `int n; scanf("%d", &n);` for every problem) are considered FAILING even if they compile.
+
+**Generic placeholder templates are FAILING even if they compile.**
 
 When writing or fixing templates, you MUST:
 
 **a) Analyze the problem's actual input format from `input_description` and `samples`.**
-   - Determine the number and types of input variables (e.g. single int, two ints, n followed by array, string, matrix, etc.)
-   - Use variable names that match the problem semantics (e.g. `n`, `m`, `k`, `s`, `a[]` — not generic `x`, `y`).
+- Determine what values need to be passed as parameters to `solve()`.
+- Use semantic variable names matching the problem domain (e.g. `n`, `coins`, `s`, `a`, not generic `x`, `y`).
+- Determine the return type of `solve()` (int, long long, double, string, etc.).
 
-**b) Write a TEMPLATE section that:**
-   - Reads ALL required inputs exactly matching the described format
-   - Contains a `// TODO: implement` comment where the algorithm goes
-   - Outputs a placeholder result (e.g. `printf("0\n")`, `print(0)`) that causes WRONG_ANSWER but NOT COMPILE_ERROR
-   - Includes a one-line comment showing the sample: `// Sample: input -> output`
-   - Does NOT contain the solution logic (no correct algorithm)
+**b) Write the TEMPLATE section (solve function) that:**
+- Has a meaningful signature: typed parameters matching the problem input, a return type matching the output.
+- Contains `// Example: solve(arg) -> expected_output` using the first sample.
+- Contains `// TODO: implement and return result` comment.
+- Returns a placeholder (0, 0.0, "", etc.) that causes WRONG_ANSWER but NOT COMPILE_ERROR.
+- Does NOT contain any I/O code (no scanf, cin, input, printf, cout, print).
+- Does NOT contain the solution algorithm.
 
-**c) I/O pattern examples by problem type:**
+**c) Write the APPEND section (main function) that:**
+- Reads ALL required inputs from stdin.
+- Calls `solve()` with the read values as arguments.
+- Prints the return value of `solve()` to stdout.
 
-Single integer input:
-```
-// input: n     output: result
-// Sample: 5 -> 25
-int n;
-scanf("%d", &n);
-// TODO: compute result from n
-printf("0\n");
-```
+**d) I/O pattern examples by problem type:**
 
-Two integers:
-```
-// input: n m     output: result
-// Sample: 3 4 -> 7
-int n, m;
-scanf("%d %d", &n, &m);
-// TODO: compute result from n and m
-printf("0\n");
-```
+Single integer input, integer output:
+```c
+// TEMPLATE section:
+int solve(int n) {
+    // Example: solve(5) -> 25
+    // TODO: implement and return result
+    return 0;
+}
 
-N followed by array:
-```
-// input: n, then n integers     output: result
-// Sample: 3 / 1 2 3 -> 6
-int n;
-scanf("%d", &n);
-int a[n];
-for (int i = 0; i < n; i++) scanf("%d", &a[i]);
-// TODO: process array a[]
-printf("0\n");
+// APPEND section:
+int main(void) {
+    int n; scanf("%d", &n);
+    printf("%d\n", solve(n));
+    return 0;
+}
 ```
 
-String input:
-```
-// input: string s     output: result
-// Sample: "hello" -> 5
-char s[1001];
-scanf("%s", s);
-// TODO: process string s
-printf("0\n");
+Two integers, integer output:
+```c
+// TEMPLATE section:
+int solve(int n, int m) {
+    // Example: solve(3, 4) -> 7
+    // TODO: implement and return result
+    return 0;
+}
+
+// APPEND section:
+int main(void) {
+    int n, m; scanf("%d %d", &n, &m);
+    printf("%d\n", solve(n, m));
+    return 0;
+}
 ```
 
-Python3 equivalents use `input()`, `split()`, `map()` as appropriate:
+N + array, integer output (use pointer/array param in C):
+```c
+// TEMPLATE section:
+long long solve(int n, long long a[]) {
+    // Example: solve(3, [1,2,3]) -> 6
+    // TODO: implement and return result
+    return 0;
+}
+
+// APPEND section:
+int main(void) {
+    int n; scanf("%d", &n);
+    long long a[100005];
+    for (int i = 0; i < n; i++) scanf("%lld", &a[i]);
+    printf("%lld\n", solve(n, a));
+    return 0;
+}
+```
+
+String input, integer output (C uses char*, C++ uses string):
+```c
+// C TEMPLATE:
+int solve(const char* s) {
+    // Example: solve("LXRR") -> 2
+    // TODO: implement and return result
+    return 0;
+}
+
+// C APPEND:
+int main(void) {
+    static char s[1000005]; scanf("%s", s);
+    printf("%d\n", solve(s));
+    return 0;
+}
+```
+
+**Python3 equivalents** — solve() takes typed params, returns value, main reads and prints:
 ```python
-def solve() -> None:
-    # input: n m    output: result
-    # Sample: 3 4 -> 7
-    n, m = map(int, input().split())
-    # TODO: compute result from n and m
-    print(0)
+# TEMPLATE section:
+def solve(n: int) -> int:
+    # Example: solve(5) -> 25
+    # TODO: implement and return result
+    return 0
+
+# APPEND section:
+if __name__ == '__main__':
+    n = int(input())
+    print(solve(n))
 ```
 
-**d) Evaluate existing templates against the problem's actual I/O:**
-   - If the existing template reads `int n` but the problem takes two integers, mark it as FAIL.
-   - If the existing template has no sample comment, mark it as FAIL.
-   - If the existing template reads input correctly but lacks the sample comment, that alone is sufficient to require a fix.
+Python3 with multiple params:
+```python
+def solve(n: int, m: int) -> int:
+    # Example: solve(3, 4) -> 7
+    # TODO: implement and return result
+    return 0
+# main:
+if __name__ == '__main__':
+    n, m = map(int, input().split())
+    print(solve(n, m))
+```
+
+Python3 with array:
+```python
+def solve(n: int, a: list) -> int:
+    # Example: solve(3, [1,2,3]) -> 6
+    # TODO: implement and return result
+    return 0
+# main:
+if __name__ == '__main__':
+    n = int(input())
+    a = list(map(int, input().split()))
+    print(solve(n, a))
+```
+
+**e) Java pattern** — solve() is a static method with typed params and return type:
+```java
+// PREPEND: import java.util.*; \n\npublic class Main {
+// TEMPLATE:
+    public static int solve(int n) {
+        // Example: solve(5) -> 25
+        // TODO: implement and return result
+        return 0;
+    }
+// APPEND:
+    public static void main(String[] args) {
+        Scanner sc = new Scanner(System.in);
+        int n = sc.nextInt();
+        System.out.println(solve(n));
+    }
+}
+```
+
+**f) Evaluate existing templates against the problem's actual I/O:**
+- If `solve()` is `void solve(void)` or `void solve()` — FAIL (no params, no return, I/O mixed in).
+- If `solve(Scanner sc)` reads I/O itself and prints inside — FAIL (I/O should be in main).
+- If `def solve() -> None` with `input()` inside — FAIL (should take params, return value).
+- If parameters don't match the actual input format — FAIL.
+- If the Example comment is missing or wrong — FAIL.
 
 ### 5. Python3-Specific Rules
-- Python3 templates MUST use `input()` and `print()` for I/O, NOT `sys.stdin` or `sys.stdin.readline()`.
-- Do NOT include `import sys` in Python3 templates.
-- Common Python3 I/O idioms:
+- `solve()` MUST take typed parameters and MUST return a value. Never `def solve() -> None`.
+- Python3 templates MUST use `//` markers (not `#`).
+- I/O ONLY in `__main__` block: use `input()`, `print()`. Never use `sys.stdin` anywhere.
+- Common Python3 I/O in main:
   - Single int: `n = int(input())`
-  - Single line of ints: `a = list(map(int, input().split()))`
-  - Multiple values: `n, m = map(int, input().split())`
+  - Single line of ints: `n, m = map(int, input().split())`
+  - Array: `a = list(map(int, input().split()))`
   - String: `s = input().strip()`
-  - N lines: `for _ in range(n): ...`
+  - N then array: `n = int(input())` then `a = list(map(int, input().split()))`
 
 ### 6. Judge Compatibility
 - C/C++ templates must have proper `#include` directives and `int main()`.
 - Java must use class name `Main` (not `Solution` or anything else).
-- Python3 must read from stdin and write to stdout.
-- All templates must be runnable as-is on the judge (WRONG_ANSWER is acceptable, but not COMPILE_ERROR or SYSTEM_ERROR).
+- All templates must run on the judge producing WRONG_ANSWER (not COMPILE_ERROR or RUNTIME_ERROR).
 
 ### 7. Metadata
 - `difficulty` must be one of: `Low`, `Mid`, `High`.
@@ -155,34 +280,56 @@ Respond with EXACTLY this JSON structure:
 ## Rules
 - If status is "pass", all fields in `fixes` should be null.
 - If status is "fail", provide corrected values in `fixes` for EVERY issue found.
-- `template` values must be COMPLETE code strings with `//PREPEND BEGIN/END`, `//TEMPLATE BEGIN/END`, and `//APPEND BEGIN/END` markers. Use `\n` for newlines.
-- Do NOT truncate or abbreviate template code — write the full I/O reading code based on the actual problem format.
-- Python3 templates MUST use `//` markers (not `#`), and MUST use `input()`/`print()` (not `sys.stdin`).
-- Templates MUST be customized to the problem's actual I/O format — generic `int n; scanf("%d", &n)` for a two-integer problem is a FAIL.
+- `template` values must be COMPLETE code strings with all three marker sections. Use `\n` for newlines.
+- Do NOT truncate or abbreviate template code.
+- solve() in TEMPLATE must have typed params + return type. main() in APPEND must do all I/O.
+- Python3 templates MUST use `//` markers (not `#`), and MUST use `input()`/`print()` only in `__main__`.
 - CRITICAL: Your entire response must be parseable JSON. No text before or after the JSON.
 
-## Example: Problem takes two integers N and M, outputs their sum
+## Example: Problem takes N and M (two integers), outputs their sum
 
-C template (TEMPLATE section only, inside markers):
+C template (complete, all three sections):
 ```
-void solve(void) {
-    // input: n m    output: n+m
-    // Sample: 3 4 -> 7
-    int n, m;
-    scanf("%d %d", &n, &m);
-    // TODO: compute and print result
-    printf("0\n");
+//PREPEND BEGIN
+#include <stdio.h>
+//PREPEND END
+
+//TEMPLATE BEGIN
+int solve(int n, int m) {
+    // Example: solve(3, 4) -> 7
+    // TODO: implement and return result
+    return 0;
 }
+//TEMPLATE END
+
+//APPEND BEGIN
+int main(void) {
+    int n, m; scanf("%d %d", &n, &m);
+    printf("%d\n", solve(n, m));
+    return 0;
+}
+//APPEND END
 ```
 
-Python3 template (TEMPLATE section only, inside markers):
-```python
-def solve() -> None:
-    # input: n m    output: n+m
-    # Sample: 3 4 -> 7
+Python3 template (complete):
+```
+//PREPEND BEGIN
+
+//PREPEND END
+
+//TEMPLATE BEGIN
+def solve(n: int, m: int) -> int:
+    # Example: solve(3, 4) -> 7
+    # TODO: implement and return result
+    return 0
+
+//TEMPLATE END
+
+//APPEND BEGIN
+if __name__ == '__main__':
     n, m = map(int, input().split())
-    # TODO: compute and print result
-    print(0)
+    print(solve(n, m))
+//APPEND END
 ```
 
 ## Problem Data

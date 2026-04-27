@@ -354,23 +354,25 @@ def _upsert_audit_record(
 # ---------------------------------------------------------------------------
 
 DEFAULT_TEMPLATES = {
+    # TEMPLATE section: solve() takes semantic params, returns result — NO I/O inside solve().
+    # APPEND section: main() reads stdin, calls solve(), prints result.
     "C": (
         "//PREPEND BEGIN\n"
         "#include <stdio.h>\n"
         "//PREPEND END\n"
         "\n"
         "//TEMPLATE BEGIN\n"
-        "void solve(void) {\n"
-        "    int n;\n"
-        '    scanf("%d", &n);\n'
-        '    // TODO: implement\n'
-        '    printf("%d\\n", n);\n'
+        "int solve(int n) {\n"
+        "    // Example: solve(5) -> 25\n"
+        "    // TODO: implement and return result\n"
+        "    return 0;\n"
         "}\n"
         "//TEMPLATE END\n"
         "\n"
         "//APPEND BEGIN\n"
         "int main(void) {\n"
-        "    solve();\n"
+        "    int n; scanf(\"%d\", &n);\n"
+        "    printf(\"%d\\n\", solve(n));\n"
         "    return 0;\n"
         "}\n"
         "//APPEND END\n"
@@ -382,20 +384,18 @@ DEFAULT_TEMPLATES = {
         "//PREPEND END\n"
         "\n"
         "//TEMPLATE BEGIN\n"
-        "void solve() {\n"
-        "    int n;\n"
-        "    cin >> n;\n"
-        "    // TODO: implement\n"
-        "    cout << n << endl;\n"
+        "int solve(int n) {\n"
+        "    // Example: solve(5) -> 25\n"
+        "    // TODO: implement and return result\n"
+        "    return 0;\n"
         "}\n"
         "//TEMPLATE END\n"
         "\n"
         "//APPEND BEGIN\n"
         "int main() {\n"
-        "    ios::sync_with_stdio(false);\n"
-        "    cin.tie(nullptr);\n"
-        "    solve();\n"
-        "    return 0;\n"
+        "    ios::sync_with_stdio(false); cin.tie(nullptr);\n"
+        "    int n; cin >> n;\n"
+        "    cout << solve(n) << endl; return 0;\n"
         "}\n"
         "//APPEND END\n"
     ),
@@ -407,17 +407,18 @@ DEFAULT_TEMPLATES = {
         "//PREPEND END\n"
         "\n"
         "//TEMPLATE BEGIN\n"
-        "    public static void solve(Scanner sc) {\n"
-        "        int n = sc.nextInt();\n"
-        "        // TODO: implement\n"
-        "        System.out.println(n);\n"
+        "    public static int solve(int n) {\n"
+        "        // Example: solve(5) -> 25\n"
+        "        // TODO: implement and return result\n"
+        "        return 0;\n"
         "    }\n"
         "//TEMPLATE END\n"
         "\n"
         "//APPEND BEGIN\n"
         "    public static void main(String[] args) {\n"
         "        Scanner sc = new Scanner(System.in);\n"
-        "        solve(sc);\n"
+        "        int n = sc.nextInt();\n"
+        "        System.out.println(solve(n));\n"
         "    }\n"
         "}\n"
         "//APPEND END\n"
@@ -428,16 +429,17 @@ DEFAULT_TEMPLATES = {
         "//PREPEND END\n"
         "\n"
         "//TEMPLATE BEGIN\n"
-        "def solve() -> None:\n"
-        "    n = int(input())\n"
-        "    # TODO: implement\n"
-        "    print(n)\n"
+        "def solve(n: int) -> int:\n"
+        "    # Example: solve(5) -> 25\n"
+        "    # TODO: implement and return result\n"
+        "    return 0\n"
         "\n"
         "//TEMPLATE END\n"
         "\n"
         "//APPEND BEGIN\n"
         "if __name__ == '__main__':\n"
-        "    solve()\n"
+        "    n = int(input())\n"
+        "    print(solve(n))\n"
         "//APPEND END\n"
     ),
 }
@@ -470,21 +472,33 @@ def _quick_check_problem(problem: dict) -> list[str]:
         issues.append("No sample input/output")
 
     # Check template (starter code): must be non-empty AND use //PREPEND/TEMPLATE/APPEND markers
+    # AND solve() must have typed parameters and a return value (not void solve(void))
     template = problem.get("template") or {}
     missing_langs = []
     no_markers_langs = []
+    void_solve_langs = []
     for lang in ("C", "C++", "Java", "Python3"):
         code = template.get(lang, "") or ""
         if not code.strip():
             missing_langs.append(lang)
         elif "//TEMPLATE BEGIN" not in code:
             no_markers_langs.append(lang)
+        else:
+            # Detect void solve(void) / void solve() pattern — no I/O separation
+            import re as _re
+            if _re.search(r'void\s+solve\s*\(\s*(void)?\s*\)', code):
+                void_solve_langs.append(lang)
     if missing_langs:
         issues.append(f"Missing starter code for: {', '.join(missing_langs)}")
     if no_markers_langs:
         issues.append(
             f"Starter code lacks //PREPEND/TEMPLATE/APPEND markers for: "
             f"{', '.join(no_markers_langs)} — student editor will be blank"
+        )
+    if void_solve_langs:
+        issues.append(
+            f"solve() has no parameters or return value in: {', '.join(void_solve_langs)} — "
+            f"main() must read input and pass parameters to solve(), solve() must return result"
         )
 
     # Check test_case_id
@@ -512,13 +526,33 @@ def audit_single_problem(self, problem_summary: dict) -> dict:
     """Audit a single problem via LLM and auto-fix if needed.
 
     Args:
-        problem_summary: dict with at least _id, id, title.
+        problem_summary: dict with at least _id and id.
+            If id == 0 the task will resolve the real db_id via the problem list.
     Returns:
         dict with audit result.
     """
     display_id = problem_summary["_id"]
-    db_id = problem_summary["id"]
+    db_id = problem_summary.get("id", 0)
     title = problem_summary.get("title", display_id)
+
+    # Resolve real db_id when caller passes 0 (e.g. triggered via /audit/run/<display_id>)
+    if db_id == 0:
+        try:
+            client, csrf = _oj_login()
+            problems = _fetch_problem_list(client, csrf, limit=500)
+            client.close()
+            match = next((p for p in problems if p["_id"] == display_id), None)
+            if match:
+                db_id = match["id"]
+                title = match.get("title", display_id)
+                logger.info("Resolved display_id=%s -> db_id=%d", display_id, db_id)
+            else:
+                logger.error("Cannot resolve db_id for display_id=%s", display_id)
+                return {"_id": display_id, "status": "error", "message": "Problem not found in OJ list"}
+        except Exception as exc:
+            logger.error("Failed to resolve db_id for %s: %s", display_id, exc)
+            return {"_id": display_id, "status": "error", "message": f"Failed to resolve db_id: {exc}"}
+
     return _do_audit_problem(display_id, db_id, title, retry_on_failure=self)
 
 
