@@ -28,18 +28,98 @@ Your job is to **strictly evaluate** the problem against the criteria below and 
 3. Template code with NO markers will be treated as empty by the parser — the student editor shows nothing.
 4. In the JSON response, use `\n` for newlines within template strings.
 
-### 4. Python3-Specific Rules
-- Python3 templates MUST use `input()` and `print()` for I/O, NOT `sys.stdin` or `sys.stdin.readline()`.
-- Do NOT include `import sys` in Python3 templates unless absolutely necessary.
-- The APPEND section should contain `if __name__ == '__main__':` with the I/O code, and the TEMPLATE section should contain only the `def solve()` function signature and a TODO/placeholder.
+### 4. Template Customization Based on Problem I/O
+**This is the most important quality check.** Generic placeholder templates (e.g. `int n; scanf("%d", &n);` for every problem) are considered FAILING even if they compile.
 
-### 5. Judge Compatibility
+When writing or fixing templates, you MUST:
+
+**a) Analyze the problem's actual input format from `input_description` and `samples`.**
+   - Determine the number and types of input variables (e.g. single int, two ints, n followed by array, string, matrix, etc.)
+   - Use variable names that match the problem semantics (e.g. `n`, `m`, `k`, `s`, `a[]` — not generic `x`, `y`).
+
+**b) Write a TEMPLATE section that:**
+   - Reads ALL required inputs exactly matching the described format
+   - Contains a `// TODO: implement` comment where the algorithm goes
+   - Outputs a placeholder result (e.g. `printf("0\n")`, `print(0)`) that causes WRONG_ANSWER but NOT COMPILE_ERROR
+   - Includes a one-line comment showing the sample: `// Sample: input -> output`
+   - Does NOT contain the solution logic (no correct algorithm)
+
+**c) I/O pattern examples by problem type:**
+
+Single integer input:
+```
+// input: n     output: result
+// Sample: 5 -> 25
+int n;
+scanf("%d", &n);
+// TODO: compute result from n
+printf("0\n");
+```
+
+Two integers:
+```
+// input: n m     output: result
+// Sample: 3 4 -> 7
+int n, m;
+scanf("%d %d", &n, &m);
+// TODO: compute result from n and m
+printf("0\n");
+```
+
+N followed by array:
+```
+// input: n, then n integers     output: result
+// Sample: 3 / 1 2 3 -> 6
+int n;
+scanf("%d", &n);
+int a[n];
+for (int i = 0; i < n; i++) scanf("%d", &a[i]);
+// TODO: process array a[]
+printf("0\n");
+```
+
+String input:
+```
+// input: string s     output: result
+// Sample: "hello" -> 5
+char s[1001];
+scanf("%s", s);
+// TODO: process string s
+printf("0\n");
+```
+
+Python3 equivalents use `input()`, `split()`, `map()` as appropriate:
+```python
+def solve() -> None:
+    # input: n m    output: result
+    # Sample: 3 4 -> 7
+    n, m = map(int, input().split())
+    # TODO: compute result from n and m
+    print(0)
+```
+
+**d) Evaluate existing templates against the problem's actual I/O:**
+   - If the existing template reads `int n` but the problem takes two integers, mark it as FAIL.
+   - If the existing template has no sample comment, mark it as FAIL.
+   - If the existing template reads input correctly but lacks the sample comment, that alone is sufficient to require a fix.
+
+### 5. Python3-Specific Rules
+- Python3 templates MUST use `input()` and `print()` for I/O, NOT `sys.stdin` or `sys.stdin.readline()`.
+- Do NOT include `import sys` in Python3 templates.
+- Common Python3 I/O idioms:
+  - Single int: `n = int(input())`
+  - Single line of ints: `a = list(map(int, input().split()))`
+  - Multiple values: `n, m = map(int, input().split())`
+  - String: `s = input().strip()`
+  - N lines: `for _ in range(n): ...`
+
+### 6. Judge Compatibility
 - C/C++ templates must have proper `#include` directives and `int main()`.
 - Java must use class name `Main` (not `Solution` or anything else).
 - Python3 must read from stdin and write to stdout.
 - All templates must be runnable as-is on the judge (WRONG_ANSWER is acceptable, but not COMPILE_ERROR or SYSTEM_ERROR).
 
-### 6. Metadata
+### 7. Metadata
 - `difficulty` must be one of: `Low`, `Mid`, `High`.
 - `tags` must have at least one tag.
 - `source` should be non-empty.
@@ -76,14 +156,33 @@ Respond with EXACTLY this JSON structure:
 - If status is "pass", all fields in `fixes` should be null.
 - If status is "fail", provide corrected values in `fixes` for EVERY issue found.
 - `template` values must be COMPLETE code strings with `//PREPEND BEGIN/END`, `//TEMPLATE BEGIN/END`, and `//APPEND BEGIN/END` markers. Use `\n` for newlines.
-- Do NOT truncate or abbreviate template code.
+- Do NOT truncate or abbreviate template code — write the full I/O reading code based on the actual problem format.
 - Python3 templates MUST use `//` markers (not `#`), and MUST use `input()`/`print()` (not `sys.stdin`).
+- Templates MUST be customized to the problem's actual I/O format — generic `int n; scanf("%d", &n)` for a two-integer problem is a FAIL.
 - CRITICAL: Your entire response must be parseable JSON. No text before or after the JSON.
 
-## Example Python3 Template (correct format)
+## Example: Problem takes two integers N and M, outputs their sum
 
+C template (TEMPLATE section only, inside markers):
+```
+void solve(void) {
+    // input: n m    output: n+m
+    // Sample: 3 4 -> 7
+    int n, m;
+    scanf("%d %d", &n, &m);
+    // TODO: compute and print result
+    printf("0\n");
+}
+```
+
+Python3 template (TEMPLATE section only, inside markers):
 ```python
-//PREPEND BEGIN\n\n//PREPEND END\n\n//TEMPLATE BEGIN\ndef solve() -> None:\n    n = int(input())\n    # TODO: implement\n    pass\n//TEMPLATE END\n\n//APPEND BEGIN\nif __name__ == '__main__':\n    solve()\n//APPEND END
+def solve() -> None:
+    # input: n m    output: n+m
+    # Sample: 3 4 -> 7
+    n, m = map(int, input().split())
+    # TODO: compute and print result
+    print(0)
 ```
 
 ## Problem Data
