@@ -573,6 +573,10 @@ onBeforeUnmount(() => {
 <template>
   <div class="app-shell">
     <header class="top-nav">
+      <div class="top-brand">
+        <img src="/logo.svg" alt="CDUT AI" class="top-logo" />
+        <span class="top-brand-name">CDUT AI \u5b66\u4e60\u52a9\u624b</span>
+      </div>
       <div class="tabs" v-if="!requiresAuth">
         <button :class="{ active: activeTab === 'home' }" @click="activeTab = 'home'">主页</button>
         <button :class="{ active: activeTab === 'problemset' }" @click="activeTab = 'problemset'">题库</button>
@@ -599,10 +603,7 @@ onBeforeUnmount(() => {
         <div class="auth-page card">
           <div class="auth-page-header">
             <div class="auth-brand-icon">
-              <svg width="40" height="40" viewBox="0 0 40 40" fill="none">
-                <rect width="40" height="40" rx="10" fill="#5e6ad2"/>
-                <text x="20" y="26" text-anchor="middle" fill="#fff" font-size="20" font-weight="600" font-family="system-ui">C</text>
-              </svg>
+              <img src="/logo.svg" alt="CDUT AI" style="width:56px;height:56px;" />
             </div>
             <h2>登录 OJ 账号</h2>
             <p>请先完成登录或注册后继续使用题库和聊天功能</p>

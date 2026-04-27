@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" fill="none">
+  <!-- Background circle -->
+  <circle cx="100" cy="100" r="95" fill="#0a0a1f" stroke="#4fc3f7" stroke-width="3"/>
+  
+  <!-- Graduation cap icon -->
+  <g transform="translate(100, 80)">
+    <polygon points="0,-35 -40,0 0,20 40,0" fill="none" stroke="#7c3aed" stroke-width="3"/>
+    <polygon points="-40,0 -40,15 0,35 40,15 40,0" fill="none" stroke="#7c3aed" stroke-width="3"/>
+    <line x1="0" y1="20" x2="0" y2="35" stroke="#7c3aed" stroke-width="2.5"/>
+    <!-- Tassel -->
+    <line x1="40" y1="0" x2="50" y2="-10" stroke="#f59e0b" stroke-width="2"/>
+    <circle cx="52" cy="-12" r="3" fill="#f59e0b"/>
+  </g>
+  
+  <!-- AI brain/agent symbol -->
+  <g transform="translate(100, 145)">
+    <rect x="-20" y="-12" width="40" height="24" rx="6" fill="none" stroke="#4fc3f7" stroke-width="2.5"/>
+    <circle cx="-8" cy="0" r="3" fill="#4fc3f7"/>
+    <circle cx="0" cy="0" r="3" fill="#4fc3f7"/>
+    <circle cx="8" cy="0" r="3" fill="#4fc3f7"/>
+    <!-- Antenna -->
+    <line x1="0" y1="-12" x2="0" y2="-20" stroke="#4fc3f7" stroke-width="2"/>
+    <circle cx="0" cy="-22" r="3" fill="#4fc3f7"/>
+  </g>
+  
+  <!-- Code brackets -->
+  <text x="32" y="72" font-family="monospace" font-size="24" font-weight="bold" fill="#4fc3f7" opacity="0.4">&lt;/&gt;</text>
+  
+  <!-- Small decorative dots -->
+  <circle cx="60" cy="40" r="2" fill="#4fc3f7" opacity="0.3"/>
+  <circle cx="140" cy="35" r="1.5" fill="#7c3aed" opacity="0.3"/>
+  <circle cx="155" cy="100" r="2" fill="#4fc3f7" opacity="0.3"/>
+  <circle cx="40" cy="120" r="1.5" fill="#7c3aed" opacity="0.3"/>
+</svg>

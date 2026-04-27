@@ -51,6 +51,27 @@ body {
   backdrop-filter: blur(4px);
 }
 
+.top-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.top-logo {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+}
+
+.top-brand-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
 .tabs {
   display: flex;
   gap: 8px;
