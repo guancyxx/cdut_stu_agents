@@ -25,6 +25,32 @@ db_operations_total = Counter(
     "db_operations_total", "Total DB operations", ["operation", "table"]
 )
 
+# Submission fallback / DLQ metrics
+submission_fallback_events_total = Counter(
+    "submission_fallback_events_total",
+    "Total submission fallback ingest events",
+    ["outcome", "status_label", "source"],
+)
+submission_dlq_replay_runs_total = Counter(
+    "submission_dlq_replay_runs_total",
+    "Total submission DLQ replay runs",
+    ["outcome"],
+)
+submission_dlq_replay_rows_total = Counter(
+    "submission_dlq_replay_rows_total",
+    "Total submission DLQ rows processed",
+    ["outcome"],
+)
+submission_dlq_replay_duration_seconds = Histogram(
+    "submission_dlq_replay_duration_seconds",
+    "Submission DLQ replay duration in seconds",
+    buckets=[0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 30],
+)
+submission_dlq_pending_rows = Gauge(
+    "submission_dlq_pending_rows",
+    "Current pending submission DLQ rows",
+)
+
 
 def metrics_text() -> str:
     """Return Prometheus-format metrics text."""

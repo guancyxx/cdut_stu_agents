@@ -1,0 +1,79 @@
+groups:
+  - name: ai-agent-lite-submission-fallback
+    interval: 30s
+    rules:
+      - alert: SubmissionFallbackFailureSpike
+        expr: |
+          (
+            sum(increase(submission_fallback_events_total{outcome="failed"}[15m]))
+            /
+            clamp_min(sum(increase(submission_fallback_events_total[15m])), 1)
+          ) > 0.20
+          and
+          sum(increase(submission_fallback_events_total{outcome="failed"}[15m])) >= 5
+        for: 5m
+        labels:
+          severity: warning
+          service: ai-agent-lite
+          component: submission-fallback
+        annotations:
+          summary: "Submission fallback failure ratio is high"
+          description: "Failed fallback ingests exceed 20% in the last 15m (and at least 5 failures)."
+
+      - alert: SubmissionDlqReplayFailureRatioHigh
+        expr: |
+          (
+            sum(increase(submission_dlq_replay_rows_total{outcome="failed"}[15m]))
+            /
+            clamp_min(sum(increase(submission_dlq_replay_rows_total[15m])), 1)
+          ) > 0.30
+          and
+          sum(increase(submission_dlq_replay_rows_total{outcome="failed"}[15m])) >= 3
+        for: 5m
+        labels:
+          severity: warning
+          service: ai-agent-lite
+          component: submission-dlq
+        annotations:
+          summary: "DLQ replay failure ratio is high"
+          description: "DLQ replay failed rows exceed 30% in the last 15m (and at least 3 failed rows)."
+
+      - alert: SubmissionDlqPendingBacklogHigh
+        expr: submission_dlq_pending_rows > 50
+        for: 15m
+        labels:
+          severity: critical
+          service: ai-agent-lite
+          component: submission-dlq
+        annotations:
+          summary: "DLQ backlog remains high"
+          description: "Pending submission DLQ rows are > 50 for more than 15 minutes."
+
+      - alert: SubmissionDlqReplayLatencyP95High
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (le) (rate(submission_dlq_replay_duration_seconds_bucket[15m]))
+          ) > 5
+        for: 10m
+        labels:
+          severity: warning
+          service: ai-agent-lite
+          component: submission-dlq
+        annotations:
+          summary: "DLQ replay latency p95 is high"
+          description: "DLQ replay p95 duration exceeds 5 seconds in the last 15m."
+
+      - alert: SubmissionFallbackIngestStalledWithBacklog
+        expr: |
+          submission_dlq_pending_rows > 0
+          and
+          sum(increase(submission_fallback_events_total{outcome="created"}[30m])) == 0
+        for: 10m
+        labels:
+          severity: warning
+          service: ai-agent-lite
+          component: submission-fallback
+        annotations:
+          summary: "Fallback ingest may be stalled while backlog exists"
+          description: "There is pending DLQ backlog, but no successful fallback event creation in the last 30m."

@@ -35,13 +35,21 @@ celery_app.conf.update(
     task_time_limit=int(settings.ollama_timeout) + 60,
     # result expiry — audit results kept for 7 days
     result_expires=86400 * 7,
-    # route all audit tasks to the audit queue
-    task_routes={"app.tasks.problem_auditor.*": {"queue": "audit"}},
-    # Beat schedule: audit one problem every 10 minutes
+    # route all background tasks to the audit queue
+    task_routes={
+        "app.tasks.problem_auditor.*": {"queue": "audit"},
+        "app.tasks.submission_events.*": {"queue": "audit"},
+    },
+    # Beat schedule: periodic problem audit + submission fallback compensation
     beat_schedule={
         "audit-next-problem-every-10-min": {
             "task": "app.tasks.problem_auditor.audit_next_problem",
             "schedule": 600,  # 600 seconds = 10 minutes
+        },
+        "retry-submission-dlq-every-5-min": {
+            "task": "app.tasks.submission_events.retry_submission_dlq",
+            "schedule": 300,
+            "kwargs": {"limit": 20},
         },
     },
 )
@@ -51,4 +59,4 @@ celery_app.conf.update(
 # resolve correctly inside Docker containers; explicit imports are more robust.
 celery_app.autodiscover_tasks(["app.tasks"], related_name=None)
 # Also force-import to guarantee registration
-from app.tasks import problem_auditor  # noqa: E402, F401
+from app.tasks import problem_auditor, submission_events  # noqa: E402, F401

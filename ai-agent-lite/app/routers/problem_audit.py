@@ -14,6 +14,7 @@ from pydantic import BaseModel
 
 from app.celery_app import celery_app
 from app.tasks.problem_auditor import audit_single_problem, audit_all_problems, clean_problem_statement
+from app.tasks.submission_events import retry_submission_dlq_task
 
 logger = logging.getLogger("ai-agent-lite.audit_api")
 
@@ -197,6 +198,19 @@ async def trigger_clean_statement(problem_display_id: str):
     return AuditTriggerResponse(
         task_id=task.id,
         message=f"Statement clean started for problem {problem_display_id}",
+    )
+
+
+@router.post("/submission/retry-dlq", response_model=AuditTriggerResponse)
+async def trigger_submission_retry_dlq(
+    limit: int = Query(20, ge=1, le=200, description="Max unresolved rows to replay this run"),
+):
+    """Trigger async replay for submission-event DLQ rows."""
+    task = retry_submission_dlq_task.apply_async(kwargs={"limit": limit}, queue="audit")
+    logger.info("Triggered submission DLQ retry task_id=%s limit=%s", task.id, limit)
+    return AuditTriggerResponse(
+        task_id=task.id,
+        message=f"Submission DLQ replay started (limit={limit})",
     )
 
 

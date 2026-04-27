@@ -1,4 +1,4 @@
-export function createApiClient(baseUrl = '/oj-api') {
+export function createApiClient(baseUrl = '/oj-api', aiAgentBaseUrl = '/oj-test-cases') {
   const requestJson = async (path, options = {}) => {
     const response = await fetch(`${baseUrl}${path}`, {
       credentials: 'include',
@@ -94,10 +94,8 @@ export function createApiClient(baseUrl = '/oj-api') {
     requestJson(`/api/submission?id=${encodeURIComponent(submissionId)}`)
 
   const fetchTestCaseContent = (params) => {
-    // Uses a separate base URL that routes through ai-agent-lite proxy
-    // Vite config rewrites /oj-test-cases/* -> ai-agent-lite:8848/oj/*
     const query = new URLSearchParams(params)
-    return fetch(`/oj-test-cases/test_case_content?${query.toString()}`, {
+    return fetch(`${aiAgentBaseUrl}/test_case_content?${query.toString()}`, {
       credentials: 'include'
     }).then(async (response) => {
       const rawText = await response.text()
@@ -110,6 +108,24 @@ export function createApiClient(baseUrl = '/oj-api') {
     })
   }
 
+  const reportSubmissionFallback = (payload) =>
+    fetch(`${aiAgentBaseUrl}/submission-events/fallback`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payload)
+    }).then(async (response) => {
+      const rawText = await response.text()
+      if (!rawText) return { ok: response.ok, status: response.status, data: { error: `Empty response (${response.status})`, data: '' } }
+      try {
+        return { ok: response.ok, status: response.status, data: JSON.parse(rawText) }
+      } catch {
+        return { ok: response.ok, status: response.status, data: { error: `Invalid JSON response (${response.status})`, data: rawText } }
+      }
+    })
+
   return {
     fetchProfile,
     fetchCaptcha,
@@ -120,6 +136,7 @@ export function createApiClient(baseUrl = '/oj-api') {
     submitCode,
     fetchSubmissions,
     fetchSubmissionDetail,
-    fetchTestCaseContent
+    fetchTestCaseContent,
+    reportSubmissionFallback
   }
 }

@@ -153,7 +153,8 @@ const {
   register,
   logout,
   fetchProblems,
-  submitSolution
+  submitSolution,
+  reportSubmissionToFallback
 } = useOjAuthAndProblems()
 
 const authActionText = computed(() => (ojUser.value.loggedIn ? ojUser.value.profileName : '去登录'))
@@ -407,6 +408,50 @@ const handleSubmitCode = async () => {
   })
 
   activeSubmitState.value = mapSubmissionLabelToUiMessage(result)
+
+  if (!result || !result.label || !currentSessionId.value) {
+    return
+  }
+
+  const fallbackResult = await reportSubmissionToFallback({
+    sessionId: currentSessionId.value,
+    problemId: selectedProblem.value._id || selectedProblem.value.id,
+    language: activeSubmitLanguage.value,
+    result
+  })
+
+  const language = activeSubmitLanguage.value
+  const codeFilename = `${language.toLowerCase().replace('3', '')}_${selectedProblem.value._id}.${language === 'C++' ? 'cpp' : language === 'C' ? 'c' : language === 'Java' ? 'java' : 'py'}`
+  clearPendingAttachments()
+  addPendingAttachment({
+    filename: codeFilename,
+    content: normalizedCode,
+    type: 'code'
+  })
+
+  const resultContent = buildResultAttachmentContent(result)
+  if (resultContent) {
+    addPendingAttachment({
+      filename: 'submit-result.txt',
+      content: resultContent,
+      type: 'result'
+    })
+  }
+
+  if (fallbackResult?.is_first_ac && fallbackResult?.recommendation) {
+    const rec = fallbackResult.recommendation
+    const recTitle = sanitizeTextInput(String(rec.title || ''), 80)
+    const recPid = sanitizeTextInput(String(rec.problem_id || ''), 64)
+    if (recPid) {
+      addPendingAttachment({
+        filename: 'next-problem.txt',
+        content: `推荐下一题: ${recPid}${recTitle ? ` ${recTitle}` : ''}`,
+        type: 'result'
+      })
+    }
+  }
+
+  await sendMessage()
 }
 
 const buildResultAttachmentContent = (result) => {
@@ -444,47 +489,6 @@ const formatMemory = (kb) => {
   if (!kb || kb <= 0) return '0KB'
   if (kb >= 1024) return `${(kb / 1024).toFixed(1)}MB`
   return `${kb}KB`
-}
-
-const handleSubmitCodeToAi = () => {
-  if (!selectedProblem.value) {
-    activeSubmitState.value = { type: 'error', message: 'Please select a problem first.' }
-    return
-  }
-
-  const normalizedCode = sanitizeTextInput(activeSubmitCode.value, 20000)
-  activeSubmitCode.value = normalizedCode
-
-  if (normalizedCode.length < 10) {
-    activeSubmitState.value = { type: 'error', message: 'Code must be at least 10 characters.' }
-    return
-  }
-
-  // Capture previous submit result BEFORE resetting
-  const previousResult = submitResult.value
-
-  // Stage code as attachment
-  const language = activeSubmitLanguage.value
-  const codeFilename = `${language.toLowerCase().replace('3', '')}_${selectedProblem.value._id}.${language === 'C++' ? 'cpp' : language === 'C' ? 'c' : language === 'Java' ? 'java' : 'py'}`
-  addPendingAttachment({
-    filename: codeFilename,
-    content: normalizedCode,
-    type: 'code'
-  })
-
-  // If there is a submission result, stage it with rich detail
-  if (previousResult) {
-    const resultContent = buildResultAttachmentContent(previousResult)
-    if (resultContent) {
-      addPendingAttachment({
-        filename: 'submit-result.txt',
-        content: resultContent,
-        type: 'result'
-      })
-    }
-  }
-
-  activeSubmitState.value = { type: 'info', message: 'Attachment staged. Click 发送 in chat when ready.' }
 }
 
 watch(
@@ -910,7 +914,6 @@ onBeforeUnmount(() => {
                   />
                   <div class="submit-action-row">
                     <button :disabled="submitLoading" @click="handleSubmitCode">{{ submitLoading ? '提交中...' : '提交代码' }}</button>
-                    <button class="secondary-btn" :disabled="submitLoading" @click="handleSubmitCodeToAi">发给AI</button>
                   </div>
                 </div>
               </div>

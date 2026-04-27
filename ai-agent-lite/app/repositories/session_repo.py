@@ -1,5 +1,5 @@
 """Async CRUD for sessions table."""
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from uuid import UUID, uuid4
 
 from sqlalchemy import select, update
@@ -57,3 +57,28 @@ async def archive_session(db: AsyncSession, session_id: UUID) -> None:
         .values(status="archived", updated_at=datetime.now(timezone.utc))
     )
     await db.commit()
+
+
+async def find_recent_active_session(
+    db: AsyncSession,
+    user_id: str,
+    problem_id: str,
+    within_minutes: int = 180,
+) -> Session | None:
+    """Find a recent active session for the same user/problem to bind fallback events."""
+    if not user_id or not problem_id:
+        return None
+
+    threshold = datetime.now(timezone.utc) - timedelta(minutes=max(1, within_minutes))
+    result = await db.execute(
+        select(Session)
+        .where(
+            Session.user_id == user_id,
+            Session.problem_id == problem_id,
+            Session.status == "active",
+            Session.updated_at >= threshold,
+        )
+        .order_by(Session.updated_at.desc())
+        .limit(1)
+    )
+    return result.scalar_one_or_none()

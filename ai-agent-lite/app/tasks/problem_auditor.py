@@ -158,6 +158,7 @@ def _call_ollama(prompt: str) -> str:
         "model": settings.ollama_model,
         "messages": [{"role": "user", "content": prompt}],
         "stream": False,
+        "keep_alive": "0",  # Immediately unload model from VRAM after response
         "options": {
             "temperature": 0.2,
             "num_predict": 4096,

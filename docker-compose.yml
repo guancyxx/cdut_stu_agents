@@ -190,6 +190,26 @@ services:
     networks:
       - cdut-network
 
+  # ==================== Prometheus 监控（已注释） ====================
+  # prometheus:
+  #   image: prom/prometheus:v2.54.1
+  #   container_name: cdut-prometheus
+  #   command:
+  #     - --config.file=/etc/prometheus/prometheus.yml
+  #     - --storage.tsdb.path=/prometheus
+  #     - --web.enable-lifecycle
+  #   ports:
+  #     - "9090:9090"
+  #   volumes:
+  #     - ./docs/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+  #     - ./docs/monitoring/ai-agent-lite-alert-rules.yml:/etc/prometheus/rules/ai-agent-lite-alert-rules.yml:ro
+  #     - ./data/prometheus:/prometheus
+  #   restart: unless-stopped
+  #   depends_on:
+  #     - ai-agent-lite
+  #   networks:
+  #     - cdut-network
+
 networks:
   cdut-network:
     driver: bridge
