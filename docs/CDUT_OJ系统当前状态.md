@@ -1,6 +1,6 @@
 # CDUT OJ System - Current Status
 
-**Updated**: 2026-04-26
+**Updated**: 2026-04-27
 **OJ Version**: QDUOJ v1.6.1
 **System Status**: Running
 
@@ -21,6 +21,8 @@
 |----------------------|-------------------|--------|
 | cdut-vue-ai-chat     | Frontend          | Active |
 | cdut-ai-agent-lite   | AI Agent          | Active |
+| cdut-ai-agent-celery-worker | Celery Worker (题目审计) | Active |
+| cdut-ai-agent-celery-beat   | Celery Beat (定时调度)   | Manual |
 | cdut-oj-backend      | OJ Backend        | Active |
 | cdut-oj-judge        | Judge Server      | Active |
 | cdut-oj-postgres     | PostgreSQL        | Active |
@@ -66,12 +68,19 @@
 - [x] System prompt injection via LlmClient.SYSTEM_PROMPT + _inject_system()
 - [x] NextStepSuggester removed (reduced 3x to 2-3x LLM calls per request)
 
+### 5. 题目审计系统
+- [x] Celery + Redis 异步任务队列
+- [x] 定时 Beat 调度（每 10 分钟审计 1 题）
+- [x] LLM (Ollama gemma4:31b) 自动检测模板质量
+- [x] 自动修复并写回 OJ（PREPEND/TEMPLATE/APPEND 三段 marker）
+- [x] solve() IO 分离约定：main() 读 stdin，solve() 纯算法 + return
+
 ---
 
 ## Known Limitations
 
 - No rate limiting or abuse prevention
-- ~~No structured code review output from AI~~ → CodeReviewerAgent provides structured analysis but non-standardized output format
+- ~~No structured code review output from AI~~
 - ~~No learning progress tracking~~ → LearningManagerAgent exists but uses LLM generation without algorithmic planning
 - No intelligent problem recommendation system (PDF requirement #4, unimplemented)
 - No programming thinking visualization (PDF requirement #5, unimplemented)

@@ -228,9 +228,85 @@ Supervisor 模式可通过环境变量配置：
 - asyncpg>=0.29.0
 - prometheus-client>=0.20.0
 
+## 题目审计系统 (Celery)
+
+`app/tasks/problem_auditor.py` 实现基于 Celery + Ollama 的异步题目质量审计，自动检测并修复 OJ 题目的 starter code 模板。
+
+### 架构
+
+```
+ai-agent-celery-beat  →  定时触发  →  ai-agent-celery-worker
+                                              |
+                                    _do_audit_problem()
+                                    ├── OJ 登录 + 拉取题目
+                                    ├── _quick_check_problem()  快速预检
+                                    ├── Ollama LLM 审计
+                                    └── _apply_fixes()  写回 OJ
+```
+
+### 模板架构约定
+
+OJ 题目的 starter code 必须遵循 **IO 分离** 原则：
+
+| 段 | Marker | 内容 | 学生可见 |
+|----|--------|------|----------|
+| PREPEND | `//PREPEND BEGIN/END` | `#include` / imports / class 开头 | 否（隐藏） |
+| TEMPLATE | `//TEMPLATE BEGIN/END` | `solve()` 函数（学生实现算法） | **是** |
+| APPEND | `//APPEND BEGIN/END` | `main()` 读 stdin，调 `solve()`，打印结果 | 否（隐藏） |
+
+**核心规则**：`solve()` 必须接受语义参数并 return 结果，不得在内部做任何 IO（无 scanf/cin/input/printf/cout/print）。
+
+```c
+// CORRECT
+int solve(int n, int m) {
+    // Example: solve(3, 4) -> 7
+    // TODO: implement and return result
+    return 0;
+}
+int main(void) {
+    int n, m; scanf("%d %d", &n, &m);
+    printf("%d\n", solve(n, m));
+    return 0;
+}
+```
+
+> Python3 同样遵循此规则：`def solve(n: int) -> int:` + `if __name__ == '__main__': print(solve(int(input())))`
+
+### 服务管理
+
+```bash
+# 启动审计 worker（手动触发模式，不启动 beat）
+docker compose up -d ai-agent-celery-worker
+
+# 审计单题
+curl -X POST http://localhost:8850/audit/run/{display_id}
+
+# 查看任务状态
+curl http://localhost:8850/audit/status/{task_id}
+
+# 查看审计汇总
+curl http://localhost:8850/audit/summary
+
+# 启动 beat 定时批量审计（每 10 分钟处理 1 题）
+docker compose up -d ai-agent-celery-beat
+```
+
+### 相关环境变量
+
+| 变量 | 必填 | 说明 |
+|------|------|------|
+| CELERY_BROKER_URL | 是 | Redis broker，如 `redis://oj-redis:6379/1` |
+| OJ_ADMIN_USERNAME | 是 | OJ 管理员账号（用于拉取和更新题目） |
+| OJ_ADMIN_PASSWORD | 是 | OJ 管理员密码 |
+| OLLAMA_BASE_URL | 是 | Ollama 服务地址，如 `http://host-gateway:11435` |
+| OLLAMA_MODEL | 否 | 默认 `gemma4:31b` |
+
+---
+
 ## 变更日志
 
 | 日期 | 变更 |
 |------|------|
 | 2026-04-23 | 移除 NextStepSuggester（3x LLM 调用降为 2x）。添加已知问题与优化待办。标注中文唯一语言策略。移除 next_suggestions 协议说明。 |
 | 2026-04-24 | 恢复 NextStepSuggester 调用并启用 next_suggestions 事件。AI 回复强制中文，提示词和代码保持英文。Worker prompt 移除末尾建议列表项（改由 NextStepSuggester 统一生成）。 |
+| 2026-04-27 | 新增 Celery 异步题目审计系统。修复模板架构：solve() 必须有入参和返回值，main() 负责全部 IO。新增 void solve(void) 自动检测和 prompt 全面重写。 |
