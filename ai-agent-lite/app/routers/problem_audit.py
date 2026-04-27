@@ -13,7 +13,7 @@ from fastapi import APIRouter, Query
 from pydantic import BaseModel
 
 from app.celery_app import celery_app
-from app.tasks.problem_auditor import audit_single_problem, audit_all_problems
+from app.tasks.problem_auditor import audit_single_problem, audit_all_problems, clean_problem_statement
 
 logger = logging.getLogger("ai-agent-lite.audit_api")
 
@@ -180,6 +180,24 @@ async def audit_summary():
         }
     finally:
         conn.close()
+
+
+@router.post("/clean/{problem_display_id}", response_model=AuditTriggerResponse)
+async def trigger_clean_statement(problem_display_id: str):
+    """Trigger LLM-based statement cleaning for a single problem.
+
+    Strips HTML tags/entities from description, input_description, output_description
+    and rewrites them as clean Markdown using the local Ollama model.
+    """
+    task = clean_problem_statement.apply_async(
+        args=({"_id": problem_display_id, "id": 0},),
+        queue="audit",
+    )
+    logger.info("Triggered clean task_id=%s problem=%s", task.id, problem_display_id)
+    return AuditTriggerResponse(
+        task_id=task.id,
+        message=f"Statement clean started for problem {problem_display_id}",
+    )
 
 
 @router.delete("/records/{problem_display_id}")

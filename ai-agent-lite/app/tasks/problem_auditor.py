@@ -52,6 +52,27 @@ def _oj_login() -> tuple[httpx.Client, str]:
     return client, csrf
 
 
+def _resolve_db_id(client: httpx.Client, csrf: str, display_id: str) -> int:
+    """Resolve a problem display_id to its integer db_id via keyword search.
+
+    Uses the OJ admin API's keyword filter so only a single page request is
+    needed instead of full pagination.  Falls back to 0 if not found.
+    """
+    r = client.get(
+        "/api/admin/problem",
+        params={"keyword": display_id, "limit": 10, "page": 1},
+        headers={"X-CSRFToken": csrf},
+    )
+    r.raise_for_status()
+    data = r.json()
+    if data.get("error") is not None:
+        return 0
+    for p in data.get("data", {}).get("results", []):
+        if p.get("_id") == display_id:
+            return p["id"]
+    return 0
+
+
 def _fetch_problem_list(client: httpx.Client, csrf: str, limit: int = 0) -> list[dict]:
     """Fetch problem summaries from the OJ Admin API.
 
@@ -539,12 +560,10 @@ def audit_single_problem(self, problem_summary: dict) -> dict:
     if db_id == 0:
         try:
             client, csrf = _oj_login()
-            problems = _fetch_problem_list(client, csrf, limit=500)
-            client.close()
-            match = next((p for p in problems if p["_id"] == display_id), None)
-            if match:
-                db_id = match["id"]
-                title = match.get("title", display_id)
+            db_id = _resolve_db_id(client, csrf, display_id)
+            if db_id:
+                title_r = [p for p in [_fetch_problem_detail(client, csrf, db_id) or {}] if p]
+                title = (title_r[0].get("title") if title_r else None) or display_id
                 logger.info("Resolved display_id=%s -> db_id=%d", display_id, db_id)
             else:
                 logger.error("Cannot resolve db_id for display_id=%s", display_id)
@@ -978,3 +997,125 @@ def audit_all_problems(self, force: bool = False, limit: int = 0) -> dict:
         "skipped": len(problems) - len(target_problems),
         "task_ids": task_ids[:50],  # only return first 50 for safety
     }
+
+
+# ---------------------------------------------------------------------------
+# Statement cleaner task
+# ---------------------------------------------------------------------------
+
+import html as _html
+import re as _re
+
+
+def _strip_html(raw: str) -> str:
+    """Remove all HTML tags, unescape entities, and normalise whitespace."""
+    text = _html.unescape(raw or "")
+    text = _re.sub(r"<[^>]+>", " ", text)
+    text = _re.sub(r"[ \t]+", " ", text)
+    text = _re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()
+
+
+def _build_clean_prompt(display_id: str, title: str, desc: str, inp: str, out: str) -> str:
+    return f"""You are cleaning a competitive programming problem statement for an online judge.
+The raw text may contain stripped HTML, leftover tags, or HTML entities. Rewrite it as clean, readable Markdown.
+
+Rules:
+- Preserve ALL original meaning and numbers exactly.
+- Use Markdown: paragraphs, **bold** for emphasis, `code` for character names / variable names (e.g. `L`, `R`, `X`).
+- Express large numbers as e.g. `10^6` (not HTML superscript).
+- No HTML tags. No raw HTML entities (& amp; &#039; etc.).
+- Return ONLY valid JSON with exactly these keys: description, input_description, output_description.
+
+Problem: {display_id} — {title}
+
+description:
+{desc}
+
+input_description:
+{inp}
+
+output_description:
+{out}
+
+JSON:"""
+
+
+@celery_app.task(name="clean_problem_statement", bind=True, max_retries=2)
+def clean_problem_statement(self, problem_summary: dict) -> dict:
+    """Celery task: use LLM to rewrite a problem's statement fields as clean Markdown.
+
+    Args:
+        problem_summary: dict with at least '_id' (display_id) and 'id' (db_id).
+                         If id==0 the task resolves the real db_id from the OJ listing.
+    Returns:
+        dict with keys: display_id, status ('ok'|'error'), message.
+    """
+    import json as _json
+
+    display_id: str = problem_summary.get("_id", "")
+    db_id: int = problem_summary.get("id", 0)
+
+    logger.info("clean_problem_statement: start display_id=%s db_id=%s", display_id, db_id)
+
+    try:
+        client, csrf = _oj_login()
+
+        # Resolve real db_id when caller passes 0 (API route limitation)
+        if db_id == 0 and display_id:
+            db_id = _resolve_db_id(client, csrf, display_id)
+            if db_id == 0:
+                raise ValueError(f"Could not resolve db_id for display_id={display_id}")
+            logger.info("Resolved display_id=%s -> db_id=%d", display_id, db_id)
+
+        # Fetch full problem detail
+        problem = _fetch_problem_detail(client, csrf, db_id)
+        if problem is None:
+            raise ValueError(f"Failed to fetch problem detail for db_id={db_id}")
+
+        title = problem.get("title", display_id)
+        raw_desc = problem.get("description", "")
+        raw_inp  = problem.get("input_description", "")
+        raw_out  = problem.get("output_description", "")
+
+        # Strip HTML
+        desc_clean = _strip_html(raw_desc)
+        inp_clean  = _strip_html(raw_inp)
+        out_clean  = _strip_html(raw_out)
+
+        # Ask LLM to rewrite as Markdown
+        prompt = _build_clean_prompt(display_id, title, desc_clean, inp_clean, out_clean)
+        llm_response = _call_ollama(prompt)
+        logger.debug("LLM clean response (first 300 chars): %s", llm_response[:300])
+
+        # Extract JSON from LLM output
+        m = _re.search(r'\{[\s\S]+\}', llm_response)
+        if not m:
+            raise ValueError(f"LLM did not return valid JSON. Response: {llm_response[:500]}")
+        data = _json.loads(m.group())
+
+        new_desc = data.get("description") or desc_clean
+        new_inp  = data.get("input_description") or inp_clean
+        new_out  = data.get("output_description") or out_clean
+
+        # Unescape any HTML entities the LLM may have reintroduced in its output
+        import html as _html_mod
+        new_desc = _html_mod.unescape(new_desc)
+        new_inp  = _html_mod.unescape(new_inp)
+        new_out  = _html_mod.unescape(new_out)
+
+        # Write back to OJ
+        problem["description"] = new_desc
+        problem["input_description"] = new_inp
+        problem["output_description"] = new_out
+
+        ok = _update_problem(client, csrf, problem)
+        if not ok:
+            raise ValueError("PUT /api/admin/problem returned error")
+
+        logger.info("clean_problem_statement: OK display_id=%s", display_id)
+        return {"display_id": display_id, "status": "ok", "message": "Statement cleaned and written back"}
+
+    except Exception as exc:
+        logger.error("clean_problem_statement failed display_id=%s: %s", display_id, exc)
+        raise self.retry(exc=exc, countdown=30)
