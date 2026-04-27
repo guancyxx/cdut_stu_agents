@@ -355,59 +355,90 @@ def _upsert_audit_record(
 
 DEFAULT_TEMPLATES = {
     "C": (
-        '#include <stdio.h>\n'
-        '#include <stdlib.h>\n'
-        '\n'
-        'void solve(void) {\n'
-        '    int n;\n'
+        "//PREPEND BEGIN\n"
+        "#include <stdio.h>\n"
+        "//PREPEND END\n"
+        "\n"
+        "//TEMPLATE BEGIN\n"
+        "void solve(void) {\n"
+        "    int n;\n"
         '    scanf("%d", &n);\n'
+        '    // TODO: implement\n'
         '    printf("%d\\n", n);\n'
-        '}\n'
-        '\n'
-        'int main(void) {\n'
-        '    solve();\n'
-        '    return 0;\n'
-        '}\n'
+        "}\n"
+        "//TEMPLATE END\n"
+        "\n"
+        "//APPEND BEGIN\n"
+        "int main(void) {\n"
+        "    solve();\n"
+        "    return 0;\n"
+        "}\n"
+        "//APPEND END\n"
     ),
     "C++": (
-        '#include <bits/stdc++.h>\n'
-        'using namespace std;\n'
-        '\n'
-        'void solve() {\n'
-        '    int n;\n'
-        '    cin >> n;\n'
-        '    cout << n << endl;\n'
-        '}\n'
-        '\n'
-        'int main() {\n'
-        '    ios::sync_with_stdio(false);\n'
-        '    cin.tie(nullptr);\n'
-        '    solve();\n'
-        '    return 0;\n'
-        '}\n'
+        "//PREPEND BEGIN\n"
+        "#include <bits/stdc++.h>\n"
+        "using namespace std;\n"
+        "//PREPEND END\n"
+        "\n"
+        "//TEMPLATE BEGIN\n"
+        "void solve() {\n"
+        "    int n;\n"
+        "    cin >> n;\n"
+        "    // TODO: implement\n"
+        "    cout << n << endl;\n"
+        "}\n"
+        "//TEMPLATE END\n"
+        "\n"
+        "//APPEND BEGIN\n"
+        "int main() {\n"
+        "    ios::sync_with_stdio(false);\n"
+        "    cin.tie(nullptr);\n"
+        "    solve();\n"
+        "    return 0;\n"
+        "}\n"
+        "//APPEND END\n"
     ),
     "Java": (
-        'import java.util.*;\n'
-        '\n'
-        'public class Main {\n'
-        '    static void solve(Scanner sc) {\n'
-        '        int n = sc.nextInt();\n'
-        '        System.out.println(n);\n'
-        '    }\n'
-        '\n'
-        '    public static void main(String[] args) {\n'
-        '        Scanner sc = new Scanner(System.in);\n'
-        '        solve(sc);\n'
-        '    }\n'
-        '}\n'
+        "//PREPEND BEGIN\n"
+        "import java.util.*;\n"
+        "\n"
+        "public class Main {\n"
+        "//PREPEND END\n"
+        "\n"
+        "//TEMPLATE BEGIN\n"
+        "    public static void solve(Scanner sc) {\n"
+        "        int n = sc.nextInt();\n"
+        "        // TODO: implement\n"
+        "        System.out.println(n);\n"
+        "    }\n"
+        "//TEMPLATE END\n"
+        "\n"
+        "//APPEND BEGIN\n"
+        "    public static void main(String[] args) {\n"
+        "        Scanner sc = new Scanner(System.in);\n"
+        "        solve(sc);\n"
+        "    }\n"
+        "}\n"
+        "//APPEND END\n"
     ),
     "Python3": (
-        'def solve() -> None:\n'
-        '    n = int(input())\n'
-        '    print(n)\n'
-        '\n'
+        "//PREPEND BEGIN\n"
+        "\n"
+        "//PREPEND END\n"
+        "\n"
+        "//TEMPLATE BEGIN\n"
+        "def solve() -> None:\n"
+        "    n = int(input())\n"
+        "    # TODO: implement\n"
+        "    print(n)\n"
+        "\n"
+        "//TEMPLATE END\n"
+        "\n"
+        "//APPEND BEGIN\n"
         "if __name__ == '__main__':\n"
-        '    solve()\n'
+        "    solve()\n"
+        "//APPEND END\n"
     ),
 }
 
@@ -438,15 +469,23 @@ def _quick_check_problem(problem: dict) -> list[str]:
     if not samples:
         issues.append("No sample input/output")
 
-    # Check template (starter code)
+    # Check template (starter code): must be non-empty AND use //PREPEND/TEMPLATE/APPEND markers
     template = problem.get("template") or {}
     missing_langs = []
+    no_markers_langs = []
     for lang in ("C", "C++", "Java", "Python3"):
         code = template.get(lang, "") or ""
         if not code.strip():
             missing_langs.append(lang)
+        elif "//TEMPLATE BEGIN" not in code:
+            no_markers_langs.append(lang)
     if missing_langs:
         issues.append(f"Missing starter code for: {', '.join(missing_langs)}")
+    if no_markers_langs:
+        issues.append(
+            f"Starter code lacks //PREPEND/TEMPLATE/APPEND markers for: "
+            f"{', '.join(no_markers_langs)} — student editor will be blank"
+        )
 
     # Check test_case_id
     tc_id = problem.get("test_case_id") or ""
@@ -781,6 +820,12 @@ def _apply_fixes(client: httpx.Client, csrf: str, problem: dict, fixes: dict) ->
             if code and isinstance(code, str):
                 # Auto-wrap bare code into //PREPEND/TEMPLATE/APPEND format
                 merged_template[lang] = _ensure_template_markers(code, lang)
+        # Also normalize any existing templates that lack markers but were not fixed by LLM
+        for lang in ("C", "C++", "Java", "Python3"):
+            if lang not in fixes["template"] or not fixes["template"].get(lang):
+                existing = merged_template.get(lang, "") or ""
+                if existing.strip() and "//TEMPLATE BEGIN" not in existing:
+                    merged_template[lang] = _ensure_template_markers(existing, lang)
         updated["template"] = merged_template
 
     # Apply text field fixes
