@@ -575,7 +575,7 @@ onBeforeUnmount(() => {
     <header class="top-nav">
       <div class="top-brand">
         <img src="/logo.svg" alt="CDUT AI" class="top-logo" />
-        <span class="top-brand-name">CDUT AI \u5b66\u4e60\u52a9\u624b</span>
+        <span class="top-brand-name">CDUT AI 学习助手</span>
       </div>
       <div class="tabs" v-if="!requiresAuth">
         <button :class="{ active: activeTab === 'home' }" @click="activeTab = 'home'">主页</button>
