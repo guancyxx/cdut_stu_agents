@@ -30,9 +30,9 @@ celery_app.conf.update(
     task_reject_on_worker_lost=True,
     # concurrency — single worker processes one task at a time
     worker_concurrency=1,
-    # timeouts
-    task_soft_time_limit=int(settings.ollama_timeout) + 30,
-    task_time_limit=int(settings.ollama_timeout) + 60,
+    # timeouts (matched to Xiaomi API speed: ~15-60s per inference)
+    task_soft_time_limit=int(settings.xiaomi_timeout) + 60,
+    task_time_limit=int(settings.xiaomi_timeout) + 120,
     # result expiry — audit results kept for 7 days
     result_expires=86400 * 7,
     # route all background tasks to the audit queue
@@ -42,9 +42,9 @@ celery_app.conf.update(
     },
     # Beat schedule: periodic problem audit + submission fallback compensation
     beat_schedule={
-        "audit-next-problem-every-10-min": {
+        "audit-next-problem-every-100s": {
             "task": "app.tasks.problem_auditor.audit_next_problem",
-            "schedule": 600,  # 600 seconds = 10 minutes
+            "schedule": settings.audit_beat_interval,  # ~100s → 3 audits / 5 min
         },
         "retry-submission-dlq-every-5-min": {
             "task": "app.tasks.submission_events.retry_submission_dlq",

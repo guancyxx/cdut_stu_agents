@@ -27,9 +27,24 @@ class Settings:
     llm_retry_delay: float = 2.0
 
     # LLM (local Ollama — used by background audit tasks)
+    # qwen3.6 is a thinking model; _call_ollama sends think=False to disable reasoning
     ollama_base_url: str = os.getenv("LITE_OLLAMA_BASE_URL", "http://172.17.0.1:11435").strip()
-    ollama_model: str = os.getenv("LITE_OLLAMA_MODEL", "gemma4:31b").strip()
-    ollama_timeout: float = float(os.getenv("LITE_OLLAMA_TIMEOUT", "600"))
+    ollama_model: str = os.getenv("LITE_OLLAMA_MODEL", "qwen3.6:latest").strip()
+    ollama_timeout: float = float(os.getenv("LITE_OLLAMA_TIMEOUT", "300"))
+
+    # LLM (Xiaomi MiniMax API — used by problem auditor)
+    # Replace Ollama with Xiaomi's mimo-v2-pro for better audit quality and speed.
+    xiaomi_api_key: str = os.getenv("LITE_XIAOMI_API_KEY", "").strip()
+    xiaomi_api_url: str = os.getenv(
+        "LITE_XIAOMI_API_URL",
+        "https://token-plan-sgp.xiaomimimo.com/v1/chat/completions",
+    ).strip()
+    xiaomi_model: str = os.getenv("LITE_XIAOMI_MODEL", "mimo-v2-pro").strip()
+    xiaomi_timeout: float = float(os.getenv("LITE_XIAOMI_TIMEOUT", "180"))
+
+    # Audit rate control: process 3 problems every 5 minutes (300s).
+    # Beat fires every 100s; with ~1 problem done in ~60s, 3 in 5 min.
+    audit_beat_interval: int = int(os.getenv("LITE_AUDIT_BEAT_INTERVAL", "100"))
 
     # OJ Admin API (used by problem auditor to fetch/patch problems)
     oj_api_url: str = os.getenv("OJ_API_URL", "http://oj-backend:8000").strip()

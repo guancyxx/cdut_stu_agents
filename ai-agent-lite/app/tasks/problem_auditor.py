@@ -1,24 +1,19 @@
 """Background Celery task: problem quality auditor.
 
-Fetches problems from the OJ Admin API, asks a local LLM (Ollama) to
-evaluate completeness and compliance, and auto-fixes issues by writing
-back corrected starter code / test cases / metadata.
+Audits all local (custom-*) OJ problems via Xiaomi MiniMax LLM (mimo-v2-pro),
+evaluating completeness, removing non-OJ content, deduplicating garbage,
+reclassifying difficulty, and adding algorithmic tags.
 
-Key design decisions:
-- Uses a *separate* Ollama LLM (gemma4:31b) instead of the cloud LLM,
-  because audit runs are long, batch-oriented, and must not consume
-  chat-rate API quota.
-- Avoids re-auditing already-processed problems via the problem_audit
-  DB table (status != 'pending').
-- Supports ``force=true`` to re-audit everything regardless of status.
-- Each problem is audited as an individual Celery sub-task for
-  fine-grained progress tracking and automatic retry on failure.
-- The beat-scheduled ``audit_next_problem`` runs every 10 minutes and
-  picks exactly ONE un-audited problem at a time, ensuring the local
-  GPU is never overloaded with concurrent LLM inference requests.
+Key changes from v2 (Ollama):
+- Uses Xiaomi MiniMax API (mimo-v2-pro) instead of local Ollama GPU.
+- Direct PostgreSQL queries bypass broken OJ Admin API pagination.
+- Beat fires every 100s (3 audits / 5 min).
+- Deduplicates boilerplate like "例五、例六", removes non-OJ items.
+- Full difficulty reclassification + algorithm tag assignment.
 """
 import json
 import logging
+import re as _re
 import uuid
 from datetime import datetime, timezone
 
@@ -29,18 +24,20 @@ from app.config import settings
 
 logger = logging.getLogger("ai-agent-lite.audit")
 
+# All local problem IDs start with this prefix.
+LOCAL_PREFIX = "custom-"
+
+
 # ---------------------------------------------------------------------------
-# OJ Admin API helpers (synchronous — Celery workers are sync by default)
+# OJ Admin API helpers (synchronous)
 # ---------------------------------------------------------------------------
 
 def _oj_login() -> tuple[httpx.Client, str]:
     """Authenticate with the OJ Admin API and return (client, csrf_token)."""
     client = httpx.Client(base_url=settings.oj_api_url, timeout=30.0)
-    # prime CSRF cookie
     r = client.get("/api/profile")
     r.raise_for_status()
     csrf = client.cookies.get("csrftoken", "")
-    # login
     r = client.post(
         "/api/login",
         json={"username": settings.oj_admin_user, "password": settings.oj_admin_pass},
@@ -53,11 +50,6 @@ def _oj_login() -> tuple[httpx.Client, str]:
 
 
 def _resolve_db_id(client: httpx.Client, csrf: str, display_id: str) -> int:
-    """Resolve a problem display_id to its integer db_id via keyword search.
-
-    Uses the OJ admin API's keyword filter so only a single page request is
-    needed instead of full pagination.  Falls back to 0 if not found.
-    """
     r = client.get(
         "/api/admin/problem",
         params={"keyword": display_id, "limit": 10, "page": 1},
@@ -73,50 +65,7 @@ def _resolve_db_id(client: httpx.Client, csrf: str, display_id: str) -> int:
     return 0
 
 
-def _fetch_problem_list(client: httpx.Client, csrf: str, limit: int = 0) -> list[dict]:
-    """Fetch problem summaries from the OJ Admin API.
-
-    Args:
-        limit: Maximum number of problems to fetch. 0 means all.
-               For large OJ instances, use a reasonable limit (e.g. 50-200).
-    """
-    problems = []
-    page = 1
-    per_page = 100
-    while True:
-        r = client.get(
-            "/api/admin/problem",
-            params={"limit": per_page, "page": page},
-            headers={"X-CSRFToken": csrf},
-        )
-        r.raise_for_status()
-        data = r.json()
-        if data.get("error") is not None:
-            break
-        results = data["data"]["results"]
-        if not results:
-            break
-        problems.extend(results)
-        # Stop if we have enough
-        if limit > 0 and len(problems) >= limit:
-            problems = problems[:limit]
-            break
-        # Stop if this page was not full (no more pages)
-        if len(results) < per_page:
-            break
-        page += 1
-
-        # Safety: avoid runaway pagination on very large databases
-        if limit == 0 and page > 5000:
-            logger.warning("Pagination safety limit reached at page %d, stopping fetch", page)
-            break
-
-    logger.info("Fetched %d problems from OJ", len(problems))
-    return problems
-
-
 def _fetch_problem_detail(client: httpx.Client, csrf: str, db_id: int) -> dict | None:
-    """Get full detail for a single problem."""
     r = client.get(
         "/api/admin/problem",
         params={"id": db_id},
@@ -131,45 +80,56 @@ def _fetch_problem_detail(client: httpx.Client, csrf: str, db_id: int) -> dict |
 
 
 def _update_problem(client: httpx.Client, csrf: str, payload: dict) -> bool:
-    """PUT /api/admin/problem to update a problem. Returns True on success."""
     r = client.put(
         "/api/admin/problem",
         json=payload,
         headers={"X-CSRFToken": csrf},
     )
     if r.status_code >= 400:
-        logger.error("Problem update failed id=%s status=%d: %s",
-                     payload.get("_id"), r.status_code, r.text[:300])
+        logger.error(
+            "Problem update failed id=%s status=%d: %s",
+            payload.get("_id"), r.status_code, r.text[:300],
+        )
         return False
     return True
 
 
 # ---------------------------------------------------------------------------
-# Ollama LLM call (synchronous, used in Celery worker)
+# Xiaomi MiniMax LLM call (replaces Ollama)
 # ---------------------------------------------------------------------------
 
-def _call_ollama(prompt: str) -> str:
-    """Send a completion request to the local Ollama instance.
+def _call_xiaomi(system_prompt: str, user_prompt: str) -> str:
+    """Send a completion request to Xiaomi MiniMax API.
 
-    Uses the non-streaming endpoint for simplicity in background tasks.
+    Returns stripped response text. Raises on failure.
     """
-    url = settings.ollama_base_url.rstrip("/") + "/api/chat"
-    payload = {
-        "model": settings.ollama_model,
-        "messages": [{"role": "user", "content": prompt}],
-        "stream": False,
-        "keep_alive": "0",  # Immediately unload model from VRAM after response
-        "options": {
-            "temperature": 0.2,
-            "num_predict": 4096,
-        },
+    url = settings.xiaomi_api_url
+    headers = {
+        "Authorization": f"Bearer {settings.xiaomi_api_key}",
+        "Content-Type": "application/json",
     }
-    timeout = settings.ollama_timeout
-    with httpx.Client(timeout=timeout) as client:
-        r = client.post(url, json=payload)
+    payload = {
+        "model": settings.xiaomi_model,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        "temperature": 0.1,   # deterministic audit
+        "max_tokens": 32768,
+        "stream": False,
+    }
+    with httpx.Client(timeout=settings.xiaomi_timeout) as client:
+        r = client.post(url, json=payload, headers=headers)
         r.raise_for_status()
         data = r.json()
-        content = data.get("message", {}).get("content", "")
+        msg = data["choices"][0]["message"]
+        content = msg.get("content", "") or ""
+        # Fallback: thinking models put output in reasoning_content
+        if not content.strip():
+            content = msg.get("reasoning_content", "") or ""
+        # Strip markdown fences
+        content = _re.sub(r'^```(?:json)?\s*\n?', '', content.strip())
+        content = _re.sub(r'\n?```\s*$', '', content)
         return content.strip()
 
 
@@ -177,183 +137,244 @@ def _call_ollama(prompt: str) -> str:
 # Prompt building
 # ---------------------------------------------------------------------------
 
-def _build_audit_prompt(problem: dict) -> str:
-    """Build the LLM audit prompt for a single problem."""
-    from app.prompts import get_prompt
-    template = get_prompt("problem_auditor")
-    if not template:
-        template = _FALLBACK_PROMPT
+_AUDIT_SYSTEM = """You are an expert competitive-programming problem curator and auditor for a university-level Online Judge (OJ).
 
-    # Serialize the problem data for the LLM to inspect
-    problem_data = json.dumps(problem, ensure_ascii=False, indent=2)
+Your job is to evaluate and FIX a problem JSON. You receive the full database record.
+You must do ALL of the following in ONE pass:
 
-    return template.replace("{{PROBLEM_DATA}}", problem_data)
+## 1. LOCAL-ONLY ID Check
+Only problems with `_id` starting with `custom-` are local. Skip others.
 
+## 2. Deduplicate Boilerplate / Garbage
+Look for and REMOVE these patterns from `description` / `input_description` / `output_description`:
+- Lines like "例五、输入……例六、输出……", "样例五", "例3、", "输入样例5", any numbered examples beyond the first
+- Repeated placeholder text like "Button", "???", "暂无"
+- HTML residue: `<br>`, `<p>`, `&nbsp;`, `&#039;`
+- Any sentence that is NOT part of the actual problem statement
 
-_FALLBACK_PROMPT = """You are an expert competitive programming problem quality auditor.
+## 3. Non-OJ Content Detection (CRITICAL)
+If the problem is NOT an algorithmic/programming problem, flag it as `"status": "remove"` with `"reason"`.
+Non-OJ content includes:
+- "输出一首古诗" / "打印九九乘法表" / "print a poem"
+- Anything asking to output art, poems, ASCII pictures
+- Trivial print statements with no algorithmic thinking
+- Problems that can be solved with a single `print("...")` without input processing
 
-You will be given a JSON object representing a problem from an Online Judge system.
-Your job is to evaluate the problem against these criteria and respond in **valid JSON only**:
+## 4. Complete Structure Enforcement
+Every VALID problem MUST have:
+- `title`: clear, no trailing spaces, no NBSP
+- `description`: full problem text (story + task), cleaned, >= 50 chars
+- `input_description`: input format specification
+- `output_description`: output format specification
+- `samples`: at least 1 {input, output} pair with real data
+- `hint`: optional but encouraged
 
-1. **completeness**: Does the problem have a clear title, description, input description, output description, and at least 1 sample?
-2. **test_cases**: Does the problem have valid test cases? (test_case_id non-empty)
-3. **starter_code**: Does the problem have meaningful starter code templates for C, C++, Java, and Python3?
-   Templates must include a solve() function signature and a main() that calls it.
-4. **judge_compatibility**: Will the starter code compile and run on the judge?
-   - C/C++ must have `#include` headers and `int main()`
-   - Java must have `public class Main` with `public static void main`
-   - Python3 must have `def solve()` and `if __name__ == '__main__'`
-5. **metadata**: Does the problem have proper difficulty, source, tags, and time/memory limits?
+## 5. Difficulty Reclassification (REQUIRED)
+IGNORE the existing `difficulty` field. Re-evaluate based on:
+- **Low**: simple arithmetic, conditionals, basic loops, no data structures
+- **Mid**: arrays, sorting, greedy, basic DP, binary search, strings, hashing
+- **High**: complex DP, graph algorithms (BFS/DFS/Dijkstra/MST), segment trees, advanced math, flow
 
-Respond with a JSON object:
-```json
-{
-  "status": "pass|fail",
-  "issues": ["list of specific issues found"],
-  "fixes": {
-    "template": {"C": "...", "C++": "...", "Java": "...", "Python3": "..."},
-    "title": "corrected title if needed, else null",
-    "input_description": "corrected input desc if needed, else null",
-    "output_description": "corrected output desc if needed, else null",
-    "samples": [{"input": "...", "output": "..."}],
-    "difficulty": "Low|Mid|High",
-    "source": "source if needed",
-    "tags": ["tag1", "tag2"]
-  }
-}
+## 6. Algorithm Tag Assignment (REQUIRED)
+Provide at least 1-3 tags from this list (or related terms):
+排序, 二分, 搜索, DP/动态规划, 贪心, 图论, 并查集, 最短路, 树, 线段树,
+字符串, 哈希, 数学, 数论, 模拟, 枚举, 递归, 回溯, 分治, 前缀和,
+差分, 双指针, 滑动窗口, 单调栈, 位运算, 组合数学, 博弈论, 计算几何
+
+## 7. Starter Code Templates (MUST use markers)
+For EVERY language (C, C++, Java, Python3), produce or verify templates using:
+```
+//PREPEND BEGIN
+<#include / imports / class opening>
+//PREPEND END
+
+//TEMPLATE BEGIN
+<solve() with typed params + return type, NO I/O>
+//TEMPLATE END
+
+//APPEND BEGIN
+<main() reads input, calls solve(), prints return>
+//APPEND END
 ```
 
-If status is "pass", fixes can all be null.
-If status is "fail", provide corrected values in fixes for every issue you found.
+CRITICAL RULES:
+- All languages use `//` markers (even Python3)
+- solve() takes typed parameters, returns value, does NO I/O
+- main() reads stdin, calls solve(), prints result
+- Template must match the problem's actual input format from `input_description`
+- Include `# Example: solve(arg1, arg2) -> expected_output`
 
-Problem data:
-{{PROBLEM_DATA}}
+## 8. Metadata
+- `source`: leave as-is unless empty, then set to "CDUT OJ"
+- `languages`: must include ["C","C++","Java","Python3"]
+- `time_limit` and `memory_limit`: keep existing
+
+## Response Format
+Output ONLY this JSON, no markdown fences, no text before/after:
+
+{
+  "status": "pass|fail|remove",
+  "reason": "if remove: why this is not an OJ problem",
+  "issues": ["list of specific issues found, empty if pass"],
+  "fixes": {
+    "title": "cleaned title or null",
+    "description": "cleaned description with garbage removed or null",
+    "input_description": "cleaned or null",
+    "output_description": "cleaned or null",
+    "hint": "hint text or null",
+    "samples": [{"input": "...", "output": "..."}],
+    "difficulty": "Low|Mid|High",
+    "tags": ["tag1", "tag2", "tag3"],
+    "source": "CDUT OJ or existing",
+    "template": {
+      "C": "full C template with //PREPEND/TEMPLATE/APPEND markers or null",
+      "C++": "full C++ template with markers or null",
+      "Java": "full Java template with markers or null",
+      "Python3": "full Python3 template with markers or null"
+    }
+  }
+}
+
+If status is "pass", put nulls in fixes. If "remove", fixes can be empty.
+For "fail", provide corrections for every issue found.
 """
 
 
+def _build_audit_prompt(problem: dict) -> str:
+    """Build user prompt with the problem data."""
+    problem_data = json.dumps(problem, ensure_ascii=False, indent=2)
+    return f"Audit the following problem:\n\n{problem_data}"
+
+
 # ---------------------------------------------------------------------------
-# Database helpers (sync — Celery worker uses psycopg2 directly)
+# PostgreSQL direct helpers (bypasses broken OJ API pagination)
 # ---------------------------------------------------------------------------
 
-def _get_all_audited_ids() -> set[str]:
-    """Fetch all problem_display_ids that have a successful audit record.
+# In-memory dedup: prevent a Beat tick from picking the same problem that
+# the previous tick's task hasn't finished writing to the DB yet.
+_in_flight_ids: set[str] = set()
 
-    Returns a set of display IDs for fast membership checking.
-    Only includes records with status 'pass' (skip on 'fail' so they get retried).
-    """
+
+def _pg_connect():
+    """Return a psycopg2 connection to the OJ database."""
     import psycopg2
     db_url = settings.db_url.replace("+asyncpg", "")
-    conn = psycopg2.connect(db_url)
+    return psycopg2.connect(db_url)
+
+
+def _get_all_audited_ids() -> set[str]:
+    """Return set of local problem display_ids that already have an audit record."""
+    conn = _pg_connect()
     try:
         with conn.cursor() as cur:
             cur.execute(
                 "SELECT problem_display_id FROM {schema}.problem_audit "
-                "WHERE status = 'pass'".format(schema=settings.db_schema)
+                "WHERE status = 'pass'".format(schema=settings.db_schema),
             )
             return {row[0] for row in cur.fetchall()}
     finally:
         conn.close()
 
 
-def _get_next_unaudited_problem() -> dict | None:
-    """Fetch ONE un-audited problem from the OJ.
+def _get_next_local_unaudited() -> dict | None:
+    """Find ONE local (custom-*) problem not yet audited, via PostgreSQL.
 
-    Strategy:
-    1. Get all already-audited display_ids from the DB.
-    2. Fetch the latest page of problems from the OJ.
-    3. Return the first problem whose _id is not in the audit table.
-       If all on the first page are audited, fetch more pages.
-    Returns None if all problems are audited.
+    Returns dict {id, _id, title} or None if all local problems are audited.
+    Excludes ids in the in-memory _in_flight_ids set to avoid double-audit.
     """
-    import psycopg2
-
-    # Step 1: get audited ids
-    db_url = settings.db_url.replace("+asyncpg", "")
-    conn = psycopg2.connect(db_url)
-    audited_ids: set[str] = set()
+    conn = _pg_connect()
     try:
         with conn.cursor() as cur:
-            cur.execute(
-                "SELECT problem_display_id FROM {schema}.problem_audit".format(
-                    schema=settings.db_schema
-                )
-            )
-            audited_ids = {row[0] for row in cur.fetchall()}
+            # Build dynamic NOT IN for in-flight ids
+            in_flight_clause = ""
+            in_flight_params = ()
+            if _in_flight_ids:
+                placeholders = ",".join(["%s"] * len(_in_flight_ids))
+                in_flight_clause = f"AND p._id NOT IN ({placeholders})"
+                in_flight_params = tuple(sorted(_in_flight_ids))
+
+            cur.execute("""
+                SELECT p.id, p._id, p.title
+                FROM problem p
+                WHERE p._id LIKE 'custom-%%'
+                  AND p._id NOT IN (
+                      SELECT problem_display_id
+                      FROM {schema}.problem_audit
+                  )
+                  {in_flight}
+                ORDER BY p.id
+                LIMIT 1
+            """.format(
+                schema=settings.db_schema,
+                in_flight=in_flight_clause,
+            ), in_flight_params)
+            row = cur.fetchone()
+            if row:
+                return {"id": row[0], "_id": row[1], "title": row[2]}
+            return None
     finally:
         conn.close()
 
-    # Step 2: paginate through OJ to find an un-audited problem
-    try:
-        client, csrf = _oj_login()
-    except Exception:
-        logger.exception("OJ login failed in _get_next_unaudited_problem")
-        return None
 
+def _get_all_local_problems() -> list[dict]:
+    """Return ALL local problems (id, _id, title) via PostgreSQL."""
+    conn = _pg_connect()
     try:
-        page = 1
-        per_page = 100
-        max_pages = 100  # safety: don't scan more than 100 pages
-        while page <= max_pages:
-            r = client.get(
-                "/api/admin/problem",
-                params={"limit": per_page, "page": page},
-                headers={"X-CSRFToken": csrf},
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT id, _id, title FROM problem WHERE _id LIKE 'custom-%%' ORDER BY id"
             )
-            r.raise_for_status()
-            data = r.json()
-            if data.get("error") is not None or not data.get("data", {}).get("results"):
-                break
-
-            results = data["data"]["results"]
-            for p in results:
-                if p["_id"] not in audited_ids:
-                    logger.info("Found un-audited problem: _id=%s (page %d)", p["_id"], page)
-                    return p
-
-            if len(results) < per_page:
-                break
-            page += 1
-    except Exception:
-        logger.exception("OJ fetch failed in _get_next_unaudited_problem")
-        return None
+            return [{"id": r[0], "_id": r[1], "title": r[2]} for r in cur.fetchall()]
     finally:
-        client.close()
+        conn.close()
 
-    logger.info("All problems are audited (scanned %d pages)", page)
-    return None
 
+def _get_local_problem_count() -> int:
+    """Count how many local (custom-*) problems exist."""
+    conn = _pg_connect()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT count(*) FROM problem WHERE _id LIKE 'custom-%%'")
+            return cur.fetchone()[0]
+    finally:
+        conn.close()
+
+
+# ---------------------------------------------------------------------------
+# Database helpers
+# ---------------------------------------------------------------------------
 
 def _upsert_audit_record(
-    problem_display_id: str,
-    problem_db_id: int,
+    display_id: str,
+    db_id: int,
     audit_status: str,
     issues: list,
     fixes: dict,
-    llm_raw_response: str,
+    llm_raw: str,
+    extra: dict | None = None,
 ) -> None:
     """Insert or update an audit record."""
     import psycopg2
-    db_url = settings.db_url.replace("+asyncpg", "")
-    conn = psycopg2.connect(db_url)
+    conn = _pg_connect()
     try:
         with conn.cursor() as cur:
-            existing = cur.execute(
+            cur.execute(
                 "SELECT id FROM {schema}.problem_audit WHERE problem_display_id = %s "
                 "ORDER BY created_at DESC LIMIT 1".format(schema=settings.db_schema),
-                (problem_display_id,),
+                (display_id,),
             )
             existing = cur.fetchone()
 
             now = datetime.now(timezone.utc)
-            issues_json = json.dumps(issues, ensure_ascii=False)
-            fixes_json = json.dumps(fixes, ensure_ascii=False)
+            issues_j = json.dumps(issues, ensure_ascii=False)
+            fixes_j = json.dumps(fixes, ensure_ascii=False)
 
             if existing:
                 cur.execute(
                     "UPDATE {schema}.problem_audit SET "
                     "status=%s, issues=%s, fixes=%s, llm_raw_response=%s, "
                     "updated_at=%s WHERE id=%s".format(schema=settings.db_schema),
-                    (audit_status, issues_json, fixes_json, llm_raw_response, now, existing[0]),
+                    (audit_status, issues_j, fixes_j, llm_raw, now, existing[0]),
                 )
             else:
                 cur.execute(
@@ -363,34 +384,91 @@ def _upsert_audit_record(
                     "VALUES (%s, %s, %s, %s, %s, %s, %s, %s)".format(
                         schema=settings.db_schema
                     ),
-                    (problem_display_id, problem_db_id, audit_status,
-                     issues_json, fixes_json, llm_raw_response, now, now),
+                    (display_id, db_id, audit_status,
+                     issues_j, fixes_j, llm_raw, now, now),
                 )
             conn.commit()
     finally:
         conn.close()
 
 
+def _delete_audit_record(display_id: str) -> None:
+    """Remove all audit records for a problem (allows re-audit)."""
+    conn = _pg_connect()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "DELETE FROM {schema}.problem_audit WHERE problem_display_id = %s".format(
+                    schema=settings.db_schema
+                ),
+                (display_id,),
+            )
+            conn.commit()
+    finally:
+        conn.close()
+
+
+def _clear_all_audit_records() -> int:
+    """Delete ALL audit records. Returns count of deleted rows."""
+    conn = _pg_connect()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "DELETE FROM {schema}.problem_audit".format(schema=settings.db_schema)
+            )
+            deleted = cur.rowcount
+            conn.commit()
+            return deleted
+    finally:
+        conn.close()
+
+
 # ---------------------------------------------------------------------------
-# Starter code templates (defaults when missing)
+# Quick pre-check
+# ---------------------------------------------------------------------------
+
+def _quick_check_problem(problem: dict) -> list[str]:
+    """Fast heuristic pre-check."""
+    issues = []
+    if not problem.get("title") or not problem["title"].strip():
+        issues.append("Missing or empty title")
+    desc = problem.get("description") or ""
+    if not desc.strip() or len(desc.strip()) < 10:
+        issues.append("Description too short or empty")
+    samples = problem.get("samples") or []
+    if not samples:
+        issues.append("No sample input/output")
+    template = problem.get("template") or {}
+    for lang in ("C", "C++", "Java", "Python3"):
+        code = template.get(lang, "") or ""
+        if not code.strip():
+            issues.append(f"Missing starter code for {lang}")
+        elif "//TEMPLATE BEGIN" not in code:
+            issues.append(f"Starter code lacks markers for {lang}")
+        elif _re.search(r'void\s+solve\s*\(\s*(void)?\s*\)', code):
+            issues.append(
+                f"void solve(void) in {lang} — solve() must take params and return result"
+            )
+    if not (problem.get("test_case_id") or "").strip():
+        issues.append("Empty test_case_id")
+    return issues
+
+
+# ---------------------------------------------------------------------------
+# DEFAULT_TEMPLATES (fallback)
 # ---------------------------------------------------------------------------
 
 DEFAULT_TEMPLATES = {
-    # TEMPLATE section: solve() takes semantic params, returns result — NO I/O inside solve().
-    # APPEND section: main() reads stdin, calls solve(), prints result.
     "C": (
         "//PREPEND BEGIN\n"
         "#include <stdio.h>\n"
-        "//PREPEND END\n"
-        "\n"
+        "//PREPEND END\n\n"
         "//TEMPLATE BEGIN\n"
         "int solve(int n) {\n"
-        "    // Example: solve(5) -> 25\n"
         "    // TODO: implement and return result\n"
         "    return 0;\n"
         "}\n"
-        "//TEMPLATE END\n"
-        "\n"
+        "//TEMPLATE END\n\n"
         "//APPEND BEGIN\n"
         "int main(void) {\n"
         "    int n; scanf(\"%d\", &n);\n"
@@ -403,16 +481,13 @@ DEFAULT_TEMPLATES = {
         "//PREPEND BEGIN\n"
         "#include <bits/stdc++.h>\n"
         "using namespace std;\n"
-        "//PREPEND END\n"
-        "\n"
+        "//PREPEND END\n\n"
         "//TEMPLATE BEGIN\n"
         "int solve(int n) {\n"
-        "    // Example: solve(5) -> 25\n"
         "    // TODO: implement and return result\n"
         "    return 0;\n"
         "}\n"
-        "//TEMPLATE END\n"
-        "\n"
+        "//TEMPLATE END\n\n"
         "//APPEND BEGIN\n"
         "int main() {\n"
         "    ios::sync_with_stdio(false); cin.tie(nullptr);\n"
@@ -423,19 +498,15 @@ DEFAULT_TEMPLATES = {
     ),
     "Java": (
         "//PREPEND BEGIN\n"
-        "import java.util.*;\n"
-        "\n"
+        "import java.util.*;\n\n"
         "public class Main {\n"
-        "//PREPEND END\n"
-        "\n"
+        "//PREPEND END\n\n"
         "//TEMPLATE BEGIN\n"
         "    public static int solve(int n) {\n"
-        "        // Example: solve(5) -> 25\n"
         "        // TODO: implement and return result\n"
         "        return 0;\n"
         "    }\n"
-        "//TEMPLATE END\n"
-        "\n"
+        "//TEMPLATE END\n\n"
         "//APPEND BEGIN\n"
         "    public static void main(String[] args) {\n"
         "        Scanner sc = new Scanner(System.in);\n"
@@ -446,18 +517,12 @@ DEFAULT_TEMPLATES = {
         "//APPEND END\n"
     ),
     "Python3": (
-        "//PREPEND BEGIN\n"
-        "\n"
-        "//PREPEND END\n"
-        "\n"
+        "//PREPEND BEGIN\n\n//PREPEND END\n\n"
         "//TEMPLATE BEGIN\n"
         "def solve(n: int) -> int:\n"
-        "    # Example: solve(5) -> 25\n"
         "    # TODO: implement and return result\n"
-        "    return 0\n"
-        "\n"
-        "//TEMPLATE END\n"
-        "\n"
+        "    return 0\n\n"
+        "//TEMPLATE END\n\n"
         "//APPEND BEGIN\n"
         "if __name__ == '__main__':\n"
         "    n = int(input())\n"
@@ -468,71 +533,185 @@ DEFAULT_TEMPLATES = {
 
 
 # ---------------------------------------------------------------------------
-# Quick pre-check: skip problems that are clearly fine without LLM
+# Ensure marker format
 # ---------------------------------------------------------------------------
 
-def _quick_check_problem(problem: dict) -> list[str]:
-    """Fast heuristic check for obvious issues. Returns list of issue strings.
+def _ensure_template_markers(code: str, lang: str) -> str:
+    """Wrap bare code into QDUOJ's //PREPEND/TEMPLATE/APPEND marker format."""
+    if "//TEMPLATE BEGIN" in code:
+        return code
 
-    Empty list means no obvious issues detected (still needs LLM audit).
-    This is used to skip problems that are trivially incomplete.
-    """
-    issues = []
+    lines = code.split("\n")
 
-    # Check title
-    if not problem.get("title") or not problem["title"].strip():
-        issues.append("Missing or empty title")
+    if lang == "Python3":
+        prepend_lines = []
+        template_lines = []
+        append_lines = []
+        in_append = False
 
-    # Check description
-    desc = problem.get("description") or ""
-    if not desc.strip() or len(desc.strip()) < 10:
-        issues.append("Description too short or empty")
+        for line in lines:
+            s = line.strip()
+            if s.startswith("if __name__") or s == "if __name__ == '__main__':":
+                in_append = True
+                append_lines.append(line)
+                continue
+            if in_append:
+                append_lines.append(line)
+                continue
+            if s in ("import sys",) or s.startswith("import sys #"):
+                continue
+            if not template_lines and s.startswith("def solve"):
+                template_lines.append(line)
+                continue
+            if template_lines:
+                template_lines.append(line)
+            else:
+                prepend_lines.append(line)
 
-    # Check samples
-    samples = problem.get("samples") or []
-    if not samples:
-        issues.append("No sample input/output")
-
-    # Check template (starter code): must be non-empty AND use //PREPEND/TEMPLATE/APPEND markers
-    # AND solve() must have typed parameters and a return value (not void solve(void))
-    template = problem.get("template") or {}
-    missing_langs = []
-    no_markers_langs = []
-    void_solve_langs = []
-    for lang in ("C", "C++", "Java", "Python3"):
-        code = template.get(lang, "") or ""
-        if not code.strip():
-            missing_langs.append(lang)
-        elif "//TEMPLATE BEGIN" not in code:
-            no_markers_langs.append(lang)
-        else:
-            # Detect void solve(void) / void solve() pattern — no I/O separation
-            import re as _re
-            if _re.search(r'void\s+solve\s*\(\s*(void)?\s*\)', code):
-                void_solve_langs.append(lang)
-    if missing_langs:
-        issues.append(f"Missing starter code for: {', '.join(missing_langs)}")
-    if no_markers_langs:
-        issues.append(
-            f"Starter code lacks //PREPEND/TEMPLATE/APPEND markers for: "
-            f"{', '.join(no_markers_langs)} — student editor will be blank"
-        )
-    if void_solve_langs:
-        issues.append(
-            f"solve() has no parameters or return value in: {', '.join(void_solve_langs)} — "
-            f"main() must read input and pass parameters to solve(), solve() must return result"
+        pre = "\n".join(prepend_lines).strip()
+        tpl = "\n".join(template_lines)
+        app = "\n".join(append_lines)
+        return (
+            f"//PREPEND BEGIN\n{pre}\n//PREPEND END\n\n"
+            f"//TEMPLATE BEGIN\n{tpl}\n//TEMPLATE END\n\n"
+            f"//APPEND BEGIN\n{app}\n//APPEND END"
         )
 
-    # Check test_case_id
-    tc_id = problem.get("test_case_id") or ""
-    if not tc_id.strip():
-        issues.append("Empty test_case_id")
+    elif lang in ("C", "C++"):
+        prepend_lines, template_lines, append_lines = [], [], []
+        in_append = False
+        for line in lines:
+            s = line.strip()
+            if s.startswith("int main("):
+                in_append = True
+                append_lines.append(line)
+                continue
+            if in_append:
+                append_lines.append(line)
+                continue
+            if not template_lines and (s.startswith("void solve") or s.startswith("int solve")):
+                template_lines.append(line)
+                continue
+            if template_lines:
+                template_lines.append(line)
+            else:
+                prepend_lines.append(line)
 
-    return issues
+        pre = "\n".join(prepend_lines)
+        tpl = "\n".join(template_lines)
+        app = "\n".join(append_lines)
+        return (
+            f"//PREPEND BEGIN\n{pre}\n//PREPEND END\n\n"
+            f"//TEMPLATE BEGIN\n{tpl}\n//TEMPLATE END\n\n"
+            f"//APPEND BEGIN\n{app}\n//APPEND END"
+        )
+
+    elif lang == "Java":
+        prepend_lines, template_lines, append_lines = [], [], []
+        in_template, in_append, depth = False, False, 0
+        for line in lines:
+            s = line.strip()
+            if s.startswith("public static") and "solve" in s:
+                in_template = True
+                depth = 0
+                template_lines.append(line)
+                depth += line.count("{") - line.count("}")
+                continue
+            if in_template and not in_append:
+                template_lines.append(line)
+                depth += line.count("{") - line.count("}")
+                if depth <= 0 and "{" in "".join(template_lines):
+                    in_template = False
+                continue
+            if s.startswith("public static void main"):
+                in_append = True
+            if in_append:
+                append_lines.append(line)
+            else:
+                prepend_lines.append(line)
+
+        pre = "\n".join(prepend_lines)
+        tpl = "\n".join(template_lines)
+        app = "\n".join(append_lines)
+        return (
+            f"//PREPEND BEGIN\n{pre}\n//PREPEND END\n\n"
+            f"//TEMPLATE BEGIN\n{tpl}\n//TEMPLATE END\n\n"
+            f"//APPEND BEGIN\n{app}\n//APPEND END"
+        )
+
+    # unknown: everything in TEMPLATE
+    return (
+        "//PREPEND BEGIN\n\n//PREPEND END\n\n"
+        f"//TEMPLATE BEGIN\n{code}\n//TEMPLATE END\n\n"
+        "//APPEND BEGIN\n\n//APPEND END"
+    )
 
 
 # ---------------------------------------------------------------------------
-# Core audit task — audits exactly ONE problem per invocation
+# Fix application
+# ---------------------------------------------------------------------------
+
+def _apply_fixes(client: httpx.Client, csrf: str, problem: dict, fixes: dict) -> None:
+    """Apply LLM-suggested fixes via the OJ Admin API."""
+    updated = dict(problem)
+
+    if fixes.get("template"):
+        merged = dict(updated.get("template") or {})
+        for lang, code in fixes["template"].items():
+            if code and isinstance(code, str):
+                merged[lang] = _ensure_template_markers(code, lang)
+        for lang in ("C", "C++", "Java", "Python3"):
+            if lang not in fixes["template"] or not fixes["template"].get(lang):
+                existing = merged.get(lang, "") or ""
+                if existing.strip() and "//TEMPLATE BEGIN" not in existing:
+                    merged[lang] = _ensure_template_markers(existing, lang)
+        updated["template"] = merged
+
+    for field in ("title", "description", "input_description", "output_description", "hint"):
+        if fixes.get(field):
+            updated[field] = fixes[field]
+
+    if fixes.get("samples"):
+        updated["samples"] = fixes["samples"]
+
+    if fixes.get("difficulty"):
+        updated["difficulty"] = fixes["difficulty"]
+    if fixes.get("source"):
+        updated["source"] = fixes["source"]
+    if fixes.get("tags"):
+        updated["tags"] = fixes["tags"]
+
+    for required in ("_id", "id", "test_case_id", "io_mode", "languages",
+                     "rule_type", "spj", "visible"):
+        if required not in updated and required in problem:
+            updated[required] = problem[required]
+
+    ok = _update_problem(client, csrf, updated)
+    if not ok:
+        raise RuntimeError(f"PUT /api/admin/problem failed for _id={updated.get('_id')}")
+
+
+# ---------------------------------------------------------------------------
+# Parse LLM JSON response
+# ---------------------------------------------------------------------------
+
+def _parse_llm_response(raw: str) -> dict:
+    """Extract JSON from LLM response."""
+    start = raw.find("{")
+    end = raw.rfind("}") + 1
+    if start >= 0 and end > start:
+        try:
+            result = json.loads(raw[start:end])
+            if "status" in result:
+                return result
+        except json.JSONDecodeError:
+            pass
+    logger.warning("LLM response was not valid JSON; raw preview: %s", raw[:200])
+    return {"status": "error", "issues": ["LLM response was not valid JSON"], "fixes": {}}
+
+
+# ---------------------------------------------------------------------------
+# Core audit task — exactly ONE problem
 # ---------------------------------------------------------------------------
 
 @celery_app.task(
@@ -541,614 +720,194 @@ def _quick_check_problem(problem: dict) -> list[str]:
     max_retries=2,
     default_retry_delay=60,
     queue="audit",
-    soft_time_limit=600,   # 10 min soft (matches the beat interval)
-    time_limit=660,         # 11 min hard limit
+    soft_time_limit=300,
+    time_limit=360,
 )
 def audit_single_problem(self, problem_summary: dict) -> dict:
-    """Audit a single problem via LLM and auto-fix if needed.
-
-    Args:
-        problem_summary: dict with at least _id and id.
-            If id == 0 the task will resolve the real db_id via the problem list.
-    Returns:
-        dict with audit result.
-    """
+    """Audit a single problem via Xiaomi LLM and auto-fix if needed."""
     display_id = problem_summary["_id"]
     db_id = problem_summary.get("id", 0)
     title = problem_summary.get("title", display_id)
 
-    # Resolve real db_id when caller passes 0 (e.g. triggered via /audit/run/<display_id>)
     if db_id == 0:
         try:
             client, csrf = _oj_login()
             db_id = _resolve_db_id(client, csrf, display_id)
             if db_id:
-                title_r = [p for p in [_fetch_problem_detail(client, csrf, db_id) or {}] if p]
-                title = (title_r[0].get("title") if title_r else None) or display_id
+                detail = _fetch_problem_detail(client, csrf, db_id)
+                title = (detail or {}).get("title") or display_id
                 logger.info("Resolved display_id=%s -> db_id=%d", display_id, db_id)
             else:
                 logger.error("Cannot resolve db_id for display_id=%s", display_id)
-                return {"_id": display_id, "status": "error", "message": "Problem not found in OJ list"}
+                return {"_id": display_id, "status": "error", "message": "Not found in OJ list"}
         except Exception as exc:
             logger.error("Failed to resolve db_id for %s: %s", display_id, exc)
-            return {"_id": display_id, "status": "error", "message": f"Failed to resolve db_id: {exc}"}
+            return {"_id": display_id, "status": "error", "message": f"resolve: {exc}"}
 
-    return _do_audit_problem(display_id, db_id, title, retry_on_failure=self)
+    return _do_audit_problem(display_id, db_id, title, retry=self)
 
 
 def _do_audit_problem(
-    display_id: str,
-    db_id: int,
-    title: str,
-    retry_on_failure=None,
+    display_id: str, db_id: int, title: str, retry=None,
 ) -> dict:
-    """Core audit logic: fetch problem detail -> LLM audit -> save -> auto-fix.
+    """Core audit logic."""
+    logger.info("Auditing _id=%s (db_id=%d, title=%s)", display_id, db_id, title)
 
-    Args:
-        display_id: Problem display ID (e.g. "LQ1273").
-        db_id: Problem database ID.
-        title: Problem title.
-        retry_on_failure: Optional Celery self reference for retry support.
-            Pass None when called from non-Celery context (e.g. beat task).
-    Returns:
-        dict with audit result.
-    """
-    logger.info("Auditing problem _id=%s (db_id=%d, title=%s)", display_id, db_id, title)
-
-    # Step 1: Login to OJ and fetch full problem detail
     client = None
     try:
         client, csrf = _oj_login()
         problem = _fetch_problem_detail(client, csrf, db_id)
         if problem is None:
-            return {"_id": display_id, "status": "error", "message": "Failed to fetch problem detail"}
+            return {"_id": display_id, "status": "error", "message": "Failed to fetch detail"}
     except Exception as exc:
-        logger.exception("OJ login/fetch failed for _id=%s", display_id)
-        if retry_on_failure:
-            raise retry_on_failure.retry(exc=exc)
+        logger.exception("OJ login/fetch failed _id=%s", display_id)
+        if retry:
+            raise retry.retry(exc=exc)
         raise
 
     try:
-        # Step 2: Ask LLM to audit
         prompt = _build_audit_prompt(problem)
         try:
-            raw_response = _call_ollama(prompt)
+            raw = _call_xiaomi(_AUDIT_SYSTEM, prompt)
         except Exception as exc:
-            logger.exception("Ollama call failed for _id=%s", display_id)
-            if retry_on_failure:
-                raise retry_on_failure.retry(exc=exc)
+            logger.exception("Xiaomi API call failed _id=%s", display_id)
+            if retry:
+                raise retry.retry(exc=exc)
             raise
 
-        # Step 3: Parse LLM response
-        audit_result = _parse_llm_response(raw_response)
+        result = _parse_llm_response(raw)
 
-        # Step 4: Save audit record
-        try:
-            _upsert_audit_record(
-                problem_display_id=display_id,
-                problem_db_id=db_id,
-                audit_status=audit_result["status"],
-                issues=audit_result.get("issues", []),
-                fixes=audit_result.get("fixes", {}),
-                llm_raw_response=raw_response,
-            )
-        except Exception:
-            logger.exception("DB save failed for _id=%s", display_id)
+        status = result.get("status", "error")
+        issues = result.get("issues", [])
+        fixes = result.get("fixes", {}) or {}
 
-        # Step 5: Auto-fix if status is "fail"
-        if audit_result["status"] == "fail" and audit_result.get("fixes"):
+        if status == "remove":
+            reason = result.get("reason", "Non-OJ problem")
+            logger.info("REMOVE %s: %s", display_id, reason)
+            _upsert_audit_record(display_id, db_id, "remove", [reason], {}, raw)
+            return {
+                "_id": display_id, "status": "remove",
+                "issues": [reason],
+            }
+
+        _upsert_audit_record(display_id, db_id, status, issues, fixes, raw)
+
+        if status == "fail" and fixes:
             try:
-                _apply_fixes(client, csrf, problem, audit_result["fixes"])
-                logger.info("Auto-fixed problem _id=%s", display_id)
+                _apply_fixes(client, csrf, problem, fixes)
+                logger.info("Auto-fixed _id=%s", display_id)
             except Exception:
-                logger.exception("Auto-fix failed for _id=%s", display_id)
-                try:
-                    _upsert_audit_record(
-                        problem_display_id=display_id,
-                        problem_db_id=db_id,
-                        audit_status="fix_failed",
-                        issues=audit_result.get("issues", []),
-                        fixes=audit_result.get("fixes", {}),
-                        llm_raw_response=raw_response,
-                    )
-                except Exception:
-                    pass
+                logger.exception("Auto-fix failed _id=%s", display_id)
+                _upsert_audit_record(display_id, db_id, "fix_failed", issues, fixes, raw)
 
-        return {
-            "_id": display_id,
-            "status": audit_result["status"],
-            "issues": audit_result.get("issues", []),
-        }
+        return {"_id": display_id, "status": status, "issues": issues}
     finally:
         if client:
             client.close()
 
 
 # ---------------------------------------------------------------------------
-# Beat-scheduled task: audit exactly ONE problem per tick (every 10 min)
+# Beat-scheduled task: audit ONE local problem per tick (every 100s)
 # ---------------------------------------------------------------------------
 
 @celery_app.task(
     name="app.tasks.problem_auditor.audit_next_problem",
     queue="audit",
-    soft_time_limit=600,
-    time_limit=660,
+    soft_time_limit=300,
+    time_limit=360,
 )
 def audit_next_problem() -> dict:
-    """Find and audit exactly ONE un-audited problem.
+    """Find and audit ONE un-audited local problem via PostgreSQL.
 
-    This is the task triggered by Celery Beat every 10 minutes.
-    It picks the next un-audited problem from OJ, runs the full
-    audit+fix pipeline on it, and returns the result.
-
-    The design ensures only one LLM inference runs at a time,
-    keeping the local GPU fully available for interactive use.
-
-    IMPORTANT: We run the audit logic directly (not via apply_async)
-    because concurrency=1 means calling .get() on a sub-task would
-    deadlock the sole worker.
+    Beat fires every 100s, so ~3 audits / 5 min.
+    Uses _in_flight_ids to prevent double-audit from overlapping ticks.
     """
-    problem = _get_next_unaudited_problem()
+    problem = _get_next_local_unaudited()
     if problem is None:
-        logger.info("No un-audited problems found — all done")
-        return {"status": "no_work", "message": "All problems audited"}
+        logger.info("No un-audited local problems — all done")
+        return {"status": "no_work", "message": "All local problems audited"}
 
     display_id = problem["_id"]
     db_id = problem["id"]
     title = problem.get("title", display_id)
-    logger.info("Beat tick: auditing problem _id=%s (db_id=%d, title=%s)",
-                display_id, db_id, title)
 
-    # Run the audit logic directly (no sub-task delegation)
-    return _do_audit_problem(display_id, db_id, title)
-
-
-def _parse_llm_response(raw: str) -> dict:
-    """Extract JSON from the LLM response, with fallback heuristics."""
-    # Try to find a JSON block in the response
-    json_start = raw.find("{")
-    json_end = raw.rfind("}") + 1
-    if json_start >= 0 and json_end > json_start:
-        try:
-            result = json.loads(raw[json_start:json_end])
-            # Validate required fields
-            if "status" in result:
-                return result
-        except json.JSONDecodeError:
-            pass
-
-    # Fallback: if no valid JSON, treat as error
-    logger.warning("Could not parse LLM response as JSON, treating as error")
-    return {
-        "status": "error",
-        "issues": ["LLM response was not valid JSON"],
-        "fixes": {},
-    }
-
-
-def _ensure_template_markers(code: str, lang: str) -> str:
-    """Ensure a template string uses the //PREPEND/TEMPLATE/APPEND marker format.
-
-    If the code already contains the markers, return it unchanged.
-    Otherwise, wrap the bare code into the correct marker structure for QDUOJ.
-
-    QDUOJ's parse_problem_template() regex matches ONLY '//PREFIX BEGIN/END'
-    markers (not '#'). Templates without markers are silently treated as empty,
-    causing students to see a blank editor. This function prevents that.
-    """
-    if "//TEMPLATE BEGIN" in code:
-        # Already has markers — trust it
-        return code
-
-    # Split bare code into prepend / template / append sections
-    lines = code.split("\n")
-
-    if lang == "Python3":
-        # Python3: find def solve() -> template, if __name__ -> append
-        # Also strip any 'import sys' from prepend (use input() instead)
-        prepend_lines = []
-        template_lines = []
-        append_lines = []
-        in_append = False
-
-        for line in lines:
-            stripped = line.strip()
-            if stripped.startswith("if __name__") or stripped == "if __name__ == '__main__':":
-                in_append = True
-                append_lines.append(line)
-                continue
-            if in_append:
-                append_lines.append(line)
-                continue
-            # Skip 'import sys' lines — we prefer input() for beginners
-            if stripped == "import sys" or stripped.startswith("import sys #"):
-                continue
-            # Def solve starts the template section
-            if not template_lines and stripped.startswith("def solve"):
-                template_lines.append(line)
-                continue
-            if template_lines:
-                template_lines.append(line)
-            else:
-                prepend_lines.append(line)
-
-        # Filter out empty-only prepend
-        prepend_text = "\n".join(prepend_lines).strip()
-        template_text = "\n".join(template_lines)
-        append_text = "\n".join(append_lines)
-
-        # Build marked template
-        result = f"//PREPEND BEGIN\n{prepend_text}\n//PREPEND END\n\n"
-        result += f"//TEMPLATE BEGIN\n{template_text}\n//TEMPLATE END\n\n"
-        result += f"//APPEND BEGIN\n{append_text}\n//APPEND END"
-        return result
-
-    elif lang in ("C", "C++"):
-        # C/C++: lines before void solve() -> prepend, void solve() -> template,
-        # int main() -> append
-        prepend_lines = []
-        template_lines = []
-        append_lines = []
-        in_append = False
-
-        for line in lines:
-            stripped = line.strip()
-            if stripped.startswith("int main("):
-                in_append = True
-                append_lines.append(line)
-                continue
-            if in_append:
-                append_lines.append(line)
-                continue
-            # Check if we're in the function body
-            if not template_lines and (stripped.startswith("void solve") or stripped.startswith("int solve")):
-                template_lines.append(line)
-                continue
-            if template_lines:
-                template_lines.append(line)
-            else:
-                prepend_lines.append(line)
-
-        prepend_text = "\n".join(prepend_lines)
-        template_text = "\n".join(template_lines)
-        append_text = "\n".join(append_lines)
-
-        result = f"//PREPEND BEGIN\n{prepend_text}\n//PREPEND END\n\n"
-        result += f"//TEMPLATE BEGIN\n{template_text}\n//TEMPLATE END\n\n"
-        result += f"//APPEND BEGIN\n{append_text}\n//APPEND END"
-        return result
-
-    elif lang == "Java":
-        # Java: find 'public static void solve' -> template,
-        # 'public static void main' -> append, everything before -> prepend
-        prepend_lines = []
-        template_lines = []
-        append_lines = []
-        in_template = False
-        in_append = False
-        brace_depth = 0
-
-        for line in lines:
-            stripped = line.strip()
-            if stripped.startswith("public static void solve"):
-                in_template = True
-                brace_depth = 0
-                template_lines.append(line)
-                brace_depth += line.count("{") - line.count("}")
-                continue
-            if in_template and not in_append:
-                template_lines.append(line)
-                brace_depth += line.count("{") - line.count("}")
-                if brace_depth <= 0 and "{" in "".join(template_lines):
-                    in_template = False
-                continue
-            if stripped.startswith("public static void main"):
-                in_append = True
-            if in_append:
-                append_lines.append(line)
-                continue
-            prepend_lines.append(line)
-
-        # If prepend ends with class opening, ensure it's there
-        prepend_text = "\n".join(prepend_lines)
-        template_text = "\n".join(template_lines)
-        append_text = "\n".join(append_lines)
-
-        result = f"//PREPEND BEGIN\n{prepend_text}\n//PREPEND END\n\n"
-        result += f"//TEMPLATE BEGIN\n{template_text}\n//TEMPLATE END\n\n"
-        result += f"//APPEND BEGIN\n{append_text}\n//APPEND END"
-        return result
-
-    # For unknown languages, just wrap everything in TEMPLATE
-    return f"//PREPEND BEGIN\n\n//PREPEND END\n\n//TEMPLATE BEGIN\n{code}\n//TEMPLATE END\n\n//APPEND BEGIN\n\n//APPEND END"
-
-
-def _apply_fixes(client: httpx.Client, csrf: str, problem: dict, fixes: dict) -> None:
-    """Apply LLM-suggested fixes to a problem via the OJ Admin API."""
-    updated = dict(problem)  # shallow copy
-
-    # Apply template fixes — ensure markers are present
-    if fixes.get("template"):
-        merged_template = dict(updated.get("template") or {})
-        for lang, code in fixes["template"].items():
-            if code and isinstance(code, str):
-                # Auto-wrap bare code into //PREPEND/TEMPLATE/APPEND format
-                merged_template[lang] = _ensure_template_markers(code, lang)
-        # Also normalize any existing templates that lack markers but were not fixed by LLM
-        for lang in ("C", "C++", "Java", "Python3"):
-            if lang not in fixes["template"] or not fixes["template"].get(lang):
-                existing = merged_template.get(lang, "") or ""
-                if existing.strip() and "//TEMPLATE BEGIN" not in existing:
-                    merged_template[lang] = _ensure_template_markers(existing, lang)
-        updated["template"] = merged_template
-
-    # Apply text field fixes
-    for field in ("title", "input_description", "output_description"):
-        if fixes.get(field):
-            updated[field] = fixes[field]
-
-    # Apply samples fix
-    if fixes.get("samples"):
-        updated["samples"] = fixes["samples"]
-
-    # Apply metadata fixes
-    if fixes.get("difficulty"):
-        updated["difficulty"] = fixes["difficulty"]
-    if fixes.get("source"):
-        updated["source"] = fixes["source"]
-    if fixes.get("tags"):
-        updated["tags"] = fixes["tags"]
-
-    # Ensure required fields are still present
-    for required in ("_id", "id", "test_case_id", "io_mode", "languages",
-                     "rule_type", "spj", "visible"):
-        if required not in updated and required in problem:
-            updated[required] = problem[required]
-
-    success = _update_problem(client, csrf, updated)
-    if not success:
-        raise RuntimeError(f"Problem update API returned error for _id={updated.get('_id')}")
+    # Mark as in-flight before audit starts
+    _in_flight_ids.add(display_id)
+    try:
+        logger.info("Beat tick: auditing _id=%s (db_id=%d)", display_id, db_id)
+        return _do_audit_problem(display_id, db_id, title)
+    finally:
+        _in_flight_ids.discard(display_id)
 
 
 # ---------------------------------------------------------------------------
-# Manual batch audit task — for on-demand use via API
+# Batch audit (on-demand via API)
 # ---------------------------------------------------------------------------
 
 @celery_app.task(
     name="app.tasks.problem_auditor.audit_all_problems",
     bind=True,
     queue="audit",
-    soft_time_limit=7200,  # 2 hours soft limit for the full batch
-    time_limit=7800,       # 2h10m hard limit
+    soft_time_limit=7200,
+    time_limit=7800,
 )
 def audit_all_problems(self, force: bool = False, limit: int = 0) -> dict:
-    """Orchestrate batch audit of all (or all un-audited) problems.
+    """Orchestrate batch audit of all local problems.
 
-    DISCLAIMER: This task dispatches multiple sub-tasks concurrently.
-    For steady background processing, prefer the beat-scheduled
-    ``audit_next_problem`` which processes one problem per tick.
-
-    Args:
-        force: If True, re-audit all problems regardless of existing records.
-        limit: Maximum number of problems to audit. 0 means all (but capped
-               at what _fetch_problem_list returns).
-
-    Returns:
-        dict with batch_id, total count, and dispatched task IDs.
+    Uses PostgreSQL to list local problems, dispatches staggered sub-tasks.
     """
     batch_id = str(uuid.uuid4())[:8]
-    logger.info("Batch audit %s started (force=%s, limit=%s)", batch_id, force, limit)
+    logger.info("Batch %s started (force=%s, limit=%s)", batch_id, force, limit)
 
-    # Step 1: Login and fetch problem list
-    try:
-        client, csrf = _oj_login()
-        # When limit is 0 (default), apply a reasonable cap for first run
-        effective_limit = limit if limit > 0 else settings.audit_batch_size
-        problems = _fetch_problem_list(client, csrf, limit=effective_limit)
-    except Exception as exc:
-        logger.exception("OJ login/fetch failed for batch audit %s", batch_id)
-        raise self.retry(exc=exc)
-    finally:
-        client.close()
+    all_local = _get_all_local_problems()
+    logger.info("Batch %s: %d local problems total", batch_id, len(all_local))
 
-    # Step 2: Filter out already-audited problems (unless force)
     if not force:
-        audited_ids = _get_all_audited_ids()
-        target_problems = [p for p in problems if p["_id"] not in audited_ids]
-        logger.info("Batch %s: %d of %d problems need auditing (already passed: %d)",
-                     batch_id, len(target_problems), len(problems), len(audited_ids))
+        audited = _get_all_audited_ids()
+        targets = [p for p in all_local if p["_id"] not in audited]
+        logger.info("Batch %s: %d need auditing (already passed: %d)",
+                     batch_id, len(targets), len(audited))
     else:
-        target_problems = problems
-        logger.info("Batch %s (force): re-auditing %d problems", batch_id, len(target_problems))
+        targets = all_local
 
-    if not target_problems:
+    if limit > 0 and len(targets) > limit:
+        targets = targets[:limit]
+
+    if not targets:
         return {
-            "batch_id": batch_id,
-            "total": len(problems),
-            "audited": 0,
-            "skipped": len(problems),
-            "message": "All problems already audited",
+            "batch_id": batch_id, "total": len(all_local),
+            "dispatched": 0, "message": "All local problems already audited",
         }
 
-    # Step 3: Dispatch individual audit tasks with rate limiting.
-    # We add a countdown between tasks so the GPU isn't overwhelmed.
-    # With concurrency=1 and 10min beat interval, this is mainly for manual batch runs.
     task_ids = []
-    for i, p in enumerate(target_problems):
+    for i, p in enumerate(targets):
         summary = {"_id": p["_id"], "id": p["id"], "title": p.get("title", "")}
-        # Stagger tasks: each task starts 10 minutes after the previous one
-        countdown = i * 600  # 600 seconds = 10 minutes
-        result = audit_single_problem.apply_async(
-            args=(summary,),
-            queue="audit",
-            countdown=countdown,
-        )
-        task_ids.append(result.id)
-        if (i + 1) % 10 == 0:
-            logger.info("Batch %s progress: dispatched %d/%d tasks (next in %ds)",
-                        batch_id, i + 1, len(target_problems), countdown)
+        countdown = i * 110  # ~110s stagger
+        r = audit_single_problem.apply_async(args=(summary,), queue="audit", countdown=countdown)
+        task_ids.append(r.id)
 
-    logger.info("Batch %s: dispatched %d audit tasks (task_ids: %s...)",
-                batch_id, len(task_ids), task_ids[:3])
-
+    logger.info("Batch %s: dispatched %d tasks", batch_id, len(task_ids))
     return {
-        "batch_id": batch_id,
-        "total": len(problems),
+        "batch_id": batch_id, "total": len(all_local),
         "dispatched": len(task_ids),
-        "skipped": len(problems) - len(target_problems),
-        "task_ids": task_ids[:50],  # only return first 50 for safety
+        "task_ids": task_ids[:50],
     }
 
 
 # ---------------------------------------------------------------------------
-# Statement cleaner task
+# Admin: force-clear all audit records and restart
 # ---------------------------------------------------------------------------
 
-import html as _html
-import re as _re
-
-
-def _strip_html(raw: str) -> str:
-    """Remove all HTML tags, unescape entities, and normalise whitespace."""
-    text = _html.unescape(raw or "")
-    text = _re.sub(r"<[^>]+>", " ", text)
-    text = _re.sub(r"[ \t]+", " ", text)
-    text = _re.sub(r"\n{3,}", "\n\n", text)
-    return text.strip()
-
-
-def _build_clean_prompt(display_id: str, title: str, desc: str, inp: str, out: str) -> str:
-    return f"""You are cleaning a competitive programming problem statement for an online judge.
-The raw text may contain stripped HTML, leftover tags, or HTML entities. Rewrite it as clean, readable Markdown.
-
-Rules:
-- Preserve ALL original meaning and numbers exactly.
-- Use Markdown: paragraphs, **bold** for emphasis, `code` for character names / variable names (e.g. `L`, `R`, `X`).
-- Express large numbers as e.g. `10^6` (not HTML superscript).
-- No HTML tags. No raw HTML entities (& amp; &#039; etc.).
-- Return ONLY valid JSON with exactly these keys: description, input_description, output_description.
-
-Problem: {display_id} — {title}
-
-description:
-{desc}
-
-input_description:
-{inp}
-
-output_description:
-{out}
-
-JSON:"""
-
-
-@celery_app.task(name="clean_problem_statement", bind=True, max_retries=2)
-def clean_problem_statement(self, problem_summary: dict) -> dict:
-    """Celery task: use LLM to rewrite a problem's statement fields as clean Markdown.
-
-    Args:
-        problem_summary: dict with at least '_id' (display_id) and 'id' (db_id).
-                         If id==0 the task resolves the real db_id from the OJ listing.
-    Returns:
-        dict with keys: display_id, status ('ok'|'error'), message.
-    """
-    import json as _json
-
-    display_id: str = problem_summary.get("_id", "")
-    db_id: int = problem_summary.get("id", 0)
-
-    logger.info("clean_problem_statement: start display_id=%s db_id=%s", display_id, db_id)
-
-    try:
-        client, csrf = _oj_login()
-
-        # Resolve real db_id when caller passes 0 (API route limitation)
-        if db_id == 0 and display_id:
-            db_id = _resolve_db_id(client, csrf, display_id)
-            if db_id == 0:
-                raise ValueError(f"Could not resolve db_id for display_id={display_id}")
-            logger.info("Resolved display_id=%s -> db_id=%d", display_id, db_id)
-
-        # Fetch full problem detail
-        problem = _fetch_problem_detail(client, csrf, db_id)
-        if problem is None:
-            raise ValueError(f"Failed to fetch problem detail for db_id={db_id}")
-
-        title = problem.get("title", display_id)
-        raw_desc = problem.get("description", "")
-        raw_inp  = problem.get("input_description", "")
-        raw_out  = problem.get("output_description", "")
-
-        # Strip HTML
-        desc_clean = _strip_html(raw_desc)
-        inp_clean  = _strip_html(raw_inp)
-        out_clean  = _strip_html(raw_out)
-
-        # Ask LLM to rewrite as Markdown
-        prompt = _build_clean_prompt(display_id, title, desc_clean, inp_clean, out_clean)
-        llm_response = _call_ollama(prompt)
-        logger.debug("LLM clean response (first 300 chars): %s", llm_response[:300])
-
-        # Extract JSON from LLM output
-        m = _re.search(r'\{[\s\S]+\}', llm_response)
-        if not m:
-            raise ValueError(f"LLM did not return valid JSON. Response: {llm_response[:500]}")
-        data = _json.loads(m.group())
-
-        # Unescape any HTML entities the LLM may have reintroduced in its output
-        import html as _html_mod
-        import re as _re_clean
-        def _deep_clean(s: str) -> str:
-            # Multiple unescape passes to handle double-encoded entities
-            prev = None
-            while prev != s:
-                prev = s
-                s = _html_mod.unescape(s)
-            # Remove any residual HTML tags
-            s = _re_clean.sub(r"<[^>]+>", "", s)
-            return s.strip()
-
-        new_desc = _deep_clean(data.get("description") or desc_clean)
-        new_inp  = _deep_clean(data.get("input_description") or inp_clean)
-        new_out  = _deep_clean(data.get("output_description") or out_clean)
-
-        # Write back via OJ Admin API
-        problem["description"] = new_desc
-        problem["input_description"] = new_inp
-        problem["output_description"] = new_out
-
-        ok = _update_problem(client, csrf, problem)
-        if not ok:
-            raise ValueError("PUT /api/admin/problem returned error")
-
-        # OJ backend re-escapes apostrophes to &#039; on save.
-        # Fix them directly in the DB via psycopg2 after the API write.
-        import os as _os
-        import psycopg2 as _pg
-        _db_url = _os.environ.get("LITE_DATABASE_URL", "")
-        # Convert asyncpg URL to psycopg2 URL
-        _pg_url = _db_url.replace("postgresql+asyncpg://", "postgresql://")
-        try:
-            _conn = _pg.connect(_pg_url)
-            _cur = _conn.cursor()
-            _cur.execute(
-                """UPDATE problem SET
-                     description        = replace(replace(replace(replace(replace(description,        '&#039;', ''''), '&quot;', '"'), '&amp;', '&'), '&lt;', '<'), '&gt;', '>'),
-                     input_description  = replace(replace(replace(replace(replace(input_description,  '&#039;', ''''), '&quot;', '"'), '&amp;', '&'), '&lt;', '<'), '&gt;', '>'),
-                     output_description = replace(replace(replace(replace(replace(output_description, '&#039;', ''''), '&quot;', '"'), '&amp;', '&'), '&lt;', '<'), '&gt;', '>')
-                   WHERE _id = %s""",
-                (display_id,),
-            )
-            _conn.commit()
-            _cur.close()
-            _conn.close()
-            logger.info("clean_problem_statement: post-fix unescape OK display_id=%s", display_id)
-        except Exception as _db_err:
-            logger.warning("clean_problem_statement: post-fix unescape failed: %s", _db_err)
-
-        logger.info("clean_problem_statement: OK display_id=%s", display_id)
-        return {"display_id": display_id, "status": "ok", "message": "Statement cleaned and written back"}
-
-    except Exception as exc:
-        logger.error("clean_problem_statement failed display_id=%s: %s", display_id, exc)
-        raise self.retry(exc=exc, countdown=30)
+@celery_app.task(
+    name="app.tasks.problem_auditor.reset_audit_state",
+    queue="audit",
+)
+def reset_audit_state() -> dict:
+    """Clear all audit records so everything gets re-audited."""
+    deleted = _clear_all_audit_records()
+    total = _get_local_problem_count()
+    return {
+        "deleted_records": deleted,
+        "local_problems": total,
+        "message": f"Cleared {deleted} records. {total} local problems ready for re-audit.",
+    }

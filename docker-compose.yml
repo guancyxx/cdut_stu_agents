@@ -27,8 +27,8 @@ services:
       - LITE_CELERY_BROKER=redis://oj-redis:6379/1
       - LITE_CELERY_BACKEND=redis://oj-redis:6379/2
       - LITE_OLLAMA_BASE_URL=http://172.17.0.1:11435
-      - LITE_OLLAMA_MODEL=gemma4:31b
-      - LITE_OLLAMA_TIMEOUT=600
+      - LITE_OLLAMA_MODEL=qwen3.6:latest
+      - LITE_OLLAMA_TIMEOUT=300
       - OJ_ADMIN_USER=root
       - OJ_ADMIN_PASS=rootroot
     env_file:
@@ -59,11 +59,12 @@ services:
       - LITE_CELERY_BROKER=redis://oj-redis:6379/1
       - LITE_CELERY_BACKEND=redis://oj-redis:6379/2
       - LITE_OLLAMA_BASE_URL=http://172.17.0.1:11435
-      - LITE_OLLAMA_MODEL=gemma4:31b
-      - LITE_OLLAMA_TIMEOUT=600
+      - LITE_OLLAMA_MODEL=qwen3.6:latest
+      - LITE_OLLAMA_TIMEOUT=300
       - OJ_API_URL=http://oj-backend:8000
       - OJ_ADMIN_USER=root
       - OJ_ADMIN_PASS=rootroot
+      - LITE_XIAOMI_API_KEY=${XIAOMI_API_KEY}
     depends_on:
       - oj-redis
       - oj-backend
@@ -92,6 +93,7 @@ services:
       - OJ_API_URL=http://oj-backend:8000
       - OJ_ADMIN_USER=root
       - OJ_ADMIN_PASS=rootroot
+      - LITE_XIAOMI_API_KEY=${XIAOMI_API_KEY}
     depends_on:
       - oj-redis
     restart: unless-stopped
