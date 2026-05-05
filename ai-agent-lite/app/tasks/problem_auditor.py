@@ -1,11 +1,14 @@
 """Background Celery task: problem quality auditor.
 
-Audits all local (custom-*) OJ problems via Xiaomi MiniMax LLM (mimo-v2-pro),
+Audits local (custom-*) OJ problems via a configurable LLM backend,
 evaluating completeness, removing non-OJ content, deduplicating garbage,
 reclassifying difficulty, and adding algorithmic tags.
 
-Key changes from v2 (Ollama):
-- Uses Xiaomi MiniMax API (mimo-v2-pro) instead of local Ollama GPU.
+LLM backend is selected via LITE_AUDIT_LLM_PROVIDER env var:
+  - "xiaomi"  → Xiaomi MiniMax (cloud, OpenAI-compatible, thinking model)
+  - "ollama"  → local GPU Ollama (GPU required, qwen3.6 with think=False)
+
+Key design:
 - Direct PostgreSQL queries bypass broken OJ Admin API pagination.
 - Beat fires every 100s (3 audits / 5 min).
 - Deduplicates boilerplate like "例五、例六", removes non-OJ items.
@@ -95,42 +98,94 @@ def _update_problem(client: httpx.Client, csrf: str, payload: dict) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# Xiaomi MiniMax LLM call (replaces Ollama)
+# Audit LLM call (provider-agnostic dispatcher)
 # ---------------------------------------------------------------------------
 
-def _call_xiaomi(system_prompt: str, user_prompt: str) -> str:
-    """Send a completion request to Xiaomi MiniMax API.
+def _call_llm(system_prompt: str, user_prompt: str) -> str:
+    """Send a completion request to the configured audit LLM provider.
+
+    Dispatches based on settings.audit_llm_provider:
+      - "xiaomi": OpenAI-compatible endpoint, thinking-model fallback.
+      - "ollama": local Ollama chat API with think=False.
 
     Returns stripped response text. Raises on failure.
     """
-    url = settings.xiaomi_api_url
+    provider = settings.audit_llm_provider
+
+    if provider == "xiaomi":
+        return _call_llm_xiaomi(system_prompt, user_prompt)
+    elif provider == "ollama":
+        return _call_llm_ollama(system_prompt, user_prompt)
+    else:
+        raise ValueError(f"Unknown audit LLM provider: {provider}")
+
+
+def _call_llm_xiaomi(system_prompt: str, user_prompt: str) -> str:
+    """Call Xiaomi MiniMax (OpenAI-compatible) endpoint.
+
+    mimo-v2-pro is a thinking model — its output goes to reasoning_content,
+    not content. We fall back when content is empty.
+    """
+    url = settings.audit_llm_base_url
     headers = {
-        "Authorization": f"Bearer {settings.xiaomi_api_key}",
+        "Authorization": f"Bearer {settings.audit_llm_api_key}",
         "Content-Type": "application/json",
     }
     payload = {
-        "model": settings.xiaomi_model,
+        "model": settings.audit_llm_model,
         "messages": [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
         ],
-        "temperature": 0.1,   # deterministic audit
+        "temperature": 0.1,
         "max_tokens": 32768,
         "stream": False,
     }
-    with httpx.Client(timeout=settings.xiaomi_timeout) as client:
+    with httpx.Client(timeout=settings.audit_llm_timeout) as client:
         r = client.post(url, json=payload, headers=headers)
         r.raise_for_status()
         data = r.json()
         msg = data["choices"][0]["message"]
         content = msg.get("content", "") or ""
-        # Fallback: thinking models put output in reasoning_content
         if not content.strip():
             content = msg.get("reasoning_content", "") or ""
-        # Strip markdown fences
-        content = _re.sub(r'^```(?:json)?\s*\n?', '', content.strip())
-        content = _re.sub(r'\n?```\s*$', '', content)
-        return content.strip()
+        return _strip_fences(content)
+
+
+def _call_llm_ollama(system_prompt: str, user_prompt: str) -> str:
+    """Call local Ollama instance (GPU inference).
+
+    Sends think=False to suppress reasoning mode in qwen3.6.
+    Uses keep_alive=0 to immediately release VRAM after inference.
+    """
+    base = settings.audit_llm_base_url.rstrip("/chat/completions")  # strip OpenAI suffix
+    if base.endswith("/v1"):
+        base = base[:-3]
+    url = base.rstrip("/") + "/api/chat"
+    combined = f"{system_prompt}\n\n---\n\n{user_prompt}"
+    payload = {
+        "model": settings.audit_llm_model,
+        "messages": [{"role": "user", "content": combined}],
+        "stream": False,
+        "keep_alive": "0",
+        "think": False,
+        "options": {"temperature": 0.1, "num_predict": 16384},
+    }
+    with httpx.Client(timeout=settings.audit_llm_timeout) as client:
+        r = client.post(url, json=payload)
+        r.raise_for_status()
+        data = r.json()
+        msg = data.get("message", {})
+        content = msg.get("content", "") or msg.get("thinking", "")
+        return _strip_fences(content)
+
+
+def _strip_fences(content: str) -> str:
+    """Remove markdown code-fence wrappers from LLM output."""
+    content = content or ""
+    content = _re.sub(r'^```(?:json)?\s*\n?', '', content.strip())
+    content = _re.sub(r'\n?```\s*$', '', content)
+    return content.strip()
 
 
 # ---------------------------------------------------------------------------
@@ -724,7 +779,7 @@ def _parse_llm_response(raw: str) -> dict:
     time_limit=360,
 )
 def audit_single_problem(self, problem_summary: dict) -> dict:
-    """Audit a single problem via Xiaomi LLM and auto-fix if needed."""
+    """Audit a single problem via the configured audit LLM and auto-fix if needed."""
     display_id = problem_summary["_id"]
     db_id = problem_summary.get("id", 0)
     title = problem_summary.get("title", display_id)
@@ -768,9 +823,9 @@ def _do_audit_problem(
     try:
         prompt = _build_audit_prompt(problem)
         try:
-            raw = _call_xiaomi(_AUDIT_SYSTEM, prompt)
+            raw = _call_llm(_AUDIT_SYSTEM, prompt)
         except Exception as exc:
-            logger.exception("Xiaomi API call failed _id=%s", display_id)
+            logger.exception("Audit LLM call failed _id=%s", display_id)
             if retry:
                 raise retry.retry(exc=exc)
             raise

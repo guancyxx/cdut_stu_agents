@@ -64,7 +64,7 @@ services:
       - OJ_API_URL=http://oj-backend:8000
       - OJ_ADMIN_USER=root
       - OJ_ADMIN_PASS=rootroot
-      - LITE_XIAOMI_API_KEY=${XIAOMI_API_KEY}
+      - LITE_AUDIT_LLM_API_KEY=${XIAOMI_API_KEY}
     depends_on:
       - oj-redis
       - oj-backend
@@ -93,7 +93,7 @@ services:
       - OJ_API_URL=http://oj-backend:8000
       - OJ_ADMIN_USER=root
       - OJ_ADMIN_PASS=rootroot
-      - LITE_XIAOMI_API_KEY=${XIAOMI_API_KEY}
+      - LITE_AUDIT_LLM_API_KEY=${XIAOMI_API_KEY}
     depends_on:
       - oj-redis
     restart: unless-stopped

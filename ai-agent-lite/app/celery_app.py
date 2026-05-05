@@ -30,9 +30,9 @@ celery_app.conf.update(
     task_reject_on_worker_lost=True,
     # concurrency — single worker processes one task at a time
     worker_concurrency=1,
-    # timeouts (matched to Xiaomi API speed: ~15-60s per inference)
-    task_soft_time_limit=int(settings.xiaomi_timeout) + 60,
-    task_time_limit=int(settings.xiaomi_timeout) + 120,
+    # timeouts (matched to audit LLM provider speed)
+    task_soft_time_limit=int(settings.audit_llm_timeout) + 60,
+    task_time_limit=int(settings.audit_llm_timeout) + 120,
     # result expiry — audit results kept for 7 days
     result_expires=86400 * 7,
     # route all background tasks to the audit queue
