@@ -70,6 +70,7 @@ class Settings:
     # Problem auditor
     audit_batch_size: int = int(os.getenv("LITE_AUDIT_BATCH_SIZE", "50"))
     audit_concurrency: int = int(os.getenv("LITE_AUDIT_CONCURRENCY", "2"))
+    audit_problem_id_prefix: str = os.getenv("LITE_AUDIT_PROBLEM_ID_PREFIX", "").strip()
 
 
 settings = Settings()

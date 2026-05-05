@@ -27,8 +27,9 @@ from app.config import settings
 
 logger = logging.getLogger("ai-agent-lite.audit")
 
-# All local problem IDs start with this prefix.
-LOCAL_PREFIX = "custom-"
+# Optional problem-id prefix filter for audit scope.
+# Empty means audit all problems.
+# Example: "custom-" audits only custom-*.
 
 
 # ---------------------------------------------------------------------------
@@ -317,14 +318,33 @@ def _pg_connect():
     return psycopg2.connect(db_url)
 
 
+def _problem_prefix_filter_clause(column: str = "p._id") -> tuple[str, tuple]:
+    """Build optional SQL filter for problem display-id prefix.
+
+    When settings.audit_problem_id_prefix is empty, no filter is applied.
+    """
+    prefix = settings.audit_problem_id_prefix
+    if not prefix:
+        return "", ()
+    return f"AND {column} LIKE %s", (f"{prefix}%",)
+
+
 def _get_all_audited_ids() -> set[str]:
-    """Return set of local problem display_ids that already have an audit record."""
+    """Return set of problem display_ids that already passed audit.
+
+    Scope is aligned with the configured prefix filter.
+    """
     conn = _pg_connect()
     try:
         with conn.cursor() as cur:
+            prefix_clause, prefix_params = _problem_prefix_filter_clause("pa.problem_display_id")
             cur.execute(
-                "SELECT problem_display_id FROM {schema}.problem_audit "
-                "WHERE status = 'pass'".format(schema=settings.db_schema),
+                (
+                    "SELECT pa.problem_display_id "
+                    "FROM {schema}.problem_audit pa "
+                    "WHERE pa.status = 'pass' {prefix_clause}"
+                ).format(schema=settings.db_schema, prefix_clause=prefix_clause),
+                prefix_params,
             )
             return {row[0] for row in cur.fetchall()}
     finally:
@@ -332,9 +352,9 @@ def _get_all_audited_ids() -> set[str]:
 
 
 def _get_next_local_unaudited() -> dict | None:
-    """Find ONE local (custom-*) problem not yet audited, via PostgreSQL.
+    """Find ONE problem not yet audited, via PostgreSQL.
 
-    Returns dict {id, _id, title} or None if all local problems are audited.
+    Returns dict {id, _id, title} or None if all scoped problems are audited.
     Excludes ids in the in-memory _in_flight_ids set to avoid double-audit.
     """
     conn = _pg_connect()
@@ -348,10 +368,12 @@ def _get_next_local_unaudited() -> dict | None:
                 in_flight_clause = f"AND p._id NOT IN ({placeholders})"
                 in_flight_params = tuple(sorted(_in_flight_ids))
 
-            cur.execute("""
+            prefix_clause, prefix_params = _problem_prefix_filter_clause("p._id")
+            query = """
                 SELECT p.id, p._id, p.title
                 FROM problem p
-                WHERE p._id LIKE 'custom-%%'
+                WHERE 1=1
+                  {prefix_clause}
                   AND p._id NOT IN (
                       SELECT problem_display_id
                       FROM {schema}.problem_audit
@@ -362,7 +384,10 @@ def _get_next_local_unaudited() -> dict | None:
             """.format(
                 schema=settings.db_schema,
                 in_flight=in_flight_clause,
-            ), in_flight_params)
+                prefix_clause=prefix_clause,
+            )
+            params = prefix_params + in_flight_params
+            cur.execute(query, params)
             row = cur.fetchone()
             if row:
                 return {"id": row[0], "_id": row[1], "title": row[2]}
@@ -372,24 +397,31 @@ def _get_next_local_unaudited() -> dict | None:
 
 
 def _get_all_local_problems() -> list[dict]:
-    """Return ALL local problems (id, _id, title) via PostgreSQL."""
+    """Return all scoped problems (id, _id, title) via PostgreSQL."""
     conn = _pg_connect()
     try:
         with conn.cursor() as cur:
-            cur.execute(
-                "SELECT id, _id, title FROM problem WHERE _id LIKE 'custom-%%' ORDER BY id"
-            )
+            prefix_clause, prefix_params = _problem_prefix_filter_clause("_id")
+            query = (
+                "SELECT id, _id, title FROM problem "
+                "WHERE 1=1 {prefix_clause} ORDER BY id"
+            ).format(prefix_clause=prefix_clause)
+            cur.execute(query, prefix_params)
             return [{"id": r[0], "_id": r[1], "title": r[2]} for r in cur.fetchall()]
     finally:
         conn.close()
 
 
 def _get_local_problem_count() -> int:
-    """Count how many local (custom-*) problems exist."""
+    """Count how many scoped problems exist."""
     conn = _pg_connect()
     try:
         with conn.cursor() as cur:
-            cur.execute("SELECT count(*) FROM problem WHERE _id LIKE 'custom-%%'")
+            prefix_clause, prefix_params = _problem_prefix_filter_clause("_id")
+            query = ("SELECT count(*) FROM problem WHERE 1=1 {prefix_clause}").format(
+                prefix_clause=prefix_clause,
+            )
+            cur.execute(query, prefix_params)
             return cur.fetchone()[0]
     finally:
         conn.close()
@@ -859,6 +891,29 @@ def _do_audit_problem(
     finally:
         if client:
             client.close()
+
+
+# ---------------------------------------------------------------------------
+# Optional statement-clean task (compat endpoint)
+# ---------------------------------------------------------------------------
+
+@celery_app.task(
+    name="app.tasks.problem_auditor.clean_problem_statement",
+    queue="audit",
+    soft_time_limit=300,
+    time_limit=360,
+)
+def clean_problem_statement(problem_summary: dict) -> dict:
+    """Compatibility task for /audit/clean endpoint.
+
+    The current auditor flow performs content fixes inside audit tasks.
+    This task keeps the API import stable and routes to single-problem audit.
+    """
+    display_id = problem_summary.get("_id")
+    if not display_id:
+        return {"status": "error", "message": "missing _id"}
+    result = audit_single_problem.apply(args=({"_id": display_id, "id": 0, "title": ""},))
+    return result.get() if hasattr(result, "get") else {"status": "queued", "_id": display_id}
 
 
 # ---------------------------------------------------------------------------

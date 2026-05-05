@@ -149,7 +149,7 @@ async def list_audit_records(
 
 @router.get("/summary")
 async def audit_summary():
-    """Return a summary of the last batch audit results."""
+    """Return a summary of scoped problem audit coverage and outcomes."""
     from app.config import settings
     import psycopg2
 
@@ -157,26 +157,48 @@ async def audit_summary():
     conn = psycopg2.connect(db_url)
     try:
         with conn.cursor() as cur:
-            cur.execute(
-                f"SELECT status, COUNT(*) FROM {settings.db_schema}.problem_audit "
-                "GROUP BY status"
-            )
-            counts = {row[0]: row[1] for row in cur.fetchall()}
-            cur.execute(
-                f"SELECT MAX(updated_at) FROM {settings.db_schema}.problem_audit"
-            )
-            last_time = cur.fetchone()[0]
-            cur.execute(
-                f"SELECT COUNT(*) FROM {settings.db_schema}.problem_audit"
-            )
-            total = cur.fetchone()[0]
+            prefix = settings.audit_problem_id_prefix
+            if prefix:
+                cur.execute("SELECT COUNT(*) FROM problem WHERE _id LIKE %s", (f"{prefix}%",))
+                total_problems = cur.fetchone()[0]
+                cur.execute(
+                    f"SELECT status, COUNT(*) FROM {settings.db_schema}.problem_audit "
+                    "WHERE problem_display_id LIKE %s GROUP BY status",
+                    (f"{prefix}%",),
+                )
+                counts = {row[0]: row[1] for row in cur.fetchall()}
+                cur.execute(
+                    f"SELECT MAX(updated_at) FROM {settings.db_schema}.problem_audit "
+                    "WHERE problem_display_id LIKE %s",
+                    (f"{prefix}%",),
+                )
+                last_time = cur.fetchone()[0]
+            else:
+                cur.execute("SELECT COUNT(*) FROM problem")
+                total_problems = cur.fetchone()[0]
+                cur.execute(
+                    f"SELECT status, COUNT(*) FROM {settings.db_schema}.problem_audit "
+                    "GROUP BY status"
+                )
+                counts = {row[0]: row[1] for row in cur.fetchall()}
+                cur.execute(
+                    f"SELECT MAX(updated_at) FROM {settings.db_schema}.problem_audit"
+                )
+                last_time = cur.fetchone()[0]
+
+            passed = counts.get("pass", 0)
+            failed = counts.get("fail", 0)
+            errors = counts.get("error", 0) + counts.get("fix_failed", 0)
+            pending = max(total_problems - passed - failed - errors, 0)
 
         return {
-            "total_problems": total,
-            "passed": counts.get("pass", 0),
-            "failed": counts.get("fail", 0),
-            "errors": counts.get("error", 0) + counts.get("fix_failed", 0),
-            "pending": counts.get("pending", 0),
+            "total_problems": total_problems,
+            "audited": passed + failed + errors,
+            "passed": passed,
+            "failed": failed,
+            "errors": errors,
+            "pending": pending,
+            "scope_prefix": prefix or None,
             "last_audit_time": last_time.isoformat() if last_time else None,
         }
     finally:

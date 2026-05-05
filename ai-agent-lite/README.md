@@ -300,6 +300,9 @@ docker compose up -d ai-agent-celery-beat
 | OJ_ADMIN_PASSWORD | 是 | OJ 管理员密码 |
 | OLLAMA_BASE_URL | 是 | Ollama 服务地址，如 `http://host-gateway:11435` |
 | OLLAMA_MODEL | 否 | 默认 `gemma4:31b` |
+| LITE_AUDIT_PROBLEM_ID_PREFIX | 否 | 审计题号前缀过滤；为空时审计全部题目（默认）。例如设为 `custom-` 只审计 `custom-*`。 |
+
+说明：审计任务的题目枚举使用 PostgreSQL 直接查询，不依赖 OJ Admin API 分页（避免 `page` 参数失效导致覆盖率异常）。
 
 ---
 
