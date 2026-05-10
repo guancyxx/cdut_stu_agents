@@ -39,6 +39,7 @@ celery_app.conf.update(
     task_routes={
         "app.tasks.problem_auditor.*": {"queue": "audit"},
         "app.tasks.submission_events.*": {"queue": "audit"},
+        "app.tasks.batch_import.*": {"queue": "audit"},
     },
     # Beat schedule: periodic problem audit + submission fallback compensation
     beat_schedule={
@@ -59,4 +60,4 @@ celery_app.conf.update(
 # resolve correctly inside Docker containers; explicit imports are more robust.
 celery_app.autodiscover_tasks(["app.tasks"], related_name=None)
 # Also force-import to guarantee registration
-from app.tasks import problem_auditor, submission_events  # noqa: E402, F401
+from app.tasks import problem_auditor, submission_events, batch_import  # noqa: E402, F401

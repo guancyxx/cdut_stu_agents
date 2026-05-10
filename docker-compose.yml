@@ -14,7 +14,7 @@ services:
       - ./data/training:/app/data/training
       - ./data/chat_history:/app/data/chat_history
       - ./data/problems:/app/data/problems
-      - ./qduoj/data/backend/test_case:/data/test_case:ro
+      - ./qduoj/data/backend/test_case:/data/test_case
     environment:
       - TZ=Asia/Shanghai
       - OJ_API_URL=http://oj-backend:8000
@@ -52,6 +52,8 @@ services:
     command: ["celery", "-A", "app.celery_app", "worker", "--loglevel=info", "-Q", "audit", "--concurrency=1"]
     volumes:
       - ./ai-agent-lite/app:/app/app
+      - ./data/problems:/app/data/problems
+      - ./qduoj/data/backend/test_case:/data/test_case
     environment:
       - TZ=Asia/Shanghai
       - LITE_DATABASE_URL=postgresql+asyncpg://onlinejudge:onlinejudge@oj-postgres:5432/onlinejudge

@@ -129,6 +129,66 @@ export function createApiClient(baseUrl = '/oj-api', aiAgentBaseUrl = '/oj-test-
       }
     })
 
+  // Admin problem upload API methods (all go through ai-agent-lite)
+  const adminCreateProblem = (payload) =>
+    fetch(`${aiAgentBaseUrl}/admin/problems/create`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payload)
+    }).then(async (response) => {
+      const rawText = await response.text()
+      if (!rawText) return { ok: response.ok, status: response.status, data: { error: `Empty response (${response.status})`, data: '' } }
+      try {
+        return { ok: response.ok, status: response.status, data: JSON.parse(rawText) }
+      } catch {
+        return { ok: response.ok, status: response.status, data: { error: `Invalid JSON response (${response.status})`, data: rawText } }
+      }
+    })
+
+  const adminBatchUpload = (formData) =>
+    fetch(`${aiAgentBaseUrl}/admin/problems/upload/batch`, {
+      method: 'POST',
+      credentials: 'include',
+      body: formData
+    }).then(async (response) => {
+      const rawText = await response.text()
+      if (!rawText) return { ok: response.ok, status: response.status, data: { error: `Empty response (${response.status})`, data: '' } }
+      try {
+        return { ok: response.ok, status: response.status, data: JSON.parse(rawText) }
+      } catch {
+        return { ok: response.ok, status: response.status, data: { error: `Invalid JSON response (${response.status})`, data: rawText } }
+      }
+    })
+
+  const adminImportStatus = (taskId) =>
+    fetch(`${aiAgentBaseUrl}/admin/problems/import/status/${encodeURIComponent(taskId)}`, {
+      credentials: 'include'
+    }).then(async (response) => {
+      const rawText = await response.text()
+      if (!rawText) return { ok: response.ok, status: response.status, data: { error: `Empty response (${response.status})`, data: '' } }
+      try {
+        return { ok: response.ok, status: response.status, data: JSON.parse(rawText) }
+      } catch {
+        return { ok: response.ok, status: response.status, data: { error: `Invalid JSON response (${response.status})`, data: rawText } }
+      }
+    })
+
+  const adminFetchTags = () =>
+    fetch(`${aiAgentBaseUrl}/admin/problems/tags`, {
+      credentials: 'include'
+    }).then(async (response) => {
+      const rawText = await response.text()
+      if (!rawText) return { ok: response.ok, status: response.status, data: { error: `Empty response (${response.status})`, data: '' } }
+      try {
+        return { ok: response.ok, status: response.status, data: JSON.parse(rawText) }
+      } catch {
+        return { ok: response.ok, status: response.status, data: { error: `Invalid JSON response (${response.status})`, data: rawText } }
+      }
+    })
+
   return {
     fetchProfile,
     fetchCaptcha,
@@ -141,6 +201,10 @@ export function createApiClient(baseUrl = '/oj-api', aiAgentBaseUrl = '/oj-test-
     fetchSubmissions,
     fetchSubmissionDetail,
     fetchTestCaseContent,
-    reportSubmissionFallback
+    reportSubmissionFallback,
+    adminCreateProblem,
+    adminBatchUpload,
+    adminImportStatus,
+    adminFetchTags
   }
 }
