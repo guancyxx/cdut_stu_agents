@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import CodeEditor from './components/CodeEditor.vue'
 import MessageBubble from './components/MessageBubble.vue'
+import AdminProblemUpload from './components/AdminProblemUpload.vue'
 import { useChatFeature } from './composables/useChatFeature'
 import { AUTH_MODES, OJ_DIFFICULTY_OPTIONS, initMessageRenderer, sanitizeHtmlContent, sanitizeTextInput } from './utils/validators'
 import { marked } from 'marked'
@@ -149,6 +150,7 @@ const {
   goToPage,
   searchProblems,
   isLoginMode,
+  isAdmin,
   hydrateAuthSession,
   fetchUserProfile,
   refreshCaptcha,
@@ -642,6 +644,7 @@ onBeforeUnmount(() => {
       <div class="tabs" v-if="!requiresAuth">
         <button :class="{ active: activeTab === 'home' }" @click="activeTab = 'home'">主页</button>
         <button :class="{ active: activeTab === 'problemset' }" @click="activeTab = 'problemset'">题库</button>
+        <button v-if="isAdmin" :class="{ active: activeTab === 'admin' }" @click="activeTab = 'admin'">管理</button>
         <button :class="{ active: activeTab === 'profile' }" @click="activeTab = 'profile'">个人中心</button>
       </div>
       <div class="tabs" v-else>
@@ -732,6 +735,10 @@ onBeforeUnmount(() => {
 
         <div class="error" v-if="ojUser.error">{{ ojUser.error }}</div>
       </div>
+    </section>
+
+    <section class="admin-screen" v-else-if="activeTab === 'admin' && isAdmin">
+      <AdminProblemUpload />
     </section>
 
     <div class="content-grid" :class="{ 'problemset-mode': activeTab === 'problemset' || !hasSessions }" v-else>
@@ -1155,4 +1162,9 @@ onBeforeUnmount(() => {
 </template>
 
 <style>
-  </style>
+  .admin-screen {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px;
+  }
+</style>

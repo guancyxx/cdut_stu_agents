@@ -55,7 +55,8 @@ const resolveUserProfile = (profileResponseData, fallbackUser = {}) => {
       userNode.student_number || userNode.studentNumber || userNode.student_id || fallbackUser.studentNumber,
       64
     ),
-    signature: sanitizeTextInput(userNode.signature || userNode.motto || fallbackUser.signature, 280)
+    signature: sanitizeTextInput(userNode.signature || userNode.motto || fallbackUser.signature, 280),
+    adminType: Number(userNode.admin_type ?? fallbackUser.adminType ?? 0)
   }
 }
 
@@ -77,6 +78,7 @@ export function useOjAuthAndProblems() {
     avatar: '',
     studentNumber: '',
     signature: '',
+    adminType: 0,
     error: ''
   })
 
@@ -160,6 +162,7 @@ export function useOjAuthAndProblems() {
   }
 
   const isLoginMode = computed(() => authMode.value === AUTH_MODES.LOGIN)
+  const isAdmin = computed(() => ojUser.value.loggedIn && ojUser.value.adminType >= 1)
 
   const resetAuthError = () => {
     ojUser.value.error = ''
@@ -209,6 +212,7 @@ export function useOjAuthAndProblems() {
     ojUser.value.avatar = profile.avatar
     ojUser.value.studentNumber = profile.studentNumber
     ojUser.value.signature = profile.signature
+    ojUser.value.adminType = profile.adminType || 0
   }
 
   const fetchUserProfile = async () => {
@@ -787,6 +791,7 @@ export function useOjAuthAndProblems() {
     goToPage,
     searchProblems,
     isLoginMode,
+    isAdmin,
     hydrateAuthSession,
     fetchUserProfile,
     refreshCaptcha,
