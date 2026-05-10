@@ -80,6 +80,34 @@ export function useOjAuthAndProblems() {
     error: ''
   })
 
+  // Problem detail — full data for display (description, input, output, samples, hint, source)
+  const problemDetail = ref(null)
+  const problemDetailLoading = ref(false)
+
+  const fetchProblemDetail = async (problemId) => {
+    if (!problemId) return null
+    problemDetailLoading.value = true
+    try {
+      const response = await apiClient.fetchProblemDetail(String(problemId))
+      const result = response.data
+      if (result?.error) {
+        console.warn('Failed to fetch problem detail:', result.error)
+        problemDetail.value = null
+        return null
+      }
+      // API returns { data: { ... } } for single problem detail
+      const detail = result.data ?? result
+      problemDetail.value = detail
+      return detail
+    } catch (error) {
+      console.warn('Failed to fetch problem detail:', error)
+      problemDetail.value = null
+      return null
+    } finally {
+      problemDetailLoading.value = false
+    }
+  }
+
   const problems = ref([])
   const problemLoading = ref(false)
   const problemError = ref('')
@@ -742,6 +770,9 @@ export function useOjAuthAndProblems() {
     problems,
     problemLoading,
     problemError,
+    problemDetail,
+    problemDetailLoading,
+    fetchProblemDetail,
     submitLoading,
     submitResultBySessionId,
     getSubmitResultForSession,
