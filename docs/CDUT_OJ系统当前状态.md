@@ -162,3 +162,5 @@ docker cp cdut-oj-backend:/tmp/test_case_backup.tar.gz backups/$(date +%Y%m%d)/
 System status: Running
 Readiness: Small-scale trial phase
 Recommended: Organize 10-20 students to try first 10 problems
+
+> **2026-05-10 更新**: 完整的待开发内容清单见 [PROJECT_GAP_ANALYSIS.md](./PROJECT_GAP_ANALYSIS.md)
