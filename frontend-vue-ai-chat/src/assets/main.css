@@ -1215,6 +1215,79 @@ button:disabled {
   white-space: pre-wrap;
 }
 
+/* Problem detail sections (Description, Input, Output, Samples, Hint, Source) */
+.problem-section {
+  margin-bottom: 14px;
+}
+
+.problem-section:last-child {
+  margin-bottom: 0;
+}
+
+.problem-section-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 6px 0;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.problem-section-loading {
+  text-align: center;
+  color: var(--text-muted);
+  padding: 16px 0;
+  font-size: 13px;
+}
+
+.problem-sample-block {
+  margin-bottom: 12px;
+}
+
+.problem-sample-block:last-child {
+  margin-bottom: 0;
+}
+
+.problem-sample-item {
+  margin-bottom: 6px;
+}
+
+.problem-sample-item .problem-section-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin: 0 0 4px 0;
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.problem-sample-code {
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin: 0;
+  font-size: 12px;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-all;
+  color: var(--text-secondary);
+  overflow-x: auto;
+}
+
+.problem-source {
+  font-size: 12px;
+  color: var(--text-muted);
+  padding-top: 6px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.problem-source-label {
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
 .problem-detail-bottom {
   border-top: 1px solid var(--border-subtle);
   padding-top: 8px;

@@ -132,6 +132,9 @@ const {
   problems,
   problemLoading,
   problemError,
+  problemDetail,
+  problemDetailLoading,
+  fetchProblemDetail,
   submitLoading,
   submitResultBySessionId,
   getSubmitResultForSession,
@@ -203,21 +206,69 @@ const visiblePages = computed(() => {
 })
 const selectedProblem = computed(() => problems.value.find((item) => String(item._id) === selectedProblemId.value) || null)
 const hasSelectedProblem = computed(() => Boolean(selectedProblem.value))
+
+// Full problem detail from detail API (includes input_description, output_description, samples, hint, source)
+const problemDetailData = computed(() => {
+  // Prefer the detail API response; fall back to list item data
+  if (problemDetail.value && String(problemDetail.value._id) === String(selectedProblemId.value)) {
+    return problemDetail.value
+  }
+  return selectedProblem.value
+})
+
 const selectedProblemDescription = computed(() => {
-  if (!selectedProblem.value) return ''
-
+  const detail = problemDetailData.value
+  if (!detail) return ''
   const candidate =
-    selectedProblem.value.description ||
-    selectedProblem.value.content ||
-    selectedProblem.value.desc ||
-    selectedProblem.value.problem_description ||
+    detail.description ||
+    detail.content ||
+    detail.desc ||
+    detail.problem_description ||
     ''
-
   const normalized = String(candidate).trim()
   return normalized || '暂无题目描述'
 })
 
+const selectedProblemInputDesc = computed(() => {
+  const detail = problemDetailData.value
+  if (!detail) return ''
+  return String(detail.input_description || '').trim()
+})
+
+const selectedProblemOutputDesc = computed(() => {
+  const detail = problemDetailData.value
+  if (!detail) return ''
+  return String(detail.output_description || '').trim()
+})
+
+const selectedProblemSamples = computed(() => {
+  const detail = problemDetailData.value
+  if (!detail) return []
+  const raw = detail.samples
+  if (Array.isArray(raw)) return raw
+  // QDUOJ sometimes stores samples as a JSON string
+  if (typeof raw === 'string') {
+    try { return JSON.parse(raw) } catch { return [] }
+  }
+  return []
+})
+
+const selectedProblemHint = computed(() => {
+  const detail = problemDetailData.value
+  if (!detail) return ''
+  return String(detail.hint || '').trim()
+})
+
+const selectedProblemSource = computed(() => {
+  const detail = problemDetailData.value
+  if (!detail) return ''
+  return String(detail.source || '').trim()
+})
+
 const selectedProblemDescriptionHtml = computed(() => sanitizeHtmlContent(selectedProblemDescription.value))
+const selectedProblemInputHtml = computed(() => sanitizeHtmlContent(selectedProblemInputDesc.value))
+const selectedProblemOutputHtml = computed(() => sanitizeHtmlContent(selectedProblemOutputDesc.value))
+const selectedProblemHintHtml = computed(() => sanitizeHtmlContent(selectedProblemHint.value))
 
 const handleGoToAuth = () => {
   if (ojUser.value.loggedIn) {
@@ -279,6 +330,10 @@ const handleSelectSession = (sessionId) => {
   selectSession(sessionId)
   const targetSession = sessions.value.find((session) => session.id === sessionId)
   selectedProblemId.value = targetSession?.problemId ? String(targetSession.problemId) : ''
+  // Fetch problem detail for the selected session's problem
+  if (targetSession?.problemId) {
+    fetchProblemDetail(String(targetSession.problemId))
+  }
   activeTab.value = 'home'
 }
 
@@ -301,6 +356,9 @@ const selectProblemForRightPanel = async (problem) => {
   selectedProblemId.value = String(problem._id)
   rightPanelTab.value = 'problem'
   activeTab.value = 'home'
+
+  // Fetch full problem detail (description, input, output, samples, hint, source)
+  await fetchProblemDetail(String(problem._id))
 
   // Populate starter code for ALL languages from problem template or fallback skeleton.
   // Each CodeEditor instance binds to its own codes[lang], so pre-populating all
@@ -857,7 +915,51 @@ onBeforeUnmount(() => {
             </div>
 
             <div class="problem-detail-middle">
-              <div class="problem-description" v-html="selectedProblemDescriptionHtml" />
+              <!-- Loading indicator -->
+              <div class="problem-section-loading" v-if="problemDetailLoading">加载题目详情...</div>
+
+              <!-- Description -->
+              <div class="problem-section" v-if="selectedProblemDescription">
+                <h4 class="problem-section-title">Description</h4>
+                <div class="problem-description" v-html="selectedProblemDescriptionHtml" />
+              </div>
+
+              <!-- Input -->
+              <div class="problem-section" v-if="selectedProblemInputDesc">
+                <h4 class="problem-section-title">Input</h4>
+                <div class="problem-description" v-html="selectedProblemInputHtml" />
+              </div>
+
+              <!-- Output -->
+              <div class="problem-section" v-if="selectedProblemOutputDesc">
+                <h4 class="problem-section-title">Output</h4>
+                <div class="problem-description" v-html="selectedProblemOutputHtml" />
+              </div>
+
+              <!-- Samples -->
+              <div class="problem-section" v-if="selectedProblemSamples.length">
+                <div v-for="(sample, idx) in selectedProblemSamples" :key="idx" class="problem-sample-block">
+                  <div class="problem-sample-item">
+                    <h4 class="problem-section-title">Sample Input {{ selectedProblemSamples.length > 1 ? idx + 1 : '' }}</h4>
+                    <pre class="problem-sample-code">{{ sample.input }}</pre>
+                  </div>
+                  <div class="problem-sample-item">
+                    <h4 class="problem-section-title">Sample Output {{ selectedProblemSamples.length > 1 ? idx + 1 : '' }}</h4>
+                    <pre class="problem-sample-code">{{ sample.output }}</pre>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Hint -->
+              <div class="problem-section" v-if="selectedProblemHint">
+                <h4 class="problem-section-title">Hint</h4>
+                <div class="problem-description" v-html="selectedProblemHintHtml" />
+              </div>
+
+              <!-- Source -->
+              <div class="problem-section problem-source" v-if="selectedProblemSource">
+                <span class="problem-source-label">Source:</span> {{ selectedProblemSource }}
+              </div>
             </div>
 
             <div class="problem-detail-bottom">
