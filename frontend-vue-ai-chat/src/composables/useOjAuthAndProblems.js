@@ -40,6 +40,23 @@ const persistLastUsername = (username) => {
   window.localStorage.setItem(AUTH_LAST_USERNAME_KEY, normalized)
 }
 
+// Map QDUOJ string-based admin_type to numeric values.
+// QDUOJ stores admin_type as text (enum): 'Super Admin'=2, 'Admin'=1, 'Regular User'=0
+const ADMIN_TYPE_MAP = {
+  'super admin': 2,
+  'admin': 1,
+  'regular user': 0
+}
+
+const resolveAdminType = (rawValue) => {
+  if (rawValue === null || rawValue === undefined) return 0
+  // Numeric mapping: if already numeric, use directly
+  const num = Number(rawValue)
+  if (Number.isInteger(num)) return num
+  // String mapping: normalize case-insensitive
+  return ADMIN_TYPE_MAP[String(rawValue).toLowerCase()] ?? 0
+}
+
 const resolveUserProfile = (profileResponseData, fallbackUser = {}) => {
   const payload = profileResponseData?.data ?? profileResponseData
   const userNode = payload?.user || payload?.profile || payload || {}
@@ -56,7 +73,7 @@ const resolveUserProfile = (profileResponseData, fallbackUser = {}) => {
       64
     ),
     signature: sanitizeTextInput(userNode.signature || userNode.motto || fallbackUser.signature, 280),
-    adminType: Number(userNode.admin_type ?? fallbackUser.adminType ?? 0)
+    adminType: resolveAdminType(userNode.admin_type ?? fallbackUser.adminType ?? 0)
   }
 }
 
