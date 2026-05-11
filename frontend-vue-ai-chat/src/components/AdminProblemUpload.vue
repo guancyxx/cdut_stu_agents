@@ -22,11 +22,90 @@ const form = ref({
   visible: false,
   tags: '',
   samples: [{ input: '', output: '' }],
-  test_cases: [{ input: '', output: '' }]
+  test_cases: [{ input: '', output: '' }],
+  template: { C: '', 'C++': '', Java: '', Python3: '' },
+  spj: false,
+  spj_language: '',
+  spj_code: ''
 })
 
 const submitting = ref(false)
 const submitResult = ref(null)  // { success, problem_id, db_id, message } | { error }
+
+// Template tab state
+const activeTemplateTab = ref('C')
+
+const templatePlaceholder = (lang) => {
+  const placeholders = {
+    C: 'void solve(void) {\n    // TODO: read input with scanf, compute, output with printf\n}',
+    'C++': 'void solve() {\n    // TODO: read input with cin, compute, output with cout\n}',
+    Java: 'public static void solve(Scanner sc) {\n    // TODO: read input with sc.nextInt(), output with System.out.println\n}',
+    Python3: 'def solve() -> None:\n    # TODO: read input with input(), output with print()\n'
+  }
+  return placeholders[lang] || ''
+}
+
+// Example problems for reference panel
+const selectedExample = ref('A+B Problem')
+const exampleProblems = [
+  {
+    title: 'A+B Problem',
+    desc: '最简单的入门题，输入两个整数输出和',
+    fields: {
+      title: 'A+B Problem',
+      description: '<p>输入两个整数 a 和 b，输出它们的和。0 ≤ a, b ≤ 1000</p>',
+      input_description: '<p>一行，两个整数，空格分隔。</p>',
+      output_description: '<p>一个整数，a + b 的和。</p>',
+      samples: 'input: "1 2" → output: "3"',
+      hint: '（留空）',
+      难度: 'Low',
+      来源: '课本入门',
+      标签: '数学, 入门',
+      时间限制: '1000 ms',
+      内存限制: '256 MB',
+      '模板代码(C)': 'void solve(void) {\n    int a, b;\n    scanf("%d %d", &a, &b);\n    printf("%d\\n", a + b);\n}',
+      测试数据: '1.in: "1 2" → 1.out: "3"  (添加边界：0 0, 1000 1000)'
+    }
+  },
+  {
+    title: '判断闰年',
+    desc: '用 if-else 判断闰年',
+    fields: {
+      title: '判断闰年',
+      description: '<p>输入一个年份，判断是否为闰年。规则：能被4整除但不能被100整除，或者能被400整除。</p>',
+      input_description: '<p>一个整数 n（1 ≤ n ≤ 9999）。</p>',
+      output_description: '<p>YES 或 NO。</p>',
+      samples: 'input: "2000" → output: "YES"  |  input: "1900" → output: "NO"',
+      hint: '<p>注意：1900能被4整除也能被100整除，但不能被400整除！</p>',
+      难度: 'Low',
+      来源: 'C语言课本',
+      标签: '条件判断, 入门, 数学',
+      时间限制: '1000 ms',
+      内存限制: '256 MB',
+      '模板代码(Python3)': 'n = int(input())\nif (n % 4 == 0 and n % 100 != 0) or n % 400 == 0:\n    print("YES")\nelse:\n    print("NO")',
+      测试数据: '边界用例：1, 4, 100, 400, 1900, 2000, 2004, 3200'
+    }
+  },
+  {
+    title: '求最大值',
+    desc: '输入数组求最大值，展示完整模板格式',
+    fields: {
+      title: '求最大值',
+      description: '<p>输入 n 个整数，找出最大值。</p>',
+      input_description: '<p>第一行 n（1 ≤ n ≤ 100），第二行 n 个整数。</p>',
+      output_description: '<p>一行，最大值。</p>',
+      samples: 'input: "5\\n3 1 4 1 5" → output: "5"',
+      hint: '<p>设一个变量 max 初始化为很小的数，逐个比较更新。</p>',
+      难度: 'Low',
+      来源: '数组练习',
+      标签: '数组, 循环, 入门',
+      时间限制: '1000 ms',
+      内存限制: '256 MB',
+      '模板代码(C++)': '#include <iostream>\nusing namespace std;\n\nvoid solve() {\n    int n;\n    cin >> n;\n    int maxVal = -1000000;\n    for (int i = 0; i < n; i++) {\n        int x;\n        cin >> x;\n        if (x > maxVal) maxVal = x;\n    }\n    cout << maxVal << endl;\n}',
+      测试数据: '5\\n3 1 4 1 5 → 5  |  1\\n7 → 7  |  3\\n-5 -10 -3 → -3'
+    }
+  }
+]
 
 const addSample = () => {
   form.value.samples.push({ input: '', output: '' })
@@ -46,6 +125,38 @@ const removeTestCase = (index) => {
   if (form.value.test_cases.length > 1) {
     form.value.test_cases.splice(index, 1)
   }
+}
+
+const buildTemplatePayload = () => {
+  const tmpl = {}
+  const languageBoilerplate = {
+    C: {
+      prepend: '#include <stdio.h>\n',
+      append: '\nint main(void) {\n    solve();\n    return 0;\n}\n'
+    },
+    'C++': {
+      prepend: '#include <bits/stdc++.h>\nusing namespace std;\n',
+      append: '\nint main() {\n    ios::sync_with_stdio(false);\n    cin.tie(nullptr);\n    solve();\n    return 0;\n}\n'
+    },
+    Java: {
+      prepend: 'import java.util.*;\n\npublic class Main {\n',
+      append: '\n    public static void main(String[] args) {\n        Scanner sc = new Scanner(System.in);\n        solve(sc);\n        sc.close();\n    }\n}\n'
+    },
+    Python3: {
+      prepend: '',
+      append: '\nif __name__ == \'__main__\':\n    solve()\n'
+    }
+  }
+
+  for (const [lang, code] of Object.entries(form.value.template)) {
+    if (!code || !code.trim()) continue
+    const bp = languageBoilerplate[lang] || { prepend: '', append: '' }
+    tmpl[lang] =
+      '//PREPEND BEGIN\n' + bp.prepend + '//PREPEND END\n\n' +
+      '//TEMPLATE BEGIN\n' + code + '\n//TEMPLATE END\n\n' +
+      '//APPEND BEGIN\n' + bp.append + '//APPEND END'
+  }
+  return tmpl
 }
 
 const handleSingleSubmit = async () => {
@@ -71,7 +182,11 @@ const handleSingleSubmit = async () => {
       visible: form.value.visible,
       tags: form.value.tags.split(',').map(t => t.trim()).filter(Boolean),
       samples: form.value.samples.filter(s => s.input || s.output),
-      test_cases: form.value.test_cases.filter(tc => tc.input || tc.output)
+      test_cases: form.value.test_cases.filter(tc => tc.input || tc.output),
+      template: buildTemplatePayload(),
+      spj: form.value.spj,
+      spj_language: form.value.spj ? (form.value.spj_language || 'C') : '',
+      spj_code: form.value.spj ? (form.value.spj_code || '') : ''
     }
 
     const response = await apiClient.adminCreateProblem(payload)
@@ -103,7 +218,11 @@ const resetForm = () => {
     visible: false,
     tags: '',
     samples: [{ input: '', output: '' }],
-    test_cases: [{ input: '', output: '' }]
+    test_cases: [{ input: '', output: '' }],
+    template: { C: '', 'C++': '', Java: '', Python3: '' },
+    spj: false,
+    spj_language: '',
+    spj_code: ''
   }
   submitResult.value = null
 }
@@ -255,6 +374,32 @@ const progressPercent = computed(() => {
 
     <!-- ========== Single problem form ========== -->
     <div v-if="uploadTab === 'single'" class="single-form">
+      <!-- Example Reference Panel -->
+      <details class="example-panel">
+        <summary class="example-title">📖 录入示例 (点击展开参考)</summary>
+        <div class="example-content">
+          <p class="example-intro">以下是一个完整题目的填写示例，参考各字段的填写方式：</p>
+          <div class="example-tabs">
+            <button
+              v-for="ex in exampleProblems" :key="ex.title"
+              :class="{ active: selectedExample === ex.title }"
+              @click="selectedExample = ex.title"
+              class="ex-tab-btn"
+            >{{ ex.title }}</button>
+          </div>
+          <div v-for="ex in exampleProblems" :key="'ex-'+ex.title" v-show="selectedExample === ex.title" class="example-body">
+            <p><strong>说明：</strong>{{ ex.desc }}</p>
+            <table class="example-table">
+              <tr v-for="(val, key) in ex.fields" :key="key">
+                <td class="ex-field">{{ key }}</td>
+                <td class="ex-value"><code>{{ val }}</code></td>
+              </tr>
+            </table>
+          </div>
+          <p class="example-note">💡 <strong>提示：</strong>description/hint 等字段支持 HTML 标签：<code>&lt;p&gt;</code>、<code>&lt;br&gt;</code>、<code>&lt;strong&gt;</code>、<code>&lt;code&gt;</code>、<code>&lt;ul&gt;&lt;li&gt;</code> 等。</p>
+        </div>
+      </details>
+
       <div class="form-row">
         <label>标题 <span class="required">*</span></label>
         <input v-model="form.title" type="text" placeholder="题目标题" maxlength="128" />
@@ -321,6 +466,29 @@ const progressPercent = computed(() => {
         </div>
       </div>
 
+      <!-- Template Code (Starter Code) -->
+      <div class="form-section">
+        <label>模板代码 (Starter Code) <span class="hint-text">— 可选，为学生提供代码框架</span></label>
+        <p class="section-desc">只需填写 TEMPLATE 部分的逻辑代码，PREPEND/APPEND 会自动生成。</p>
+        <div class="template-tabs">
+          <button
+            v-for="lang in ['C', 'C++', 'Java', 'Python3']" :key="lang"
+            :class="{ active: activeTemplateTab === lang }"
+            @click="activeTemplateTab = lang"
+            class="tab-btn"
+          >{{ lang }}</button>
+        </div>
+        <textarea
+          v-model="form.template[activeTemplateTab]"
+          :placeholder="templatePlaceholder(activeTemplateTab)"
+          rows="8"
+          class="template-code"
+        ></textarea>
+        <p class="hint-text">
+          学生编辑器中显示的内容。用 <code>// TODO</code> 标注学生需要完成的部分，不要提供完整答案。
+        </p>
+      </div>
+
       <!-- Test cases -->
       <div class="form-section">
         <label>测试数据</label>
@@ -348,6 +516,31 @@ const progressPercent = computed(() => {
           <label>内存限制 (MB)</label>
           <input v-model.number="form.memory_limit" type="number" min="16" max="1024" />
         </div>
+      </div>
+
+      <!-- SPJ (Special Judge) -->
+      <div class="form-section">
+        <label>特殊判题 (SPJ) <span class="hint-text">— 仅答案不唯一时启用</span></label>
+        <label class="checkbox-label" style="margin-bottom: 8px">
+          <input v-model="form.spj" type="checkbox" />
+          启用特殊判题
+        </label>
+        <template v-if="form.spj">
+          <div class="form-row">
+            <label>SPJ 语言</label>
+            <select v-model="form.spj_language">
+              <option value="">— 选择语言 —</option>
+              <option value="C">C</option>
+              <option value="C++">C++</option>
+              <option value="Java">Java</option>
+              <option value="Python3">Python3</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <label>SPJ 代码</label>
+            <textarea v-model="form.spj_code" rows="6" placeholder="自定义判题逻辑代码"></textarea>
+          </div>
+        </template>
       </div>
 
       <div class="form-row">
@@ -778,5 +971,152 @@ const progressPercent = computed(() => {
   font-size: 11px;
   color: #ef9a9a;
   margin-bottom: 2px;
+}
+
+/* Example reference panel */
+.example-panel {
+  margin-bottom: 16px;
+  padding: 12px;
+  background: var(--card-bg, #1e1e30);
+  border: 1px solid var(--border-color, #333);
+  border-radius: 8px;
+}
+
+.example-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--accent, #4fc3f7);
+  cursor: pointer;
+  padding: 4px 0;
+}
+
+.example-content {
+  margin-top: 10px;
+}
+
+.example-intro {
+  font-size: 12px;
+  color: var(--text-secondary, #999);
+  margin-bottom: 8px;
+}
+
+.example-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.ex-tab-btn {
+  padding: 4px 12px;
+  font-size: 12px;
+  background: var(--input-bg, #1a1a2e);
+  border: 1px solid var(--border-color, #333);
+  border-radius: 4px;
+  color: var(--text-secondary, #999);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.ex-tab-btn.active {
+  background: var(--accent, #4fc3f7);
+  color: #000;
+  border-color: var(--accent, #4fc3f7);
+}
+
+.example-body {
+  font-size: 12px;
+}
+
+.example-body p {
+  color: var(--text-secondary, #999);
+  margin-bottom: 6px;
+}
+
+.example-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 8px;
+}
+
+.example-table td {
+  padding: 4px 8px;
+  border: 1px solid var(--border-color, #333);
+  vertical-align: top;
+}
+
+.ex-field {
+  width: 140px;
+  font-size: 11px;
+  color: var(--text-muted, #666);
+  white-space: nowrap;
+}
+
+.ex-value {
+  font-size: 12px;
+  color: var(--text-primary, #e0e0e0);
+}
+
+.ex-value code {
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 11px;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.example-note {
+  font-size: 11px;
+  color: var(--text-muted, #666);
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-color, #333);
+}
+
+/* Template code */
+.template-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+
+.tab-btn {
+  padding: 4px 14px;
+  font-size: 12px;
+  background: var(--input-bg, #1a1a2e);
+  border: 1px solid var(--border-color, #333);
+  border-radius: 4px 4px 0 0;
+  color: var(--text-secondary, #999);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.tab-btn.active {
+  background: var(--accent, #4fc3f7);
+  color: #000;
+  border-color: var(--accent, #4fc3f7);
+}
+
+.template-code {
+  width: 100%;
+  padding: 10px;
+  background: var(--input-bg, #12121f);
+  border: 1px solid var(--border-color, #333);
+  border-radius: 0 4px 4px 4px;
+  color: var(--text-primary, #e0e0e0);
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 13px;
+  resize: vertical;
+  box-sizing: border-box;
+}
+
+.section-desc {
+  font-size: 11px;
+  color: var(--text-muted, #666);
+  margin: 4px 0 8px;
+}
+
+.hint-text {
+  font-size: 11px;
+  color: var(--text-muted, #666);
+  font-weight: normal;
 }
 </style>
