@@ -57,6 +57,10 @@ class ProblemCreateRequest(BaseModel):
     visible: bool = False
     tags: list[str] = []
     test_cases: list[SampleItem] = []
+    template: dict = {}
+    spj: bool = False
+    spj_language: str = ""
+    spj_code: str = ""
 
 
 class ProblemCreateResponse(BaseModel):
@@ -121,9 +125,13 @@ async def create_single_problem(req: ProblemCreateRequest):
                 time_limit=req.time_limit,
                 memory_limit=req.memory_limit,
                 languages=req.languages,
+                template=req.template,
                 visible=req.visible,
                 tags=req.tags,
                 test_cases=test_cases if test_cases else None,
+                spj=req.spj,
+                spj_language=req.spj_language,
+                spj_code=req.spj_code,
                 created_by_id=1,
             )
             return ProblemCreateResponse(

@@ -143,6 +143,10 @@ async def create_problem(
     visible: bool = False,
     tags: list[str] | None = None,
     test_cases: list[dict] | None = None,
+    template: dict | None = None,
+    spj: bool = False,
+    spj_language: str | None = None,
+    spj_code: str | None = None,
     created_by_id: int = 1,
     _id: str | None = None,
 ) -> dict:
@@ -207,7 +211,7 @@ async def create_problem(
             time_limit, memory_limit, languages, template,
             test_case_id, test_case_score,
             visible, is_public, created_by_id, create_time, last_update_time,
-            contest_id, spj, spj_compile_ok, io_mode, total_score,
+            contest_id, spj, spj_language, spj_code, spj_compile_ok, io_mode, total_score,
             statistic_info, submission_number, accepted_number, share_submission
         ) VALUES (
             :_id, :title, :description, :input_description, :output_description,
@@ -215,7 +219,7 @@ async def create_problem(
             :time_limit, :memory_limit, CAST(:languages AS jsonb), CAST(:template AS jsonb),
             :test_case_id, CAST(:test_case_score AS jsonb),
             :visible, :is_public, :created_by_id, :create_time, :last_update_time,
-            NULL, false, false, CAST(:io_mode AS jsonb), :total_score,
+            NULL, :spj, :spj_language, :spj_code, :spj, CAST(:io_mode AS jsonb), :total_score,
             CAST(:statistic_info AS jsonb), 0, 0, false
         ) RETURNING id, _id
     """)
@@ -234,7 +238,7 @@ async def create_problem(
         "time_limit": time_limit,
         "memory_limit": memory_limit,
         "languages": json.dumps(languages, ensure_ascii=False),
-        "template": json.dumps({}, ensure_ascii=False),
+        "template": json.dumps(template or {}, ensure_ascii=False),
         "test_case_id": test_case_id or problem_display_id,
         "test_case_score": json.dumps(test_case_score, ensure_ascii=False) if test_case_score else "[]",
         "visible": visible,
@@ -242,6 +246,9 @@ async def create_problem(
         "created_by_id": created_by_id,
         "create_time": now,
         "last_update_time": now,
+        "spj": spj,
+        "spj_language": spj_language or "",
+        "spj_code": spj_code or "",
         "io_mode": '{"io_mode":"Standard I/O"}',
         "total_score": sum(tc.get("score", 0) for tc in (test_cases or [])) or 100,
         "statistic_info": json.dumps({}, ensure_ascii=False),
