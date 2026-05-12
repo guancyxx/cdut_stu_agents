@@ -693,6 +693,28 @@ onMounted(async () => {
   // Switch session storage to the authenticated user
   switchToUser(ojUser.value.profileName || ojUser.value.username)
 
+  // Restore problem context from the active session after refresh
+  // Without this, problem description + starter code are lost on page reload
+  const restoredSession = sessions.value.find((s) => s.id === currentSessionId.value)
+  if (restoredSession?.problemId) {
+    selectedProblemId.value = String(restoredSession.problemId)
+    await fetchProblemDetail(String(restoredSession.problemId))
+
+    // Rebuild submit draft (starter code) for the restored problem
+    const draft = getActiveSubmitDraft()
+    const detail = problemDetail.value
+    const source = (detail && String(detail._id) === String(restoredSession.problemId)) ? detail : null
+    for (const lang of ALL_LANGUAGES) {
+      const starterRaw = source
+        ? (source.template?.[lang] || STARTER_CODE[lang] || '')
+        : (STARTER_CODE[lang] || '')
+      if (!draft.codes[lang]) {
+        draft.codes[lang] = extractEditableTemplateSection(starterRaw)
+      }
+      draft.templateRawByLanguage[lang] = starterRaw
+    }
+  }
+
   await fetchProblems()
   activeTab.value = 'home'
 })
