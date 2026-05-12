@@ -362,14 +362,17 @@ const selectProblemForRightPanel = async (problem) => {
   // Fetch full problem detail (description, input, output, samples, hint, source)
   await fetchProblemDetail(String(problem._id))
 
-  // Populate starter code for ALL languages from problem template or fallback skeleton.
+  // Populate starter code for ALL languages from problem detail template or fallback skeleton.
   // Each CodeEditor instance binds to its own codes[lang], so pre-populating all
   // languages means switching language just shows/hides editors — no code copying.
   const draft = getActiveSubmitDraft()
+  const starterSource = problemDetail.value && String(problemDetail.value._id || '') === String(problem._id || '')
+    ? problemDetail.value
+    : problem
   for (const lang of ALL_LANGUAGES) {
     // Only populate if the buffer is empty (first time selecting this problem)
     if (!draft.codes[lang]) {
-      draft.codes[lang] = getStarterCode(problem, lang)
+      draft.codes[lang] = getStarterCode(starterSource, lang)
     }
   }
 

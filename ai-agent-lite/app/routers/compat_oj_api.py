@@ -233,7 +233,7 @@ async def list_or_get_problem(
             row = (
                 await db.execute(
                     text(
-                        "SELECT id,_id,title,description,input_description,output_description,samples,hint,source,difficulty,time_limit,memory_limit,languages "
+                        "SELECT id,_id,title,description,input_description,output_description,samples,hint,source,difficulty,time_limit,memory_limit,languages,template "
                         "FROM problem WHERE _id=:pid OR CAST(id AS TEXT)=:pid LIMIT 1"
                     ),
                     {"pid": problem_id},
@@ -257,6 +257,7 @@ async def list_or_get_problem(
                     "time_limit": int(row[10] or 1000),
                     "memory_limit": int(row[11] or 256),
                     "languages": _parse_json(row[12], ["C", "C++", "Java", "Python3"]),
+                    "template": _parse_json(row[13], {}),
                 },
             }
 
