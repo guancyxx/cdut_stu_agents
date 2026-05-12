@@ -16,7 +16,7 @@ from fastapi import FastAPI
 from app.config import settings
 from app.database import init_db
 from app.middleware import RequestMiddleware
-from app.routers import health, metrics_router, oj_test_cases, problem_audit, problem_upload, submission_events, submission_judge, websocket
+from app.routers import compat_oj_api, health, metrics_router, oj_test_cases, problem_audit, problem_upload, submission_events, submission_judge, websocket
 
 logger = logging.getLogger("ai-agent-lite")
 
@@ -38,6 +38,7 @@ def create_app() -> FastAPI:
     app.add_middleware(RequestMiddleware)
     app.include_router(health.router)
     app.include_router(metrics_router.router)
+    app.include_router(compat_oj_api.router)
     app.include_router(oj_test_cases.router)
     app.include_router(problem_audit.router)
     app.include_router(problem_upload.router)

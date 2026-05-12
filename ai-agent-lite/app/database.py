@@ -27,6 +27,7 @@ async def init_db() -> None:
     """Create schema and tables if they do not exist."""
     from app.models.orm import Base
     from app.models.submission import Submission  # noqa: F401 — ensure table registered
+    from app.models.local_user import LocalUser  # noqa: F401 — ensure table registered
 
     _apply_schema(Base)
 

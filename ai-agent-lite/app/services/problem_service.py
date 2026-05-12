@@ -1,8 +1,8 @@
-"""Problem creation service — direct DB write for QDUOJ problem table.
+"""Problem creation service — direct DB write for problem table.
 
-Avoids the QDUOJ Admin API entirely (CSRF complexity, ~3 HTTP calls/problem).
+No QDUOJ Admin API calls.
 Writes directly to public.problem, public.problem_tag, public.problem_tags.
-Test case files go to the shared volume /data/test_case/.
+Test case files go to the shared volume /data/test_cases/.
 """
 
 import hashlib
@@ -25,7 +25,7 @@ logger = logging.getLogger("ai-agent-lite.problem_service")
 # Constants
 # ---------------------------------------------------------------------------
 
-TEST_CASE_DIR = Path(os.getenv("TEST_CASE_DIR", "/data/test_case"))
+TEST_CASE_DIR = Path(os.getenv("TEST_CASE_DIR", "/data/test_cases"))
 
 DEFAULT_LANGUAGES = ["C", "C++", "Java", "Python3"]
 VALID_DIFFICULTIES = {"Low", "Mid", "High"}
@@ -70,7 +70,7 @@ def write_test_case_files(
 
     Returns:
         (test_case_id, test_case_score)
-        test_case_id: MD5 hash string used as the directory name under /data/test_case/
+        test_case_id: MD5 hash string used as the directory name under /data/test_cases/
         test_case_score: [{"score": N}, ...] one entry per test case
     """
     os.makedirs(test_case_dir, exist_ok=True)
