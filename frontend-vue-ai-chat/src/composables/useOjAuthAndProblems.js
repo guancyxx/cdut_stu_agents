@@ -130,6 +130,14 @@ export function useOjAuthAndProblems() {
   const problems = ref([])
   const problemLoading = ref(false)
   const problemError = ref('')
+  const contestList = ref([])
+  const contestListLoading = ref(false)
+  const contestError = ref('')
+  const currentContestId = ref('')
+  const contestDetail = ref(null)
+  const contestDetailLoading = ref(false)
+  const contestRankRows = ref([])
+  const contestRankLoading = ref(false)
   const submitLoading = ref(false)
 
   // Per-session submit results — prevents stale result from polluting new sessions
@@ -379,6 +387,113 @@ export function useOjAuthAndProblems() {
     }
   }
 
+  const fetchContests = async (status = 'all') => {
+    contestError.value = ''
+    contestListLoading.value = true
+
+    try {
+      const response = await apiClient.fetchContests({ status })
+      const result = response.data
+      if (result?.error) {
+        contestError.value = typeof result.data === 'string' ? result.data : result.error
+        contestList.value = []
+        return []
+      }
+
+      const rows = Array.isArray(result.data?.results) ? result.data.results : []
+      contestList.value = rows
+      return rows
+    } catch (error) {
+      contestError.value = error.message || String(error)
+      contestList.value = []
+      return []
+    } finally {
+      contestListLoading.value = false
+    }
+  }
+
+  const fetchContestDetail = async (contestId) => {
+    if (!contestId) return null
+    contestError.value = ''
+    contestDetailLoading.value = true
+    currentContestId.value = sanitizeTextInput(String(contestId), 64)
+
+    try {
+      const response = await apiClient.fetchContestDetail(currentContestId.value)
+      const result = response.data
+      if (result?.error) {
+        contestError.value = typeof result.data === 'string' ? result.data : result.error
+        contestDetail.value = null
+        return null
+      }
+      contestDetail.value = result.data ?? null
+      return contestDetail.value
+    } catch (error) {
+      contestError.value = error.message || String(error)
+      contestDetail.value = null
+      return null
+    } finally {
+      contestDetailLoading.value = false
+    }
+  }
+
+  const joinContest = async (contestId) => {
+    const cid = sanitizeTextInput(String(contestId || ''), 64)
+    if (!cid) {
+      contestError.value = 'Invalid contest id.'
+      return false
+    }
+
+    contestError.value = ''
+    try {
+      const response = await apiClient.joinContest({ contest_id: cid })
+      const result = response.data
+      if (result?.error) {
+        contestError.value = typeof result.data === 'string' ? result.data : result.error
+        return false
+      }
+      if (contestDetail.value && String(contestDetail.value.id) === cid) {
+        contestDetail.value = {
+          ...contestDetail.value,
+          joined: true
+        }
+      }
+      return true
+    } catch (error) {
+      contestError.value = error.message || String(error)
+      return false
+    }
+  }
+
+  const fetchContestRank = async (contestId) => {
+    const cid = sanitizeTextInput(String(contestId || currentContestId.value || ''), 64)
+    if (!cid) {
+      contestError.value = 'Invalid contest id.'
+      contestRankRows.value = []
+      return []
+    }
+
+    contestError.value = ''
+    contestRankLoading.value = true
+    try {
+      const response = await apiClient.fetchContestRank(cid)
+      const result = response.data
+      if (result?.error) {
+        contestError.value = typeof result.data === 'string' ? result.data : result.error
+        contestRankRows.value = []
+        return []
+      }
+      contestRankRows.value = Array.isArray(result.data?.results) ? result.data.results : []
+      return contestRankRows.value
+    } catch (error) {
+      contestError.value = error.message || String(error)
+      contestRankRows.value = []
+      return []
+    } finally {
+      contestRankLoading.value = false
+    }
+  }
+
   // QDUOJ JudgeStatus enum — non-standard values.  See skill:qduoj-submission-judge-debugging
   //   0=ACCEPTED, -1=WRONG_ANSWER, -2=COMPILE_ERROR, 1=CPU_TLE, 2=REAL_TLE, 3=MLE,
   //   4=RUNTIME_ERROR, 5=SYSTEM_ERROR, 6=PENDING, 7=JUDGING, 8=PARTIALLY_ACCEPTED
@@ -611,7 +726,7 @@ export function useOjAuthAndProblems() {
     return null
   }
 
-  const submitSolution = async ({ problemId, problemQueryId, language, code, sessionId }) => {
+  const submitSolution = async ({ problemId, problemQueryId, language, code, sessionId, contestId = '' }) => {
     const sid = sessionId || '_default'
     submitLoading.value = true
     setSubmitResultForSession(sid, null)
@@ -629,12 +744,15 @@ export function useOjAuthAndProblems() {
       }
 
       const csrfToken = await ensureCsrfToken(apiClient)
+      const normalizedContestId = sanitizeTextInput(String(contestId || ''), 64)
+      const submitPayload = {
+        problem_id: parsedProblemId,
+        language: normalizedLanguage,
+        code: normalizedCode,
+        ...(normalizedContestId ? { contest_id: normalizedContestId } : {})
+      }
       const submitResponse = await apiClient.submitCode(
-        {
-          problem_id: parsedProblemId,
-          language: normalizedLanguage,
-          code: normalizedCode
-        },
+        submitPayload,
         csrfToken
       )
 
@@ -817,7 +935,19 @@ export function useOjAuthAndProblems() {
     logout,
     fetchProblems,
     submitSolution,
-    reportSubmissionToFallback
+    reportSubmissionToFallback,
+    contestList,
+    contestListLoading,
+    contestError,
+    currentContestId,
+    contestDetail,
+    contestDetailLoading,
+    contestRankRows,
+    contestRankLoading,
+    fetchContests,
+    fetchContestDetail,
+    joinContest,
+    fetchContestRank
   }
 }
 
