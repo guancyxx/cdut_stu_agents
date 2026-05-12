@@ -194,6 +194,30 @@ services:
     networks:
       - cdut-network
 
+  # ==================== 独立 PostgreSQL（迁移后替代 oj-postgres） ====================
+  cdut-postgres:
+    image: postgres:15-alpine
+    container_name: cdut-postgres
+    environment:
+      - POSTGRES_DB=cdut_oj
+      - POSTGRES_USER=cdut
+      - POSTGRES_PASSWORD=cdut_oj_2024
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+    restart: unless-stopped
+    networks:
+      - cdut-network
+
+  # ==================== 独立 Redis（迁移后替代 oj-redis） ====================
+  cdut-redis:
+    image: redis:7-alpine
+    container_name: cdut-redis
+    volumes:
+      - ./data/redis:/data
+    restart: unless-stopped
+    networks:
+      - cdut-network
+
   # ==================== Prometheus 监控（已注释） ====================
   # prometheus:
   #   image: prom/prometheus:v2.54.1
