@@ -6,6 +6,8 @@ data/submissions/*
 data/training/*
 data/chat_history/*
 data/problems/*
+data/redis/*
+data/test_cases/*
 !data/submissions/.gitkeep
 !data/training/.gitkeep
 !data/chat_history/.gitkeep
