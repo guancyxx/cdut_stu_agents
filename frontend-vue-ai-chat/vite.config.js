@@ -27,7 +27,7 @@ export default defineConfig({
         ws: true,
       },
       '/oj-api': {
-        target: 'http://oj-backend:8000',
+        target: 'http://ai-agent-lite:8848',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/oj-api/, ''),
       },

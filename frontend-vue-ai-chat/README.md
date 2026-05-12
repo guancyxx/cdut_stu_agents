@@ -21,7 +21,7 @@ Vue 3 + Vite frontend for the CDUT AI tutor system. Provides chat interface with
 Browser
   |
   +-- /ws     -> ws://ai-agent-lite:8848  (Vite proxy)
-  +-- /oj-api -> http://oj-backend:8000    (Vite proxy, path rewrite)
+  +-- /oj-api -> http://ai-agent-lite:8848 (Vite proxy, path rewrite)
 ```
 
 ## Quick Start (Docker)
@@ -70,7 +70,7 @@ This flow gives users a chance to review before sending and allows combining cod
 ## OJ Integration
 
 - Auth: Cookie-based login via /oj-api proxy
-- Problems: Fetch list + detail from QDUOJ backend API (offset + limit pagination)
+- Problems: Fetch list + detail from ai-agent-lite compatibility API (offset + limit pagination)
 - Submit: POST to /oj-api/submission with problem_id, language, code
 - Result: Poll submission status via /oj-api/submission
 

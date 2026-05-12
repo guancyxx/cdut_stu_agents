@@ -32,7 +32,7 @@
 | `oj-judge` | 代码编译运行、判题 | oj-backend 内部调度，ai-agent-lite 不直接访问 |
 | `oj-postgres` | 共享数据库 | ai-agent-lite 直连读写 problem 表 + ai_agent schema |
 | `oj-redis` | Celery 任务队列 | ai-agent-lite 的 Celery worker 使用 |
-| `qduoj/data/backend/test_case` | 测试用例文件 | 通过 Docker volume 挂载到 `/data/test_case` |
+| `qduoj/data/backend/test_case` | 测试用例文件 | 通过 Docker volume 挂载到 `/data/test_cases` |
 
 ### 1.3 关键代码文件
 
@@ -44,7 +44,7 @@ ai-agent-lite/app/
 ├── routers/
 │   ├── problem_upload.py  # 题目创建 → 调 problem_service
 │   ├── problem_audit.py   # 触发 audit Celery 任务
-│   ├── oj_test_cases.py    # 读取 /data/test_case 目录
+│   ├── oj_test_cases.py    # 读取 /data/test_cases 目录
 │   └── submission_events.py # 接收前端提交结果 (fallback API)
 ├── services/
 │   ├── problem_service.py # 直写 QDUOJ problem 表
@@ -124,7 +124,7 @@ services:
 ### 3.3 新的判题流程
 
 ```
-Vue 前端 → POST /api/submit {code, language, problem_id}
+Vue 前端 → POST /api/submission {code, language, problem_id}
          ↓
 ai-agent-lite (FastAPI)
   ├─ 1. 从 PG 读取 problem 信息 + test_case_id
@@ -207,7 +207,7 @@ rsync -av qduoj/data/backend/test_case/ data/test_cases/
 
 ```
 □ 新写 judge_service.py（调用 isolate，对比输出，支持SPJ）
-□ 新写 POST /api/submit 端点
+□ 新写 POST /api/submission 端点
 □ 新写 ai_agent.submission 表 + ORM
 □ 单元测试覆盖各判题结果
 ```

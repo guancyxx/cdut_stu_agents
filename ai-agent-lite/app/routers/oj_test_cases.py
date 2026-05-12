@@ -19,8 +19,8 @@ logger = logging.getLogger("ai-agent-lite")
 
 router = APIRouter(prefix="/oj", tags=["oj-test-cases"])
 
-# Path to test_case directory inside the container (volume-mounted from OJ backend)
-TEST_CASE_DIR = os.getenv("OJ_TEST_CASE_DIR", "/data/test_case")
+# Path to test_case directory inside the container (volume-mounted from migrated data)
+TEST_CASE_DIR = os.getenv("OJ_TEST_CASE_DIR", "/data/test_cases")
 
 
 def _get_db_connection():
@@ -71,16 +71,12 @@ def _lookup_problem_by_numeric_id(numeric_id: int) -> Optional[dict]:
 
 
 def _fetch_submission_detail_db(submission_id: str) -> Optional[dict]:
-    """Fetch submission detail from PostgreSQL directly.
-
-    Returns a dict with 'info' field matching the OJ API response structure,
-    or None if not found / not accessible.
-    """
+    """Fetch submission detail from ai_agent.submissions (new judge flow)."""
     try:
         conn = _get_db_connection()
         cur = conn.cursor()
         cur.execute(
-            "SELECT result, statistic_info, info FROM submission WHERE id = %s",
+            "SELECT verdict, time_sec, memory_kb, compile_error, test_case_results FROM ai_agent.submissions WHERE CAST(id AS TEXT) = %s",
             (submission_id,)
         )
         row = cur.fetchone()
@@ -89,32 +85,36 @@ def _fetch_submission_detail_db(submission_id: str) -> Optional[dict]:
         if not row:
             return None
 
-        result_code, statistic_info_raw, info_raw = row
+        verdict, time_sec, memory_kb, compile_error, test_case_results_raw = row
+        # Build QDUOJ-like detail for frontend parser compatibility
+        def verdict_to_code(v: str) -> int:
+            mapping = {"AC": 0, "WA": -1, "CE": -2, "TLE": 1, "MLE": 3, "RE": 4, "SE": 5}
+            return mapping.get(str(v or "SE"), 5)
 
-        # Parse info field — it stores per-test-case data as JSON
-        info = None
-        if isinstance(info_raw, dict):
-            info = info_raw
-        elif isinstance(info_raw, str) and info_raw:
-            try:
-                info = json.loads(info_raw)
-            except (json.JSONDecodeError, ValueError):
-                pass
-
-        # Parse statistic_info
-        stat_info = None
-        if isinstance(statistic_info_raw, dict):
-            stat_info = statistic_info_raw
-        elif isinstance(statistic_info_raw, str) and statistic_info_raw:
-            try:
-                stat_info = json.loads(statistic_info_raw)
-            except (json.JSONDecodeError, ValueError):
-                pass
+        tc_rows = []
+        if isinstance(test_case_results_raw, list):
+            for tc in test_case_results_raw:
+                tc_rows.append({
+                    "test_case": int(tc.get("case_index", 0)),
+                    "result": verdict_to_code(str(tc.get("verdict", "SE"))),
+                    "cpu_time": int(float(tc.get("time_sec", 0)) * 1000),
+                    "memory": int(tc.get("max_rss_kb", 0) or 0) * 1024,
+                    "score": 0,
+                    "output": tc.get("stdout", ""),
+                })
 
         return {
-            "result": result_code,
-            "statistic_info": stat_info or {},
-            "info": info or {},
+            "result": verdict_to_code(str(verdict or "SE")),
+            "statistic_info": {
+                "score": 100 if str(verdict or "SE") == "AC" else 0,
+                "time_cost": int(float(time_sec or 0) * 1000),
+                "memory_cost": int(memory_kb or 0),
+                "err_info": compile_error or "",
+            },
+            "info": {
+                "err": compile_error or "",
+                "data": tc_rows,
+            },
         }
     except Exception as exc:
         logger.warning("Failed to fetch submission %s from DB: %s", submission_id, exc)
