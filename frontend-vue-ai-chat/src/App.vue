@@ -12,6 +12,15 @@ import { useOjAuthAndProblems } from './composables/useOjAuthAndProblems'
 const activeTab = ref('home')
 const rightPanelTab = ref('problem')
 const selectedProblemId = ref('')
+const selectedContestProblemId = ref('')
+const contestCreateForm = ref({
+  title: '',
+  description: '',
+  startTime: '',
+  endTime: '',
+  problemIdsRaw: ''
+})
+const contestCreateState = ref({ type: '', message: '' })
 const langDropdownOpen = ref(false)
 
 // Close dropdown when clicking anywhere outside
@@ -205,14 +214,48 @@ const {
   logout,
   fetchProblems,
   submitSolution,
-  reportSubmissionToFallback
+  reportSubmissionToFallback,
+  contestList,
+  contestListLoading,
+  contestError,
+  currentContestId,
+  contestDetail,
+  contestDetailLoading,
+  contestRankRows,
+  contestRankLoading,
+  fetchContests,
+  fetchContestDetail,
+  joinContest,
+  fetchContestRank
 } = useOjAuthAndProblems()
 
 const authActionText = computed(() => (ojUser.value.loggedIn ? ojUser.value.profileName : '去登录'))
 const isProfileTab = computed(() => activeTab.value === 'profile')
+const isContestTab = computed(() => activeTab.value === 'contest')
 const requiresAuth = computed(() => authReady.value && !ojUser.value.loggedIn)
 const sessionCount = computed(() => sessions.value.length)
 const hasSessions = computed(() => sessionCount.value > 0)
+
+const selectedContest = computed(() => {
+  const cid = String(currentContestId.value || '')
+  if (!cid) return null
+  return contestList.value.find((item) => String(item.id) === cid) || null
+})
+
+const contestStatusText = computed(() => {
+  const status = String(contestDetail.value?.status || selectedContest.value?.status || '').toLowerCase()
+  if (status === 'running') return '进行中'
+  if (status === 'upcoming') return '即将开始'
+  if (status === 'ended') return '已结束'
+  return '-'
+})
+
+const selectedContestProblem = computed(() => {
+  const rows = Array.isArray(contestDetail.value?.problems) ? contestDetail.value.problems : []
+  const pid = String(selectedContestProblemId.value || '')
+  if (!pid) return null
+  return rows.find((item) => String(item._id) === pid) || null
+})
 
 // Per-session submit result — switches automatically when session changes
 const submitResult = computed(() => getSubmitResultForSession(currentSessionId.value))
@@ -569,6 +612,123 @@ const handleSubmitCode = async () => {
   await sendMessage()
 }
 
+const handleContestSelect = async (contestId) => {
+  const cid = sanitizeTextInput(String(contestId || ''), 64)
+  if (!cid) return
+  await fetchContestDetail(cid)
+  await fetchContestRank(cid)
+  const firstProblem = Array.isArray(contestDetail.value?.problems) ? contestDetail.value.problems[0] : null
+  selectedContestProblemId.value = firstProblem?._id ? String(firstProblem._id) : ''
+}
+
+const handleContestJoin = async () => {
+  const cid = sanitizeTextInput(String(currentContestId.value || ''), 64)
+  if (!cid) return
+  const ok = await joinContest(cid)
+  if (ok) {
+    await fetchContestDetail(cid)
+    await fetchContestRank(cid)
+  }
+}
+
+const handleContestProblemPick = async (problem) => {
+  if (!problem?._id) return
+  selectedContestProblemId.value = String(problem._id)
+  selectedProblemId.value = String(problem._id)
+  await fetchProblemDetail(String(problem._id))
+  rightPanelTab.value = 'submit'
+}
+
+const handleContestSubmitCode = async () => {
+  activeSubmitState.value = { type: '', message: '' }
+
+  if (!selectedContestProblem.value) {
+    activeSubmitState.value = { type: 'error', message: '请先选择比赛题目。' }
+    return
+  }
+  if (!currentContestId.value) {
+    activeSubmitState.value = { type: 'error', message: 'Invalid contest id.' }
+    return
+  }
+
+  const normalizedEditableCode = sanitizeTextInput(activeSubmitCode.value, 20000)
+  activeSubmitCode.value = normalizedEditableCode
+  if (normalizedEditableCode.length < 10) {
+    activeSubmitState.value = { type: 'error', message: 'Code must be at least 10 characters.' }
+    return
+  }
+
+  const currentDraft = getActiveSubmitDraft()
+  const templateRaw = currentDraft.templateRawByLanguage[activeSubmitLanguage.value] || ''
+  const normalizedCode = sanitizeTextInput(buildSubmissionCode(templateRaw, normalizedEditableCode), 20000)
+
+  const result = await submitSolution({
+    problemId: selectedContestProblem.value.id,
+    problemQueryId: selectedContestProblem.value._id,
+    language: activeSubmitLanguage.value,
+    code: normalizedCode,
+    sessionId: currentSessionId.value,
+    contestId: currentContestId.value
+  })
+
+  activeSubmitState.value = mapSubmissionLabelToUiMessage(result)
+  await fetchContestRank(currentContestId.value)
+}
+
+const handleContestRefresh = async () => {
+  await fetchContests('all')
+  if (currentContestId.value) {
+    await fetchContestDetail(currentContestId.value)
+    await fetchContestRank(currentContestId.value)
+  }
+}
+
+const handleCreateContest = async () => {
+  contestCreateState.value = { type: '', message: '' }
+  const title = sanitizeTextInput(contestCreateForm.value.title, 255)
+  const description = sanitizeTextInput(contestCreateForm.value.description, 1000)
+  const normalizeLocalDateTime = (raw) => {
+    const text = sanitizeTextInput(String(raw || ''), 64)
+    if (!text) return ''
+    return text.includes('T') ? `${text}:00Z` : text
+  }
+  const startTime = normalizeLocalDateTime(contestCreateForm.value.startTime)
+  const endTime = normalizeLocalDateTime(contestCreateForm.value.endTime)
+  const problemIds = String(contestCreateForm.value.problemIdsRaw || '')
+    .split(',')
+    .map((item) => sanitizeTextInput(item.trim(), 64))
+    .filter(Boolean)
+
+  if (!title || !startTime || !endTime || !problemIds.length) {
+    contestCreateState.value = { type: 'error', message: 'Please fill all required fields.' }
+    return
+  }
+
+  const resp = await fetch('/oj-api/api/contest/create', {
+    method: 'POST',
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      title,
+      description,
+      start_time: startTime,
+      end_time: endTime,
+      problem_ids: problemIds
+    })
+  })
+  const data = await resp.json().catch(() => ({ error: 'Invalid response' }))
+  if (data?.error) {
+    contestCreateState.value = { type: 'error', message: typeof data.data === 'string' ? data.data : data.error }
+    return
+  }
+
+  contestCreateState.value = { type: 'success', message: 'Contest created.' }
+  contestCreateForm.value = { title: '', description: '', startTime: '', endTime: '', problemIdsRaw: '' }
+  await fetchContests('all')
+}
+
 const buildResultAttachmentContent = (result) => {
   if (!result) return ''
   const lines = []
@@ -702,6 +862,7 @@ onMounted(async () => {
   }
 
   await fetchProblems()
+  await fetchContests('all')
   activeTab.value = 'home'
 })
 
@@ -721,6 +882,7 @@ onBeforeUnmount(() => {
       <div class="tabs" v-if="!requiresAuth">
         <button :class="{ active: activeTab === 'home' }" @click="activeTab = 'home'">主页</button>
         <button :class="{ active: activeTab === 'problemset' }" @click="activeTab = 'problemset'">题库</button>
+        <button :class="{ active: activeTab === 'contest' }" @click="activeTab = 'contest'">比赛</button>
         <button v-if="isAdmin" :class="{ active: activeTab === 'admin' }" @click="activeTab = 'admin'">管理</button>
         <button :class="{ active: activeTab === 'profile' }" @click="activeTab = 'profile'">个人中心</button>
       </div>
@@ -811,6 +973,130 @@ onBeforeUnmount(() => {
         </div>
 
         <div class="error" v-if="ojUser.error">{{ ojUser.error }}</div>
+      </div>
+    </section>
+
+    <section class="contest-screen" v-else-if="isContestTab">
+      <div class="contest-layout">
+        <div class="contest-left card">
+          <div class="contest-head-row">
+            <h3>比赛列表</h3>
+            <button @click="handleContestRefresh" :disabled="contestListLoading">刷新</button>
+          </div>
+          <div class="contest-list" v-if="!contestListLoading">
+            <button
+              v-for="item in contestList"
+              :key="item.id"
+              class="contest-item"
+              :class="{ active: String(item.id) === String(currentContestId) }"
+              @click="handleContestSelect(item.id)"
+            >
+              <div class="contest-item-top">
+                <strong>{{ item.title }}</strong>
+                <span class="contest-badge" :class="item.status">{{ item.status }}</span>
+              </div>
+              <div class="contest-item-meta">{{ item.start_time }} ~ {{ item.end_time }}</div>
+            </button>
+            <div class="empty" v-if="!contestList.length">暂无比赛</div>
+          </div>
+          <div class="empty" v-else>加载中...</div>
+          <div class="error" v-if="contestError">{{ contestError }}</div>
+
+          <div class="contest-create" v-if="isAdmin">
+            <h4>创建比赛</h4>
+            <input v-model="contestCreateForm.title" placeholder="标题" />
+            <textarea v-model="contestCreateForm.description" placeholder="描述（可选）" />
+            <input v-model="contestCreateForm.startTime" type="datetime-local" />
+            <input v-model="contestCreateForm.endTime" type="datetime-local" />
+            <input v-model="contestCreateForm.problemIdsRaw" placeholder="题目ID，逗号分隔，如 LQ1001,LQ1002" />
+            <button @click="handleCreateContest">创建</button>
+            <div class="error" v-if="contestCreateState.type === 'error'">{{ contestCreateState.message }}</div>
+            <div class="success-tip" v-if="contestCreateState.type === 'success'">{{ contestCreateState.message }}</div>
+          </div>
+        </div>
+
+        <div class="contest-main card">
+          <div class="contest-title-row" v-if="contestDetail">
+            <div>
+              <h3>{{ contestDetail.title }}</h3>
+              <p>{{ contestDetail.description || 'No description' }}</p>
+            </div>
+            <div class="contest-actions">
+              <span class="contest-badge" :class="contestDetail.status">{{ contestStatusText }}</span>
+              <button v-if="!contestDetail.joined" @click="handleContestJoin">报名</button>
+            </div>
+          </div>
+
+          <div class="contest-problems" v-if="contestDetail">
+            <h4>题目</h4>
+            <div class="contest-problem-list">
+              <button
+                v-for="p in (contestDetail.problems || [])"
+                :key="p._id"
+                class="contest-problem-item"
+                :class="{ active: String(selectedContestProblemId) === String(p._id) }"
+                @click="handleContestProblemPick(p)"
+              >
+                <span>{{ p._id }}</span>
+                <strong>{{ p.title }}</strong>
+              </button>
+            </div>
+          </div>
+
+          <div class="contest-submit" v-if="contestDetail && selectedContestProblem">
+            <h4>比赛提交 - {{ selectedContestProblem._id }}</h4>
+            <div class="lang-select-wrap" ref="langSelectWrap">
+              <div class="lang-select-trigger" :class="{ open: langDropdownOpen }" @click="langDropdownOpen = !langDropdownOpen" @keydown.enter.prevent="langDropdownOpen = !langDropdownOpen" tabindex="0" role="combobox" aria-expanded="langDropdownOpen">
+                <span class="lang-select-label">{{ activeSubmitLanguage }}</span>
+                <span class="lang-select-arrow">▼</span>
+              </div>
+              <div v-if="langDropdownOpen" class="lang-select-dropdown" @mouseleave="langDropdownOpen = false">
+                <div
+                  v-for="lang in ALL_LANGUAGES"
+                  :key="`contest-${lang}`"
+                  class="lang-select-option"
+                  :class="{ selected: activeSubmitLanguage === lang }"
+                  @click="activeSubmitLanguage = lang; langDropdownOpen = false"
+                >
+                  {{ lang }}
+                </div>
+              </div>
+            </div>
+            <CodeEditor
+              v-for="lang in ALL_LANGUAGES"
+              :key="`contest-editor-${lang}`"
+              v-show="activeSubmitLanguage === lang"
+              v-model="getActiveSubmitDraft().codes[lang]"
+              class="oj-code-editor"
+              :language="lang"
+              placeholder="Enter your source code here"
+            />
+            <div class="submit-action-row">
+              <button :disabled="submitLoading" @click="handleContestSubmitCode">{{ submitLoading ? '提交中...' : '提交代码' }}</button>
+            </div>
+            <div class="error" v-if="activeSubmitState.message">{{ activeSubmitState.message }}</div>
+          </div>
+
+          <div class="empty" v-if="!contestDetail && !contestDetailLoading">请选择一个比赛</div>
+          <div class="empty" v-if="contestDetailLoading">加载中...</div>
+        </div>
+
+        <div class="contest-rank card">
+          <h3>排行榜</h3>
+          <div v-if="contestRankLoading" class="empty">加载中...</div>
+          <div v-else class="rank-list">
+            <div class="rank-row rank-head">
+              <span>#</span><span>用户</span><span>通过</span><span>罚时(ms)</span>
+            </div>
+            <div class="rank-row" v-for="row in contestRankRows" :key="`${row.rank}-${row.user_id}`">
+              <span>{{ row.rank }}</span>
+              <span>{{ row.user_id }}</span>
+              <span>{{ row.solved_count }}</span>
+              <span>{{ row.penalty_time_ms }}</span>
+            </div>
+            <div class="empty" v-if="!contestRankRows.length">暂无排行数据</div>
+          </div>
+        </div>
       </div>
     </section>
 

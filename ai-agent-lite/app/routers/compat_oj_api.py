@@ -23,6 +23,7 @@ import re
 import secrets
 from datetime import datetime, timezone
 from typing import Any
+from uuid import UUID
 
 from fastapi import APIRouter, Body, HTTPException, Query, Request, Response
 from sqlalchemy.exc import IntegrityError
@@ -106,6 +107,104 @@ def _parse_json(value: Any, default: Any) -> Any:
 
 def _current_username(request: Request) -> str | None:
     return request.cookies.get("lite_user")
+
+
+def _parse_uuid(value: str) -> str | None:
+    try:
+        return str(UUID(str(value)))
+    except (TypeError, ValueError):
+        return None
+
+
+def _utc_now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _contest_status(start_time: datetime, end_time: datetime, now: datetime) -> str:
+    if now < start_time:
+        return "upcoming"
+    if now >= end_time:
+        return "ended"
+    return "running"
+
+
+async def _ensure_contest_schema() -> None:
+    async with async_session() as db:
+        await db.execute(text("CREATE SCHEMA IF NOT EXISTS ai_agent"))
+        await db.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS ai_agent.contests (
+                    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                    title varchar(255) NOT NULL,
+                    description text,
+                    start_time timestamptz NOT NULL,
+                    end_time timestamptz NOT NULL,
+                    status varchar(16) NOT NULL DEFAULT 'upcoming',
+                    created_by varchar(64) NOT NULL,
+                    created_at timestamptz NOT NULL,
+                    updated_at timestamptz NOT NULL
+                )
+                """
+            )
+        )
+        await db.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS ai_agent.contest_problems (
+                    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                    contest_id uuid NOT NULL REFERENCES ai_agent.contests(id) ON DELETE CASCADE,
+                    problem_id varchar(64) NOT NULL,
+                    display_order integer NOT NULL DEFAULT 0,
+                    UNIQUE (contest_id, problem_id)
+                )
+                """
+            )
+        )
+        await db.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS ai_agent.contest_participants (
+                    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                    contest_id uuid NOT NULL REFERENCES ai_agent.contests(id) ON DELETE CASCADE,
+                    user_id varchar(64) NOT NULL,
+                    joined_at timestamptz NOT NULL,
+                    UNIQUE (contest_id, user_id)
+                )
+                """
+            )
+        )
+        await db.execute(
+            text(
+                "ALTER TABLE ai_agent.submissions "
+                "ADD COLUMN IF NOT EXISTS contest_id uuid NULL"
+            )
+        )
+        await db.execute(
+            text(
+                "ALTER TABLE ai_agent.submissions "
+                "ADD COLUMN IF NOT EXISTS is_contest boolean NOT NULL DEFAULT false"
+            )
+        )
+        await db.commit()
+
+
+async def _require_admin_username(request: Request) -> str:
+    username = _current_username(request)
+    if not username:
+        raise HTTPException(status_code=401, detail="Please login first")
+
+    async with async_session() as db:
+        row = (
+            await db.execute(
+                text("SELECT COALESCE(admin_type,0) FROM ai_agent.local_users WHERE username=:u LIMIT 1"),
+                {"u": username},
+            )
+        ).fetchone()
+
+    if not row or int(row[0] or 0) < 1:
+        raise HTTPException(status_code=403, detail="Admin permission required")
+    return username
 
 
 @router.get("/captcha")
@@ -371,13 +470,61 @@ async def list_submissions(
 
 @router.post("/submission")
 async def submit_code_compat(request: Request, payload: dict = Body(...)):
+    await _ensure_contest_schema()
     username = _current_username(request) or "anonymous"
     problem_id = str(payload.get("problem_id", "")).strip()
     language = str(payload.get("language", "")).strip()
     code = str(payload.get("code", ""))
+    contest_id_raw = payload.get("contest_id")
 
     if not problem_id or not language or not code:
         return {"error": "Invalid payload", "data": "Invalid payload"}
+
+    parsed_contest_id = _parse_uuid(contest_id_raw) if contest_id_raw else None
+    is_contest = bool(parsed_contest_id)
+
+    if is_contest:
+        async with async_session() as db:
+            contest = (
+                await db.execute(
+                    text(
+                        "SELECT id,start_time,end_time FROM ai_agent.contests "
+                        "WHERE id=:contest_id LIMIT 1"
+                    ),
+                    {"contest_id": parsed_contest_id},
+                )
+            ).fetchone()
+
+            if not contest:
+                return {"error": "Contest not found", "data": "Contest not found"}
+
+            now = _utc_now()
+            if _contest_status(contest[1], contest[2], now) != "running":
+                return {"error": "Contest is not running", "data": "Contest is not running"}
+
+            joined = (
+                await db.execute(
+                    text(
+                        "SELECT 1 FROM ai_agent.contest_participants "
+                        "WHERE contest_id=:contest_id AND user_id=:user_id LIMIT 1"
+                    ),
+                    {"contest_id": parsed_contest_id, "user_id": username},
+                )
+            ).fetchone()
+            if not joined:
+                return {"error": "Please join contest first", "data": "Please join contest first"}
+
+            contest_problem = (
+                await db.execute(
+                    text(
+                        "SELECT 1 FROM ai_agent.contest_problems "
+                        "WHERE contest_id=:contest_id AND problem_id=:problem_id LIMIT 1"
+                    ),
+                    {"contest_id": parsed_contest_id, "problem_id": problem_id},
+                )
+            ).fetchone()
+            if not contest_problem:
+                return {"error": "Problem not in contest", "data": "Problem not in contest"}
 
     # Convert frontend labels to judge labels
     lang_map = {"C++": "cpp", "C": "c", "Java": "java", "Python3": "python3", "cpp": "cpp", "c": "c", "java": "java", "python3": "python3"}
@@ -399,8 +546,8 @@ async def submit_code_compat(request: Request, payload: dict = Body(...)):
         row = (
             await db.execute(
                 text(
-                    "INSERT INTO ai_agent.submissions (id,problem_id,user_id,language,code,verdict,time_sec,memory_kb,test_case_results,compile_error,created_at,updated_at) "
-                    "VALUES (gen_random_uuid(),:pid,:uid,:lang,:code,:verdict,:time,:mem,CAST(:tcr AS jsonb),:ce,:now,:now) RETURNING id"
+                    "INSERT INTO ai_agent.submissions (id,problem_id,user_id,language,code,verdict,time_sec,memory_kb,test_case_results,compile_error,contest_id,is_contest,created_at,updated_at) "
+                    "VALUES (gen_random_uuid(),:pid,:uid,:lang,:code,:verdict,:time,:mem,CAST(:tcr AS jsonb),:ce,:contest_id,:is_contest,:now,:now) RETURNING id"
                 ),
                 {
                     "pid": problem_id,
@@ -412,7 +559,9 @@ async def submit_code_compat(request: Request, payload: dict = Body(...)):
                     "mem": int(result.max_rss_kb or 0),
                     "tcr": json.dumps(result.test_case_results or [], ensure_ascii=False),
                     "ce": result.compile_error or "",
-                    "now": datetime.now(timezone.utc),
+                    "contest_id": parsed_contest_id,
+                    "is_contest": is_contest,
+                    "now": _utc_now(),
                 },
             )
         ).fetchone()
@@ -473,3 +622,469 @@ async def submission_detail(
         },
     }
     return {"error": None, "data": detail}
+
+
+@router.post("/contest/create")
+async def contest_create(request: Request, payload: dict = Body(...)):
+    await _ensure_contest_schema()
+    admin_username = await _require_admin_username(request)
+
+    title = str(payload.get("title", "")).strip()
+    description = str(payload.get("description", "")).strip()
+    start_time_raw = str(payload.get("start_time", "")).strip()
+    end_time_raw = str(payload.get("end_time", "")).strip()
+    problem_ids = payload.get("problem_ids")
+
+    if not title or len(title) > 255:
+        return {"error": "Invalid title", "data": "Invalid title"}
+    if not isinstance(problem_ids, list) or not problem_ids:
+        return {"error": "problem_ids is required", "data": "problem_ids is required"}
+
+    normalized_problem_ids: list[str] = []
+    for pid in problem_ids:
+        v = str(pid).strip()
+        if v:
+            normalized_problem_ids.append(v)
+    normalized_problem_ids = list(dict.fromkeys(normalized_problem_ids))
+    if not normalized_problem_ids:
+        return {"error": "problem_ids is required", "data": "problem_ids is required"}
+
+    try:
+        start_time = datetime.fromisoformat(start_time_raw.replace("Z", "+00:00"))
+        end_time = datetime.fromisoformat(end_time_raw.replace("Z", "+00:00"))
+    except ValueError:
+        return {"error": "Invalid contest time", "data": "Invalid contest time"}
+
+    if start_time.tzinfo is None:
+        start_time = start_time.replace(tzinfo=timezone.utc)
+    if end_time.tzinfo is None:
+        end_time = end_time.replace(tzinfo=timezone.utc)
+    if end_time <= start_time:
+        return {"error": "end_time must be later than start_time", "data": "end_time must be later than start_time"}
+
+    now = _utc_now()
+    status = _contest_status(start_time, end_time, now)
+
+    async with async_session() as db:
+        existing_rows = (
+            await db.execute(
+                text("SELECT _id FROM problem WHERE _id = ANY(:problem_ids)"),
+                {"problem_ids": normalized_problem_ids},
+            )
+        ).fetchall()
+        existing_ids = {str(r[0]) for r in existing_rows}
+        missing = [pid for pid in normalized_problem_ids if pid not in existing_ids]
+        if missing:
+            return {"error": "Problem not found", "data": {"missing_problem_ids": missing}}
+
+        contest_row = (
+            await db.execute(
+                text(
+                    "INSERT INTO ai_agent.contests (id,title,description,start_time,end_time,status,created_by,created_at,updated_at) "
+                    "VALUES (gen_random_uuid(),:title,:description,:start_time,:end_time,:status,:created_by,:now,:now) "
+                    "RETURNING id"
+                ),
+                {
+                    "title": title,
+                    "description": description or None,
+                    "start_time": start_time,
+                    "end_time": end_time,
+                    "status": status,
+                    "created_by": admin_username,
+                    "now": now,
+                },
+            )
+        ).fetchone()
+
+        contest_id = str(contest_row[0])
+        for idx, pid in enumerate(normalized_problem_ids):
+            await db.execute(
+                text(
+                    "INSERT INTO ai_agent.contest_problems (id,contest_id,problem_id,display_order) "
+                    "VALUES (gen_random_uuid(),:contest_id,:problem_id,:display_order)"
+                ),
+                {
+                    "contest_id": contest_id,
+                    "problem_id": pid,
+                    "display_order": idx,
+                },
+            )
+        await db.commit()
+
+    return {"error": None, "data": {"contest_id": contest_id}}
+
+
+@router.get("/contest/list")
+async def contest_list(status: str = Query(default="all")):
+    await _ensure_contest_schema()
+    status_filter = str(status or "all").strip().lower()
+    allowed = {"all", "upcoming", "running", "ended"}
+    if status_filter not in allowed:
+        status_filter = "all"
+
+    now = _utc_now()
+    async with async_session() as db:
+        rows = (
+            await db.execute(
+                text(
+                    "SELECT id,title,description,start_time,end_time,created_by,created_at,updated_at "
+                    "FROM ai_agent.contests ORDER BY start_time DESC"
+                )
+            )
+        ).fetchall()
+
+    results = []
+    for r in rows:
+        computed_status = _contest_status(r[3], r[4], now)
+        if status_filter != "all" and computed_status != status_filter:
+            continue
+        results.append(
+            {
+                "id": str(r[0]),
+                "title": r[1],
+                "description": r[2] or "",
+                "start_time": r[3].isoformat(),
+                "end_time": r[4].isoformat(),
+                "status": computed_status,
+                "created_by": r[5],
+                "created_at": r[6].isoformat() if r[6] else "",
+                "updated_at": r[7].isoformat() if r[7] else "",
+            }
+        )
+    return {"error": None, "data": {"results": results}}
+
+
+@router.get("/contest/detail")
+async def contest_detail(request: Request, contest_id: str = Query(...)):
+    await _ensure_contest_schema()
+    parsed_contest_id = _parse_uuid(contest_id)
+    if not parsed_contest_id:
+        return {"error": "Invalid contest id", "data": "Invalid contest id"}
+
+    username = _current_username(request)
+    now = _utc_now()
+
+    async with async_session() as db:
+        contest = (
+            await db.execute(
+                text(
+                    "SELECT id,title,description,start_time,end_time,created_by,created_at,updated_at "
+                    "FROM ai_agent.contests WHERE id=:contest_id LIMIT 1"
+                ),
+                {"contest_id": parsed_contest_id},
+            )
+        ).fetchone()
+        if not contest:
+            return {"error": "Contest not found", "data": "Contest not found"}
+
+        problem_rows = (
+            await db.execute(
+                text(
+                    "SELECT cp.problem_id, p.id, p._id, p.title, p.difficulty, p.time_limit, p.memory_limit, cp.display_order "
+                    "FROM ai_agent.contest_problems cp "
+                    "JOIN problem p ON p._id = cp.problem_id "
+                    "WHERE cp.contest_id=:contest_id "
+                    "ORDER BY cp.display_order ASC, p.id ASC"
+                ),
+                {"contest_id": parsed_contest_id},
+            )
+        ).fetchall()
+
+        joined = False
+        if username:
+            joined_row = (
+                await db.execute(
+                    text(
+                        "SELECT 1 FROM ai_agent.contest_participants "
+                        "WHERE contest_id=:contest_id AND user_id=:user_id LIMIT 1"
+                    ),
+                    {"contest_id": parsed_contest_id, "user_id": username},
+                )
+            ).fetchone()
+            joined = bool(joined_row)
+
+    result = {
+        "id": str(contest[0]),
+        "title": contest[1],
+        "description": contest[2] or "",
+        "start_time": contest[3].isoformat(),
+        "end_time": contest[4].isoformat(),
+        "status": _contest_status(contest[3], contest[4], now),
+        "created_by": contest[5],
+        "created_at": contest[6].isoformat() if contest[6] else "",
+        "updated_at": contest[7].isoformat() if contest[7] else "",
+        "joined": joined,
+        "problems": [
+            {
+                "problem_id": r[0],
+                "id": r[1],
+                "_id": r[2],
+                "title": r[3],
+                "difficulty": r[4] or "Low",
+                "time_limit": int(r[5] or 1000),
+                "memory_limit": int(r[6] or 256),
+                "display_order": int(r[7] or 0),
+            }
+            for r in problem_rows
+        ],
+    }
+    return {"error": None, "data": result}
+
+
+@router.post("/contest/join")
+async def contest_join(request: Request, payload: dict = Body(...)):
+    await _ensure_contest_schema()
+    username = _current_username(request)
+    if not username:
+        return {"error": "Please login first", "data": "Please login first"}
+
+    parsed_contest_id = _parse_uuid(payload.get("contest_id"))
+    if not parsed_contest_id:
+        return {"error": "Invalid contest id", "data": "Invalid contest id"}
+
+    async with async_session() as db:
+        contest = (
+            await db.execute(
+                text("SELECT id FROM ai_agent.contests WHERE id=:contest_id LIMIT 1"),
+                {"contest_id": parsed_contest_id},
+            )
+        ).fetchone()
+        if not contest:
+            return {"error": "Contest not found", "data": "Contest not found"}
+
+        try:
+            await db.execute(
+                text(
+                    "INSERT INTO ai_agent.contest_participants (id,contest_id,user_id,joined_at) "
+                    "VALUES (gen_random_uuid(),:contest_id,:user_id,:now)"
+                ),
+                {
+                    "contest_id": parsed_contest_id,
+                    "user_id": username,
+                    "now": _utc_now(),
+                },
+            )
+            await db.commit()
+        except IntegrityError:
+            await db.rollback()
+
+    return {"error": None, "data": {"contest_id": parsed_contest_id, "joined": True}}
+
+
+@router.post("/contest/submission")
+async def contest_submit_code(request: Request, payload: dict = Body(...)):
+    await _ensure_contest_schema()
+    username = _current_username(request)
+    if not username:
+        return {"error": "Please login first", "data": "Please login first"}
+
+    parsed_contest_id = _parse_uuid(payload.get("contest_id"))
+    problem_id = str(payload.get("problem_id", "")).strip()
+    language = str(payload.get("language", "")).strip()
+    code = str(payload.get("code", ""))
+
+    if not parsed_contest_id or not problem_id or not language or not code:
+        return {"error": "Invalid payload", "data": "Invalid payload"}
+
+    async with async_session() as db:
+        contest = (
+            await db.execute(
+                text(
+                    "SELECT id,start_time,end_time FROM ai_agent.contests "
+                    "WHERE id=:contest_id LIMIT 1"
+                ),
+                {"contest_id": parsed_contest_id},
+            )
+        ).fetchone()
+        if not contest:
+            return {"error": "Contest not found", "data": "Contest not found"}
+
+        now = _utc_now()
+        status = _contest_status(contest[1], contest[2], now)
+        if status != "running":
+            return {"error": "Contest is not running", "data": "Contest is not running"}
+
+        joined = (
+            await db.execute(
+                text(
+                    "SELECT 1 FROM ai_agent.contest_participants "
+                    "WHERE contest_id=:contest_id AND user_id=:user_id LIMIT 1"
+                ),
+                {"contest_id": parsed_contest_id, "user_id": username},
+            )
+        ).fetchone()
+        if not joined:
+            return {"error": "Please join contest first", "data": "Please join contest first"}
+
+        contest_problem = (
+            await db.execute(
+                text(
+                    "SELECT 1 FROM ai_agent.contest_problems "
+                    "WHERE contest_id=:contest_id AND problem_id=:problem_id LIMIT 1"
+                ),
+                {"contest_id": parsed_contest_id, "problem_id": problem_id},
+            )
+        ).fetchone()
+        if not contest_problem:
+            return {"error": "Problem not in contest", "data": "Problem not in contest"}
+
+    lang_map = {
+        "C++": "cpp",
+        "C": "c",
+        "Java": "java",
+        "Python3": "python3",
+        "cpp": "cpp",
+        "c": "c",
+        "java": "java",
+        "python3": "python3",
+    }
+    normalized_lang = lang_map.get(language, language)
+
+    sandbox = SandboxClient()
+    if not await sandbox.health():
+        raise HTTPException(status_code=503, detail="Sandbox unavailable")
+
+    result = await judge_submission(
+        code=code,
+        language=normalized_lang,
+        problem_id=problem_id,
+        sandbox=sandbox,
+        user_id=username,
+    )
+
+    async with async_session() as db:
+        row = (
+            await db.execute(
+                text(
+                    "INSERT INTO ai_agent.submissions (id,problem_id,user_id,language,code,verdict,time_sec,memory_kb,test_case_results,compile_error,contest_id,is_contest,created_at,updated_at) "
+                    "VALUES (gen_random_uuid(),:pid,:uid,:lang,:code,:verdict,:time,:mem,CAST(:tcr AS jsonb),:ce,:contest_id,true,:now,:now) RETURNING id"
+                ),
+                {
+                    "pid": problem_id,
+                    "uid": username,
+                    "lang": normalized_lang,
+                    "code": code,
+                    "verdict": result.verdict,
+                    "time": float(result.total_time_sec or 0),
+                    "mem": int(result.max_rss_kb or 0),
+                    "tcr": json.dumps(result.test_case_results or [], ensure_ascii=False),
+                    "ce": result.compile_error or "",
+                    "contest_id": parsed_contest_id,
+                    "now": _utc_now(),
+                },
+            )
+        ).fetchone()
+        await db.commit()
+
+    return {"error": None, "data": {"submission_id": str(row[0])}}
+
+
+@router.get("/contest/rank")
+async def contest_rank(contest_id: str = Query(...)):
+    await _ensure_contest_schema()
+    parsed_contest_id = _parse_uuid(contest_id)
+    if not parsed_contest_id:
+        return {"error": "Invalid contest id", "data": "Invalid contest id"}
+
+    async with async_session() as db:
+        contest = (
+            await db.execute(
+                text(
+                    "SELECT id,start_time,end_time FROM ai_agent.contests "
+                    "WHERE id=:contest_id LIMIT 1"
+                ),
+                {"contest_id": parsed_contest_id},
+            )
+        ).fetchone()
+        if not contest:
+            return {"error": "Contest not found", "data": "Contest not found"}
+
+        participants = (
+            await db.execute(
+                text(
+                    "SELECT user_id, joined_at FROM ai_agent.contest_participants "
+                    "WHERE contest_id=:contest_id ORDER BY joined_at ASC"
+                ),
+                {"contest_id": parsed_contest_id},
+            )
+        ).fetchall()
+
+        submissions = (
+            await db.execute(
+                text(
+                    "SELECT user_id, problem_id, verdict, created_at "
+                    "FROM ai_agent.submissions "
+                    "WHERE contest_id=:contest_id AND is_contest=true "
+                    "ORDER BY created_at ASC"
+                ),
+                {"contest_id": parsed_contest_id},
+            )
+        ).fetchall()
+
+    contest_start_time = contest[1]
+    rank_state: dict[str, dict[str, Any]] = {}
+    for p in participants:
+        rank_state[str(p[0])] = {
+            "user_id": str(p[0]),
+            "joined_at": p[1],
+            "solved_count": 0,
+            "penalty_time_ms": 0,
+            "problems": {},
+        }
+
+    for row in submissions:
+        user_id = str(row[0])
+        problem_id = str(row[1])
+        verdict = str(row[2] or "SE")
+        created_at = row[3]
+
+        if user_id not in rank_state:
+            rank_state[user_id] = {
+                "user_id": user_id,
+                "joined_at": contest_start_time,
+                "solved_count": 0,
+                "penalty_time_ms": 0,
+                "problems": {},
+            }
+
+        pstate = rank_state[user_id]
+        prob_state = pstate["problems"].setdefault(
+            problem_id,
+            {"solved": False, "wrong_before_ac": 0},
+        )
+
+        if prob_state["solved"]:
+            continue
+
+        if verdict == "AC":
+            elapsed_ms = int((created_at - contest_start_time).total_seconds() * 1000)
+            wrong_penalty_ms = int(prob_state["wrong_before_ac"]) * 20 * 60 * 1000
+            pstate["solved_count"] += 1
+            pstate["penalty_time_ms"] += max(0, elapsed_ms) + wrong_penalty_ms
+            prob_state["solved"] = True
+        else:
+            prob_state["wrong_before_ac"] += 1
+
+    rows = list(rank_state.values())
+    rows.sort(
+        key=lambda item: (
+            -int(item["solved_count"]),
+            int(item["penalty_time_ms"]),
+            item["joined_at"],
+            item["user_id"],
+        )
+    )
+
+    ranked = []
+    for idx, item in enumerate(rows, start=1):
+        ranked.append(
+            {
+                "rank": idx,
+                "user_id": item["user_id"],
+                "solved_count": int(item["solved_count"]),
+                "penalty_time_ms": int(item["penalty_time_ms"]),
+                "joined_at": item["joined_at"].isoformat() if item.get("joined_at") else "",
+            }
+        )
+
+    return {"error": None, "data": {"results": ranked}}

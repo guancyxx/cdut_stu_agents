@@ -96,6 +96,50 @@ export function createApiClient(baseUrl = '/oj-api', aiAgentBaseUrl = '/oj-test-
   const fetchSubmissionDetail = (submissionId) =>
     requestJson(`/api/submission?id=${encodeURIComponent(submissionId)}`)
 
+  const createContest = (payload) =>
+    requestJson('/api/contest/create', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Referer: window.location.origin,
+        Origin: window.location.origin
+      },
+      body: JSON.stringify(payload)
+    })
+
+  const fetchContests = (params = {}) => {
+    const query = new URLSearchParams(params)
+    return requestJson(`/api/contest/list?${query.toString()}`)
+  }
+
+  const fetchContestDetail = (contestId) =>
+    requestJson(`/api/contest/detail?contest_id=${encodeURIComponent(contestId)}`)
+
+  const joinContest = (payload) =>
+    requestJson('/api/contest/join', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Referer: window.location.origin,
+        Origin: window.location.origin
+      },
+      body: JSON.stringify(payload)
+    })
+
+  const submitContestCode = (payload) =>
+    requestJson('/api/contest/submission', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Referer: window.location.origin,
+        Origin: window.location.origin
+      },
+      body: JSON.stringify(payload)
+    })
+
+  const fetchContestRank = (contestId) =>
+    requestJson(`/api/contest/rank?contest_id=${encodeURIComponent(contestId)}`)
+
   const fetchTestCaseContent = (params) => {
     const query = new URLSearchParams(params)
     return fetch(`${aiAgentBaseUrl}/test_case_content?${query.toString()}`, {
@@ -200,6 +244,12 @@ export function createApiClient(baseUrl = '/oj-api', aiAgentBaseUrl = '/oj-test-
     submitCode,
     fetchSubmissions,
     fetchSubmissionDetail,
+    createContest,
+    fetchContests,
+    fetchContestDetail,
+    joinContest,
+    submitContestCode,
+    fetchContestRank,
     fetchTestCaseContent,
     reportSubmissionFallback,
     adminCreateProblem,
