@@ -30,7 +30,10 @@ const ALL_LANGUAGES = ['C++', 'C', 'Java', 'Python3']
 const createSubmitDraft = () => ({
   language: DEFAULT_LANGUAGE,
   // Per-language code buffers, one for each CodeEditor instance
+  // These buffers contain ONLY the user-editable section shown in editor.
   codes: Object.fromEntries(ALL_LANGUAGES.map((lang) => [lang, ''])),
+  // Keep original starter template for each language so submission can rebuild full source.
+  templateRawByLanguage: Object.fromEntries(ALL_LANGUAGES.map((lang) => [lang, ''])),
   state: { type: '', message: '' }
 })
 
@@ -60,6 +63,49 @@ const STARTER_CODE = {
 const getStarterCode = (problem, language) => {
   const tpl = problem?.template || {}
   return tpl[language] || STARTER_CODE[language] || ''
+}
+
+const TEMPLATE_MARKERS = {
+  prependBegin: '//PREPEND BEGIN',
+  prependEnd: '//PREPEND END',
+  templateBegin: '//TEMPLATE BEGIN',
+  templateEnd: '//TEMPLATE END',
+  appendBegin: '//APPEND BEGIN',
+  appendEnd: '//APPEND END'
+}
+
+const extractEditableTemplateSection = (code) => {
+  const text = String(code || '')
+  const begin = text.indexOf(TEMPLATE_MARKERS.templateBegin)
+  const end = text.indexOf(TEMPLATE_MARKERS.templateEnd)
+  if (begin === -1 || end === -1 || end <= begin) {
+    return text
+  }
+
+  const bodyStart = begin + TEMPLATE_MARKERS.templateBegin.length
+  let editable = text.slice(bodyStart, end)
+  editable = editable.replace(/^\s*\n/, '')
+  editable = editable.replace(/\n\s*$/, '\n')
+  return editable
+}
+
+const buildSubmissionCode = (templateRaw, editableSection) => {
+  const tpl = String(templateRaw || '')
+  if (!tpl) {
+    return String(editableSection || '')
+  }
+
+  const begin = tpl.indexOf(TEMPLATE_MARKERS.templateBegin)
+  const end = tpl.indexOf(TEMPLATE_MARKERS.templateEnd)
+  if (begin === -1 || end === -1 || end <= begin) {
+    return String(editableSection || '')
+  }
+
+  const insertionStart = begin + TEMPLATE_MARKERS.templateBegin.length
+  const before = tpl.slice(0, insertionStart)
+  const after = tpl.slice(end)
+  const editable = String(editableSection || '').replace(/\s+$/, '')
+  return `${before}\n${editable}\n${after}`
 }
 
 const activeSubmitLanguage = computed({
@@ -370,10 +416,12 @@ const selectProblemForRightPanel = async (problem) => {
     ? problemDetail.value
     : problem
   for (const lang of ALL_LANGUAGES) {
+    const starterRaw = getStarterCode(starterSource, lang)
     // Only populate if the buffer is empty (first time selecting this problem)
     if (!draft.codes[lang]) {
-      draft.codes[lang] = getStarterCode(starterSource, lang)
+      draft.codes[lang] = extractEditableTemplateSection(starterRaw)
     }
+    draft.templateRawByLanguage[lang] = starterRaw
   }
 
   ensureSessionMetadata(targetSession.id, {
@@ -454,13 +502,17 @@ const handleSubmitCode = async () => {
     return
   }
 
-  const normalizedCode = sanitizeTextInput(activeSubmitCode.value, 20000)
-  activeSubmitCode.value = normalizedCode
+  const normalizedEditableCode = sanitizeTextInput(activeSubmitCode.value, 20000)
+  activeSubmitCode.value = normalizedEditableCode
 
-  if (normalizedCode.length < 10) {
+  if (normalizedEditableCode.length < 10) {
     activeSubmitState.value = { type: 'error', message: 'Code must be at least 10 characters.' }
     return
   }
+
+  const currentDraft = getActiveSubmitDraft()
+  const templateRaw = currentDraft.templateRawByLanguage[activeSubmitLanguage.value] || ''
+  const normalizedCode = sanitizeTextInput(buildSubmissionCode(templateRaw, normalizedEditableCode), 20000)
 
   const result = await submitSolution({
     problemId: selectedProblem.value.id,
