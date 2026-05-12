@@ -1,12 +1,13 @@
 # isolate sandbox Docker image
 # Builds isolate from source; container must run with --privileged for namespace/cgroup ops
+# Exposes FastAPI HTTP API on port 8899 for ai-agent-lite to call
 
 FROM ubuntu:24.04
 
 ENV DEBIAN_FRONTEND=noninteractive \
     TZ=Asia/Shanghai
 
-# Build dependencies for isolate + language toolchains
+# Build dependencies for isolate + language toolchains + Python web server
 RUN apt-get update && apt-get install -y --no-install-recommends \
     # Isolate build dependencies
     build-essential \
@@ -24,7 +25,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     openjdk-21-jdk-headless \
     # Runtime
     procps \
+    curl \
     && rm -rf /var/lib/apt/lists/*
+
+# Install Python web framework for API server
+RUN pip3 install --break-system-packages --no-cache-dir \
+    fastapi==0.115.6 \
+    uvicorn==0.34.0
 
 # Build isolate from source
 WORKDIR /tmp/isolate-build
@@ -53,5 +60,11 @@ RUN useradd -m -s /bin/bash sandbox && \
 
 WORKDIR /workspace
 
-# isolate runs as root for cgroup/namespace init; non-root can use --run after --init
-# The ai-agent-lite backend will invoke isolate CLI via this container
+# Copy sandbox module and API server
+COPY sandbox.py /workspace/sandbox.py
+COPY api_server.py /workspace/api_server.py
+
+# isolate runs as root for cgroup/namespace init
+EXPOSE 8899
+
+CMD ["python3", "-m", "uvicorn", "api_server:app", "--host", "0.0.0.0", "--port", "8899"]

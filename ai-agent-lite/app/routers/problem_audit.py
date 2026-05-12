@@ -74,7 +74,7 @@ async def trigger_audit(
 @router.post("/run/{problem_display_id}", response_model=AuditTriggerResponse)
 async def trigger_single_audit(problem_display_id: str):
     """Trigger audit for a single problem by its display ID (e.g. 'custom-ab1c')."""
-    # We need the db_id — fetch it via the OJ API inside the task
+    # db_id is resolved inside the task via direct PostgreSQL lookup
     task = audit_single_problem.apply_async(
         args=({"_id": problem_display_id, "id": 0, "title": ""},),
         queue="audit",

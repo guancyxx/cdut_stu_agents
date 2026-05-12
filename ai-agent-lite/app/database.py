@@ -1,7 +1,8 @@
 """Database connection pool and initialization for ai-agent-lite.
 
-Reuses the existing QDUOJ PostgreSQL instance with a separate schema.
+Uses the dedicated cdut-postgres instance with a separate schema.
 """
+
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.config import settings
@@ -25,11 +26,10 @@ def _apply_schema(base):
 async def init_db() -> None:
     """Create schema and tables if they do not exist."""
     from app.models.orm import Base
+    from app.models.submission import Submission  # noqa: F401 — ensure table registered
 
-    # Set schema BEFORE create_all
     _apply_schema(Base)
 
-    # Ensure schema exists
     async with engine.begin() as conn:
         import sqlalchemy
         await conn.execute(sqlalchemy.text(f"CREATE SCHEMA IF NOT EXISTS {settings.db_schema}"))
