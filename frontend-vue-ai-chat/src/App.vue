@@ -318,6 +318,20 @@ const selectedProblemInputHtml = computed(() => sanitizeHtmlContent(selectedProb
 const selectedProblemOutputHtml = computed(() => sanitizeHtmlContent(selectedProblemOutputDesc.value))
 const selectedProblemHintHtml = computed(() => sanitizeHtmlContent(selectedProblemHint.value))
 
+const hasTemplateMarkersForActiveLanguage = computed(() => {
+  const draft = getActiveSubmitDraft()
+  const language = draft.language
+  const templateRaw = String(draft.templateRawByLanguage?.[language] || '')
+  return templateRaw.includes(TEMPLATE_MARKERS.templateBegin) && templateRaw.includes(TEMPLATE_MARKERS.templateEnd)
+})
+
+const editorModeHint = computed(() => {
+  if (hasTemplateMarkersForActiveLanguage.value) {
+    return '当前仅显示可编辑区，提交时将自动拼接模板其余部分。'
+  }
+  return '该题该语言无模板标记，当前为完整自由编辑模式。'
+})
+
 const handleGoToAuth = () => {
   if (ojUser.value.loggedIn) {
     activeTab.value = 'profile'
@@ -1064,6 +1078,9 @@ onBeforeUnmount(() => {
                       </div>
                     </div>
                   </div>
+                  <div class="editor-mode-hint" :class="{ 'is-free-mode': !hasTemplateMarkersForActiveLanguage }">
+                    {{ editorModeHint }}
+                  </div>
                   <!-- Multiple editor instances — one per language, switched by v-show.
                        Each editor keeps its own CodeMirror state and code buffer.
                        No template copying needed on language switch. -->
@@ -1221,5 +1238,22 @@ onBeforeUnmount(() => {
     flex: 1;
     overflow-y: auto;
     padding: 16px;
+  }
+
+  .editor-mode-hint {
+    margin: 8px 0 10px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    font-size: 12px;
+    line-height: 1.45;
+    color: #b8d4ff;
+    background: rgba(65, 98, 178, 0.16);
+    border: 1px solid rgba(88, 134, 255, 0.32);
+  }
+
+  .editor-mode-hint.is-free-mode {
+    color: #ffd9a6;
+    background: rgba(153, 106, 41, 0.2);
+    border-color: rgba(255, 174, 78, 0.36);
   }
 </style>
