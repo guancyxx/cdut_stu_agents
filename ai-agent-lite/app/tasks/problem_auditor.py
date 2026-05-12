@@ -33,69 +33,123 @@ logger = logging.getLogger("ai-agent-lite.audit")
 
 
 # ---------------------------------------------------------------------------
-# OJ Admin API helpers (synchronous)
+# PostgreSQL problem helpers (synchronous)
 # ---------------------------------------------------------------------------
 
-def _oj_login() -> tuple[httpx.Client, str]:
-    """Authenticate with the OJ Admin API and return (client, csrf_token)."""
-    client = httpx.Client(base_url=settings.oj_api_url, timeout=30.0)
-    r = client.get("/api/profile")
-    r.raise_for_status()
-    csrf = client.cookies.get("csrftoken", "")
-    r = client.post(
-        "/api/login",
-        json={"username": settings.oj_admin_user, "password": settings.oj_admin_pass},
-        headers={"X-CSRFToken": csrf},
-    )
-    r.raise_for_status()
-    csrf = client.cookies.get("csrftoken", csrf)
-    logger.info("OJ login succeeded, csrf=%s…", csrf[:8])
-    return client, csrf
+def _resolve_db_id(display_id: str) -> int:
+    """Resolve problem DB id from display id (_id)."""
+    conn = _pg_connect()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT id FROM problem WHERE _id = %s LIMIT 1", (display_id,))
+            row = cur.fetchone()
+            return int(row[0]) if row else 0
+    finally:
+        conn.close()
 
 
-def _resolve_db_id(client: httpx.Client, csrf: str, display_id: str) -> int:
-    r = client.get(
-        "/api/admin/problem",
-        params={"keyword": display_id, "limit": 10, "page": 1},
-        headers={"X-CSRFToken": csrf},
-    )
-    r.raise_for_status()
-    data = r.json()
-    if data.get("error") is not None:
-        return 0
-    for p in data.get("data", {}).get("results", []):
-        if p.get("_id") == display_id:
-            return p["id"]
-    return 0
+def _fetch_problem_detail(db_id: int) -> dict | None:
+    """Fetch full problem row and normalize fields used by auditor."""
+    conn = _pg_connect()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT id, _id, title, description, input_description, output_description, "
+                "samples, hint, languages, template, time_limit, memory_limit, rule_type, "
+                "spj, visible, difficulty, source, test_case_id, io_mode "
+                "FROM problem WHERE id = %s LIMIT 1",
+                (db_id,),
+            )
+            row = cur.fetchone()
+            if not row:
+                return None
+            keys = [
+                "id", "_id", "title", "description", "input_description",
+                "output_description", "samples", "hint", "languages", "template",
+                "time_limit", "memory_limit", "rule_type", "spj", "visible",
+                "difficulty", "source", "test_case_id", "io_mode",
+            ]
+            data = dict(zip(keys, row))
+            for key in ("samples", "languages", "template", "io_mode"):
+                if data.get(key) is None:
+                    data[key] = {} if key in ("template", "io_mode") else []
+            return data
+    finally:
+        conn.close()
 
 
-def _fetch_problem_detail(client: httpx.Client, csrf: str, db_id: int) -> dict | None:
-    r = client.get(
-        "/api/admin/problem",
-        params={"id": db_id},
-        headers={"X-CSRFToken": csrf},
-    )
-    r.raise_for_status()
-    data = r.json()
-    if data.get("error") is not None:
-        logger.warning("Failed to fetch problem id=%d: %s", db_id, data.get("error"))
-        return None
-    return data.get("data") or data
+def _ensure_tag_ids(tags: list[str]) -> list[int]:
+    """Ensure tags exist in problem_tag table and return their ids."""
+    if not tags:
+        return []
+
+    conn = _pg_connect()
+    try:
+        with conn.cursor() as cur:
+            ids: list[int] = []
+            for raw in tags:
+                name = (raw or "").strip()
+                if not name:
+                    continue
+                cur.execute("SELECT id FROM problem_tag WHERE name = %s LIMIT 1", (name,))
+                row = cur.fetchone()
+                if row:
+                    ids.append(int(row[0]))
+                    continue
+                cur.execute("INSERT INTO problem_tag (name) VALUES (%s) RETURNING id", (name,))
+                ids.append(int(cur.fetchone()[0]))
+            conn.commit()
+            return ids
+    finally:
+        conn.close()
 
 
-def _update_problem(client: httpx.Client, csrf: str, payload: dict) -> bool:
-    r = client.put(
-        "/api/admin/problem",
-        json=payload,
-        headers={"X-CSRFToken": csrf},
-    )
-    if r.status_code >= 400:
-        logger.error(
-            "Problem update failed id=%s status=%d: %s",
-            payload.get("_id"), r.status_code, r.text[:300],
-        )
+def _update_problem(payload: dict) -> bool:
+    """Update problem via direct PostgreSQL write."""
+    problem_id = payload.get("id")
+    if not problem_id:
         return False
-    return True
+
+    conn = _pg_connect()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE problem SET title=%s, description=%s, input_description=%s, output_description=%s, "
+                "samples=%s::jsonb, hint=%s, languages=%s::jsonb, template=%s::jsonb, difficulty=%s, source=%s, "
+                "last_update_time=%s WHERE id=%s",
+                (
+                    payload.get("title", ""),
+                    payload.get("description", ""),
+                    payload.get("input_description", ""),
+                    payload.get("output_description", ""),
+                    json.dumps(payload.get("samples") or [], ensure_ascii=False),
+                    payload.get("hint"),
+                    json.dumps(payload.get("languages") or [], ensure_ascii=False),
+                    json.dumps(payload.get("template") or {}, ensure_ascii=False),
+                    payload.get("difficulty", "Low"),
+                    payload.get("source"),
+                    datetime.now(timezone.utc),
+                    int(problem_id),
+                ),
+            )
+
+            if payload.get("tags") is not None:
+                tag_ids = _ensure_tag_ids(list(payload.get("tags") or []))
+                cur.execute("DELETE FROM problem_tags WHERE problem_id = %s", (int(problem_id),))
+                for tag_id in tag_ids:
+                    cur.execute(
+                        "INSERT INTO problem_tags (problem_id, problemtag_id) VALUES (%s, %s) ON CONFLICT DO NOTHING",
+                        (int(problem_id), int(tag_id)),
+                    )
+
+            conn.commit()
+            return True
+    except Exception:
+        conn.rollback()
+        logger.exception("Problem update failed id=%s", problem_id)
+        return False
+    finally:
+        conn.close()
 
 
 # ---------------------------------------------------------------------------
@@ -738,8 +792,8 @@ def _ensure_template_markers(code: str, lang: str) -> str:
 # Fix application
 # ---------------------------------------------------------------------------
 
-def _apply_fixes(client: httpx.Client, csrf: str, problem: dict, fixes: dict) -> None:
-    """Apply LLM-suggested fixes via the OJ Admin API."""
+def _apply_fixes(problem: dict, fixes: dict) -> None:
+    """Apply LLM-suggested fixes via direct PostgreSQL writes."""
     updated = dict(problem)
 
     if fixes.get("template"):
@@ -773,9 +827,9 @@ def _apply_fixes(client: httpx.Client, csrf: str, problem: dict, fixes: dict) ->
         if required not in updated and required in problem:
             updated[required] = problem[required]
 
-    ok = _update_problem(client, csrf, updated)
+    ok = _update_problem(updated)
     if not ok:
-        raise RuntimeError(f"PUT /api/admin/problem failed for _id={updated.get('_id')}")
+        raise RuntimeError(f"PostgreSQL update failed for _id={updated.get('_id')}")
 
 
 # ---------------------------------------------------------------------------
@@ -813,20 +867,19 @@ def _parse_llm_response(raw: str) -> dict:
 def audit_single_problem(self, problem_summary: dict) -> dict:
     """Audit a single problem via the configured audit LLM and auto-fix if needed."""
     display_id = problem_summary["_id"]
-    db_id = problem_summary.get("id", 0)
+    db_id = int(problem_summary.get("id") or 0)
     title = problem_summary.get("title", display_id)
 
     if db_id == 0:
         try:
-            client, csrf = _oj_login()
-            db_id = _resolve_db_id(client, csrf, display_id)
+            db_id = _resolve_db_id(display_id)
             if db_id:
-                detail = _fetch_problem_detail(client, csrf, db_id)
+                detail = _fetch_problem_detail(db_id)
                 title = (detail or {}).get("title") or display_id
                 logger.info("Resolved display_id=%s -> db_id=%d", display_id, db_id)
             else:
                 logger.error("Cannot resolve db_id for display_id=%s", display_id)
-                return {"_id": display_id, "status": "error", "message": "Not found in OJ list"}
+                return {"_id": display_id, "status": "error", "message": "Not found in problem table"}
         except Exception as exc:
             logger.error("Failed to resolve db_id for %s: %s", display_id, exc)
             return {"_id": display_id, "status": "error", "message": f"resolve: {exc}"}
@@ -840,57 +893,51 @@ def _do_audit_problem(
     """Core audit logic."""
     logger.info("Auditing _id=%s (db_id=%d, title=%s)", display_id, db_id, title)
 
-    client = None
     try:
-        client, csrf = _oj_login()
-        problem = _fetch_problem_detail(client, csrf, db_id)
+        problem = _fetch_problem_detail(db_id)
         if problem is None:
             return {"_id": display_id, "status": "error", "message": "Failed to fetch detail"}
     except Exception as exc:
-        logger.exception("OJ login/fetch failed _id=%s", display_id)
+        logger.exception("PG fetch failed _id=%s", display_id)
         if retry:
             raise retry.retry(exc=exc)
         raise
 
+    prompt = _build_audit_prompt(problem)
     try:
-        prompt = _build_audit_prompt(problem)
+        raw = _call_llm(_AUDIT_SYSTEM, prompt)
+    except Exception as exc:
+        logger.exception("Audit LLM call failed _id=%s", display_id)
+        if retry:
+            raise retry.retry(exc=exc)
+        raise
+
+    result = _parse_llm_response(raw)
+
+    status = result.get("status", "error")
+    issues = result.get("issues", [])
+    fixes = result.get("fixes", {}) or {}
+
+    if status == "remove":
+        reason = result.get("reason", "Non-OJ problem")
+        logger.info("REMOVE %s: %s", display_id, reason)
+        _upsert_audit_record(display_id, db_id, "remove", [reason], {}, raw)
+        return {
+            "_id": display_id, "status": "remove",
+            "issues": [reason],
+        }
+
+    _upsert_audit_record(display_id, db_id, status, issues, fixes, raw)
+
+    if status == "fail" and fixes:
         try:
-            raw = _call_llm(_AUDIT_SYSTEM, prompt)
-        except Exception as exc:
-            logger.exception("Audit LLM call failed _id=%s", display_id)
-            if retry:
-                raise retry.retry(exc=exc)
-            raise
+            _apply_fixes(problem, fixes)
+            logger.info("Auto-fixed _id=%s", display_id)
+        except Exception:
+            logger.exception("Auto-fix failed _id=%s", display_id)
+            _upsert_audit_record(display_id, db_id, "fix_failed", issues, fixes, raw)
 
-        result = _parse_llm_response(raw)
-
-        status = result.get("status", "error")
-        issues = result.get("issues", [])
-        fixes = result.get("fixes", {}) or {}
-
-        if status == "remove":
-            reason = result.get("reason", "Non-OJ problem")
-            logger.info("REMOVE %s: %s", display_id, reason)
-            _upsert_audit_record(display_id, db_id, "remove", [reason], {}, raw)
-            return {
-                "_id": display_id, "status": "remove",
-                "issues": [reason],
-            }
-
-        _upsert_audit_record(display_id, db_id, status, issues, fixes, raw)
-
-        if status == "fail" and fixes:
-            try:
-                _apply_fixes(client, csrf, problem, fixes)
-                logger.info("Auto-fixed _id=%s", display_id)
-            except Exception:
-                logger.exception("Auto-fix failed _id=%s", display_id)
-                _upsert_audit_record(display_id, db_id, "fix_failed", issues, fixes, raw)
-
-        return {"_id": display_id, "status": status, "issues": issues}
-    finally:
-        if client:
-            client.close()
+    return {"_id": display_id, "status": status, "issues": issues}
 
 
 # ---------------------------------------------------------------------------

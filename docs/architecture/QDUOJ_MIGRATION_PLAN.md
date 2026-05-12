@@ -2,7 +2,7 @@
 
 > 目标：彻底移除 QDUOJ 依赖，ai-agent-lite 直接与代码执行沙盒交互。
 > 日期：2026-05-11
-> 状态：方案设计阶段
+> 状态：Phase4 已完成（已移除 QDUOJ 运行依赖）
 
 ---
 
@@ -215,11 +215,11 @@ rsync -av qduoj/data/backend/test_case/ data/test_cases/
 ### Phase 4: QDUOJ 下线 + 清理 (半天)
 
 ```
-□ 修改 docker-compose.yml 移除 QDUOJ 服务
-□ 清理配置中的 OJ_API_URL / OJ_ADMIN_* 变量
-□ 修改 problem_auditor.py 改用直连 PG（不再调 Admin API）
-□ 全链路测试
-□ 文档更新
+- [x] 修改 docker-compose.yml 移除 QDUOJ 服务
+- [x] 清理配置中的 OJ_API_URL / OJ_ADMIN_* 变量
+- [x] 修改 problem_auditor.py 改用直连 PG（不再调 Admin API）
+- [x] 全链路测试
+- [x] 文档更新
 ```
 
 ---
