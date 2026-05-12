@@ -8,7 +8,7 @@ The WebSocket handler calls into this module via ``process_turn`` and
 """
 import logging
 import uuid
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Callable, Awaitable
 
 from app.di import get_supervisor, get_workers, get_suggester, get_agent_display_name
 from app.i18n import TRACE
@@ -58,6 +58,8 @@ async def process_turn(
     db,
     before_kg: dict,
     request_id: uuid.UUID,
+    on_chunk: Callable[[str, bool], Awaitable[None]] | None = None,
+    set_agent_type: Callable[[AgentType], None] | None = None,
 ) -> dict:
     """Execute one full conversation turn.
 
@@ -86,7 +88,14 @@ async def process_turn(
 
     # --- 2. Dispatch to worker ---
     worker_state = {**current_state, "current_problem_context": current_problem_context}
-    agent_response = await workers[agent_type].process(query_text, worker_state, message_history=context)
+    if set_agent_type is not None:
+        set_agent_type(agent_type)
+    agent_response = await workers[agent_type].process(
+        query_text,
+        worker_state,
+        message_history=context,
+        on_chunk=on_chunk,
+    )
 
     # --- 3. Knowledge delta assessment ---
     assessor = KnowledgeAssessor(supervisor.llm)

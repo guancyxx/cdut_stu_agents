@@ -3,7 +3,7 @@ import logging
 from string import Template
 from typing import Dict, Any, List
 
-from app.workers.base import BaseWorker
+from app.workers.base import BaseWorker, StreamCallback
 from app.models.schemas import AgentResponse, CompletionStatus
 from app.utils.prompt_helpers import build_history_block, build_problem_anchor_block
 from app.prompts import get_prompt
@@ -19,6 +19,7 @@ class ProblemAnalyzerAgent(BaseWorker):
         user_input: str,
         state: Dict[str, Any],
         message_history: List[Dict[str, str]] = None,
+        on_chunk: StreamCallback | None = None,
     ) -> AgentResponse:
         problem_id = state.get("current_problem_id", "unknown")
 
@@ -40,7 +41,7 @@ class ProblemAnalyzerAgent(BaseWorker):
         )
 
         try:
-            response = await self.llm.complete([{"role": "user", "content": prompt}])
+            response = await self._complete_or_stream(prompt, on_chunk=on_chunk)
             return AgentResponse(
                 content=response,
                 status=CompletionStatus.COMPLETE,

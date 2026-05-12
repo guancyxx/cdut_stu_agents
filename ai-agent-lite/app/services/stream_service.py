@@ -19,18 +19,13 @@ _AGENT_STYLING = {
 }
 
 
-async def send_text_stream(
+async def send_stream_chunk(
     websocket: WebSocket,
-    content: str,
+    piece: str,
+    inprogress: bool,
     agent_type: Optional[AgentType] = None,
-    chunk_size: int = 80,
 ) -> None:
-    """Send a complete string as chunked streaming messages with optional agent info."""
-    if not content:
-        await websocket.send_json({"type": "raw", "data": {"type": "text", "delta": "", "inprogress": False}})
-        return
-
-    # Send agent info at the beginning if available
+    """Send one streaming chunk and optionally emit agent metadata first."""
     if agent_type:
         agent_key = agent_type.value
         display = AGENT_DISPLAY.get(agent_key)
@@ -46,13 +41,34 @@ async def send_text_stream(
             },
         })
 
+    await websocket.send_json({
+        "type": "raw",
+        "data": {"type": "text", "delta": piece, "inprogress": inprogress},
+    })
+
+
+async def send_text_stream(
+    websocket: WebSocket,
+    content: str,
+    agent_type: Optional[AgentType] = None,
+    chunk_size: int = 80,
+) -> None:
+    """Send a complete string as chunked streaming messages with optional agent info."""
+    if not content:
+        await send_stream_chunk(websocket, "", False, agent_type=agent_type)
+        return
+
     start = 0
     total = len(content)
+    first = True
     while start < total:
         end = min(start + chunk_size, total)
         piece = content[start:end]
-        await websocket.send_json({
-            "type": "raw",
-            "data": {"type": "text", "delta": piece, "inprogress": end < total},
-        })
+        await send_stream_chunk(
+            websocket,
+            piece,
+            end < total,
+            agent_type=agent_type if first else None,
+        )
+        first = False
         start = end

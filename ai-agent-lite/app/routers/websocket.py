@@ -22,7 +22,7 @@ from app.services.conversation_orchestrator import process_turn, process_system_
 from app.services.problem_context_handler import is_system_context
 from app.services.session_service import get_or_create_session, load_context, extract_problem_context
 from app.services.state_manager import state_manager
-from app.services.stream_service import send_text_stream
+from app.services.stream_service import send_text_stream, send_stream_chunk
 
 logger = logging.getLogger("ai-agent-lite.ws")
 
@@ -136,6 +136,23 @@ async def ws_handler(websocket: WebSocket) -> None:
                     "detail": ic["detail"], "output": "",
                 }})
 
+                turn_agent_type_holder = {"agent_type": None}
+                stream_tracker = {"sent": False, "sent_agent_info": False}
+
+                async def _stream_piece(piece: str, inprogress: bool) -> None:
+                    stream_tracker["sent"] = True
+                    await send_stream_chunk(
+                        websocket,
+                        piece,
+                        inprogress,
+                        agent_type=(
+                            turn_agent_type_holder["agent_type"]
+                            if not stream_tracker["sent_agent_info"]
+                            else None
+                        ),
+                    )
+                    stream_tracker["sent_agent_info"] = True
+
                 turn = await process_turn(
                     query_text=query_text,
                     current_state=current_state,
@@ -146,12 +163,15 @@ async def ws_handler(websocket: WebSocket) -> None:
                     db=db,
                     before_kg=before_kg,
                     request_id=request_id,
+                    on_chunk=_stream_piece,
+                    set_agent_type=lambda agent: turn_agent_type_holder.__setitem__("agent_type", agent),
                 )
 
                 # Emit trace & stream events
                 await websocket.send_json({"type": "trace", "data": turn["intent_result_trace"]})
                 await websocket.send_json({"type": "trace", "data": turn["worker_trace"]})
-                await send_text_stream(websocket, turn["agent_content"], turn["agent_type"])
+                if not stream_tracker["sent"]:
+                    await send_text_stream(websocket, turn["agent_content"], turn["agent_type"])
                 await websocket.send_json({"type": "trace", "data": turn["suggestion_trace"]})
 
                 if turn["next_actions"]:
