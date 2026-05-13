@@ -186,6 +186,12 @@ async def _ensure_contest_schema() -> None:
                 "ADD COLUMN IF NOT EXISTS is_contest boolean NOT NULL DEFAULT false"
             )
         )
+        await db.execute(
+            text(
+                "ALTER TABLE ai_agent.contests "
+                "ADD COLUMN IF NOT EXISTS visible boolean NOT NULL DEFAULT true"
+            )
+        )
         await db.commit()
 
 
@@ -633,6 +639,7 @@ async def contest_create(request: Request, payload: dict = Body(...)):
     description = str(payload.get("description", "")).strip()
     start_time_raw = str(payload.get("start_time", "")).strip()
     end_time_raw = str(payload.get("end_time", "")).strip()
+    visible = bool(payload.get("visible", True))
     problem_ids = payload.get("problem_ids")
 
     if not title or len(title) > 255:
@@ -680,8 +687,8 @@ async def contest_create(request: Request, payload: dict = Body(...)):
         contest_row = (
             await db.execute(
                 text(
-                    "INSERT INTO ai_agent.contests (id,title,description,start_time,end_time,status,created_by,created_at,updated_at) "
-                    "VALUES (gen_random_uuid(),:title,:description,:start_time,:end_time,:status,:created_by,:now,:now) "
+                    "INSERT INTO ai_agent.contests (id,title,description,start_time,end_time,status,visible,created_by,created_at,updated_at) "
+                    "VALUES (gen_random_uuid(),:title,:description,:start_time,:end_time,:status,:visible,:created_by,:now,:now) "
                     "RETURNING id"
                 ),
                 {
@@ -690,6 +697,7 @@ async def contest_create(request: Request, payload: dict = Body(...)):
                     "start_time": start_time,
                     "end_time": end_time,
                     "status": status,
+                    "visible": visible,
                     "created_by": admin_username,
                     "now": now,
                 },
