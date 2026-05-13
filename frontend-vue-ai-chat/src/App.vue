@@ -637,6 +637,17 @@ const handleContestProblemPick = async (problem) => {
   selectedProblemId.value = String(problem._id)
   await fetchProblemDetail(String(problem._id))
   rightPanelTab.value = 'submit'
+
+  // Populate starter code for all languages from problem detail
+  const draft = getActiveSubmitDraft()
+  const source = problemDetail.value && String(problemDetail.value._id) === String(problem._id)
+    ? problemDetail.value
+    : problem
+  for (const lang of ALL_LANGUAGES) {
+    const starterRaw = getStarterCode(source, lang)
+    draft.codes[lang] = extractEditableTemplateSection(starterRaw)
+    draft.templateRawByLanguage[lang] = starterRaw
+  }
 }
 
 const handleContestSubmitCode = async () => {
@@ -1043,6 +1054,59 @@ onBeforeUnmount(() => {
             </div>
           </div>
 
+          <!-- Problem description (rendered when a contest problem is selected) -->
+          <div class="contest-problem-detail" v-if="contestDetail && selectedContestProblem">
+            <div class="problem-detail-top">
+              <div class="card-title">{{ selectedContestProblem.title }}</div>
+              <div class="card-subtitle">Problem ID: {{ selectedContestProblem._id }}</div>
+            </div>
+
+            <!-- Description -->
+            <div class="problem-section" v-if="selectedProblemDescription && selectedProblemDescription !== '暂无题目描述'">
+              <h4 class="problem-section-title">Description</h4>
+              <div class="problem-description" v-html="selectedProblemDescriptionHtml" />
+            </div>
+
+            <!-- Input -->
+            <div class="problem-section" v-if="selectedProblemInputDesc">
+              <h4 class="problem-section-title">Input</h4>
+              <div class="problem-description" v-html="selectedProblemInputHtml" />
+            </div>
+
+            <!-- Output -->
+            <div class="problem-section" v-if="selectedProblemOutputDesc">
+              <h4 class="problem-section-title">Output</h4>
+              <div class="problem-description" v-html="selectedProblemOutputHtml" />
+            </div>
+
+            <!-- Samples -->
+            <div class="problem-section" v-if="selectedProblemSamples.length">
+              <div v-for="(sample, idx) in selectedProblemSamples" :key="idx" class="problem-sample-block">
+                <div class="problem-sample-item">
+                  <h4 class="problem-section-title">Sample Input{{ selectedProblemSamples.length > 1 ? ' ' + (idx + 1) : '' }}</h4>
+                  <pre class="problem-sample-code">{{ sample.input }}</pre>
+                </div>
+                <div class="problem-sample-item">
+                  <h4 class="problem-section-title">Sample Output{{ selectedProblemSamples.length > 1 ? ' ' + (idx + 1) : '' }}</h4>
+                  <pre class="problem-sample-code">{{ sample.output }}</pre>
+                </div>
+              </div>
+            </div>
+
+            <!-- Hint -->
+            <div class="problem-section" v-if="selectedProblemHint">
+              <h4 class="problem-section-title">Hint</h4>
+              <div class="problem-description" v-html="selectedProblemHintHtml" />
+            </div>
+
+            <!-- Limits -->
+            <div class="detail-grid compact-detail-grid">
+              <div class="detail-row compact-detail-row"><span>Time Limit</span><strong>{{ selectedContestProblem.time_limit || '-' }} ms</strong></div>
+              <div class="detail-row compact-detail-row"><span>Memory Limit</span><strong>{{ selectedContestProblem.memory_limit || '-' }} MB</strong></div>
+              <div class="detail-row compact-detail-row"><span>Difficulty</span><strong>{{ selectedContestProblem.difficulty || 'Unknown' }}</strong></div>
+            </div>
+          </div>
+
           <div class="contest-submit" v-if="contestDetail && selectedContestProblem">
             <h4>比赛提交 - {{ selectedContestProblem._id }}</h4>
             <div class="lang-select-wrap" ref="langSelectWrap">
@@ -1074,7 +1138,66 @@ onBeforeUnmount(() => {
             <div class="submit-action-row">
               <button :disabled="submitLoading" @click="handleContestSubmitCode">{{ submitLoading ? '提交中...' : '提交代码' }}</button>
             </div>
-            <div class="error" v-if="activeSubmitState.message">{{ activeSubmitState.message }}</div>
+            <div class="error" v-if="activeSubmitState.message && !submitResult">{{ activeSubmitState.message }}</div>
+
+            <!-- Contest submit result panel (same detailed view as teaching mode) -->
+            <div class="submit-result-area" v-if="submitResult">
+              <!-- Loading state -->
+              <div class="submit-result-empty" v-if="submitLoading">
+                <div class="result-spinner"></div>
+                <span>Judging...</span>
+              </div>
+
+              <!-- Detailed result -->
+              <div class="submit-result-panel" v-else :class="getResultClass(submitResult)">
+                <div class="result-header">
+                  <span class="result-icon">{{ submitResult.icon || '❓' }}</span>
+                  <span class="result-label">{{ submitResult.display || submitResult.label }}</span>
+                  <span class="result-submission-id" v-if="submitResult.submissionId">#{{ submitResult.submissionId }}</span>
+                </div>
+
+                <div class="result-stats-row">
+                  <div class="result-stat" v-if="submitResult.score > 0">
+                    <span class="stat-label">Score</span>
+                    <span class="stat-value">{{ submitResult.score }}</span>
+                  </div>
+                  <div class="result-stat">
+                    <span class="stat-label">Time</span>
+                    <span class="stat-value">{{ submitResult.timeCost }}ms</span>
+                  </div>
+                  <div class="result-stat">
+                    <span class="stat-label">Memory</span>
+                    <span class="stat-value">{{ formatMemory(submitResult.memoryCost) }}</span>
+                  </div>
+                </div>
+
+                <div class="result-error-block" v-if="submitResult.errInfo">
+                  <div class="error-block-header">
+                    <span class="error-block-icon">⚠</span>
+                    <span>{{ submitResult.label === 'COMPILE_ERROR' ? 'Compile Error' : 'Error Details' }}</span>
+                  </div>
+                  <pre class="error-block-content">{{ submitResult.errInfo }}</pre>
+                </div>
+
+                <div class="result-test-cases" v-if="submitResult.testCases && submitResult.testCases.length > 0">
+                  <div class="test-cases-header">
+                    <span class="tc-summary-label">Test Cases</span>
+                    <span class="tc-pass-count">
+                      {{ submitResult.testCases.filter(tc => tc.status === 0 || tc.label === 'ACCEPTED').length }}/{{ submitResult.testCases.length }} passed
+                    </span>
+                  </div>
+                  <div class="tc-progress-bar">
+                    <div
+                      v-for="tc in submitResult.testCases"
+                      :key="'bar-' + tc.index"
+                      class="tc-progress-segment"
+                      :class="getTestCaseClass(tc)"
+                      :title="`#${tc.index} ${tc.display}`"
+                    ></div>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
 
           <div class="empty" v-if="!contestDetail && !contestDetailLoading">请选择一个比赛</div>
