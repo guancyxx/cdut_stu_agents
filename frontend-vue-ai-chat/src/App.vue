@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import CodeEditor from './components/CodeEditor.vue'
 import MessageBubble from './components/MessageBubble.vue'
 import AdminProblemUpload from './components/AdminProblemUpload.vue'
+import ContestCreateModal from './components/ContestCreateModal.vue'
 import { useChatFeature } from './composables/useChatFeature'
 import { AUTH_MODES, OJ_DIFFICULTY_OPTIONS, initMessageRenderer, sanitizeHtmlContent, sanitizeTextInput } from './utils/validators'
 import { marked } from 'marked'
@@ -21,6 +22,7 @@ const contestCreateForm = ref({
   problemIdsRaw: ''
 })
 const contestCreateState = ref({ type: '', message: '' })
+const showContestCreateModal = ref(false)
 const langDropdownOpen = ref(false)
 
 // Close dropdown when clicking anywhere outside
@@ -683,6 +685,13 @@ const handleContestRefresh = async () => {
   }
 }
 
+const onContestCreated = async (result) => {
+  await fetchContests('all')
+  if (result?.contest_id) {
+    currentContestId.value = result.contest_id
+  }
+}
+
 const handleCreateContest = async () => {
   contestCreateState.value = { type: '', message: '' }
   const title = sanitizeTextInput(contestCreateForm.value.title, 255)
@@ -1101,7 +1110,15 @@ onBeforeUnmount(() => {
     </section>
 
     <section class="admin-screen" v-else-if="activeTab === 'admin' && isAdmin">
+      <div class="admin-actions-bar">
+        <button class="btn-create-contest" @click="showContestCreateModal = true">+ Create Contest</button>
+      </div>
       <AdminProblemUpload />
+      <ContestCreateModal
+        v-if="showContestCreateModal"
+        @close="showContestCreateModal = false"
+        @created="onContestCreated"
+      />
     </section>
 
     <div class="content-grid" :class="{ 'problemset-mode': activeTab === 'problemset' || !hasSessions }" v-else>
@@ -1529,5 +1546,27 @@ onBeforeUnmount(() => {
     flex: 1;
     overflow-y: auto;
     padding: 16px;
+  }
+
+  .admin-actions-bar {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+
+  .btn-create-contest {
+    padding: 8px 18px;
+    border-radius: 6px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: #191a1b;
+    color: #f7f8f8;
+    font-size: 0.9rem;
+    cursor: pointer;
+    font-weight: 500;
+    transition: background 0.15s;
+  }
+
+  .btn-create-contest:hover {
+    background: rgba(255, 255, 255, 0.08);
   }
 </style>
