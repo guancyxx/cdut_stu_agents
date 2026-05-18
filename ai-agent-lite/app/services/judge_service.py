@@ -28,6 +28,10 @@ import httpx
 from app.config import settings
 
 
+JAVA_MEMORY_FLOOR_KB = 1024 * 1024
+MARKER_BLOCKS = ("PREPEND", "TEMPLATE", "APPEND")
+
+
 # ── sandbox API client ────────────────────────────────────────────────
 class SandboxClient:
     """Async HTTP client for the cdut-sandbox API."""
@@ -155,6 +159,59 @@ def _compare_output(stdout: str, expected: str) -> bool:
     return _normalize(stdout) == _normalize(expected)
 
 
+def _extract_marker_block(code: str, block_name: str) -> Optional[str]:
+    """Extract a marker block body from wrapped template source."""
+    begin_marker = f"//{block_name} BEGIN"
+    end_marker = f"//{block_name} END"
+
+    begin_index = code.find(begin_marker)
+    if begin_index < 0:
+        return None
+
+    body_start = begin_index + len(begin_marker)
+    end_index = code.find(end_marker, body_start)
+    if end_index < 0:
+        return None
+
+    return code[body_start:end_index].strip("\n ")
+
+
+def _sanitize_submission_code(code: str, language: str) -> str:
+    """
+    Rebuild executable source from marker-wrapped templates when present.
+
+    Marker format:
+      //PREPEND BEGIN ... //PREPEND END
+      //TEMPLATE BEGIN ... //TEMPLATE END
+      //APPEND BEGIN ... //APPEND END
+    """
+    if "//TEMPLATE BEGIN" not in code or "//TEMPLATE END" not in code:
+        return code
+
+    extracted: list[str] = []
+    for block in MARKER_BLOCKS:
+        body = _extract_marker_block(code, block)
+        if body is None:
+            return code
+        if body.strip():
+            extracted.append(body)
+
+    if not extracted:
+        return code
+
+    if language not in {"python3", "java"}:
+        return code
+
+    return "\n\n".join(extracted).strip() + "\n"
+
+
+def _effective_memory_limit_kb(language: str, configured_limit_kb: int) -> int:
+    """Apply language-specific sandbox memory policy."""
+    if language == "java":
+        return max(configured_limit_kb, JAVA_MEMORY_FLOOR_KB)
+    return configured_limit_kb
+
+
 # ── SPJ execution ─────────────────────────────────────────────────────
 
 async def _run_spj(
@@ -211,6 +268,8 @@ async def judge_submission(
     if sandbox is None:
         sandbox = SandboxClient()
 
+    code_to_judge = _sanitize_submission_code(code, language)
+
     # 1. Fetch problem info
     problem = await _get_problem_info(problem_id)
     if not problem:
@@ -241,6 +300,7 @@ async def judge_submission(
     time_limit_sec = max(1.0, time_limit_ms / 1000.0) if time_limit_ms else 2.0
     memory_limit_mb = problem["memory_limit"] or 256
     memory_limit_kb = memory_limit_mb * 1024
+    effective_memory_limit_kb = _effective_memory_limit_kb(language, memory_limit_kb)
 
     # 4. Run against each test case
     test_case_results: list[dict] = []
@@ -270,11 +330,11 @@ async def judge_submission(
         # Call sandbox
         try:
             result = await sandbox.run(
-                code=code,
+                code=code_to_judge,
                 language=language,
                 input_data=input_data,
                 time_limit=time_limit_sec,
-                memory_limit_kb=memory_limit_kb,
+                memory_limit_kb=effective_memory_limit_kb,
             )
         except Exception as exc:
             test_case_results.append({
