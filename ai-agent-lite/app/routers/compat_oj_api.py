@@ -255,7 +255,7 @@ async def profile(request: Request, response: Response):
         row = (
             await db.execute(
                 text(
-                    "SELECT username, COALESCE(email,''), COALESCE(admin_type,0), COALESCE(password_hash,'') "
+                    "SELECT username, COALESCE(email,''), COALESCE(student_number,''), COALESCE(admin_type,0), COALESCE(password_hash,'') "
                     "FROM ai_agent.local_users WHERE username=:u LIMIT 1"
                 ),
                 {"u": username},
@@ -271,8 +271,9 @@ async def profile(request: Request, response: Response):
             "username": row[0],
             "profile_name": row[0],
             "email": row[1],
-            "admin_type": int(row[2] or 0),
-            "admin_type_name": "Super Admin" if int(row[2] or 0) == 2 else ("Admin" if int(row[2] or 0) == 1 else "Regular User"),
+            "student_number": row[2],
+            "admin_type": int(row[3] or 0),
+            "admin_type_name": "Super Admin" if int(row[3] or 0) == 2 else ("Admin" if int(row[3] or 0) == 1 else "Regular User"),
         },
     }
 
@@ -282,6 +283,7 @@ async def register(response: Response, payload: dict = Body(...)):
     username = str(payload.get("username", "")).strip()
     password = str(payload.get("password", ""))
     email = str(payload.get("email", "")).strip()
+    student_number = str(payload.get("student_number", "")).strip()
 
     if not USERNAME_RE.match(username):
         return {"error": "Invalid username", "data": "Invalid username"}
@@ -302,13 +304,14 @@ async def register(response: Response, payload: dict = Body(...)):
 
         await db.execute(
             text(
-                "INSERT INTO ai_agent.local_users (username, password_hash, email, admin_type, created_at, updated_at) "
-                "VALUES (:u, :p, :e, 0, :now, :now)"
+                "INSERT INTO ai_agent.local_users (username, password_hash, email, student_number, admin_type, created_at, updated_at) "
+                "VALUES (:u, :p, :e, :s, 0, :now, :now)"
             ),
             {
                 "u": username,
                 "p": _hash_password(password),
                 "e": email or None,
+                "s": student_number or None,
                 "now": datetime.now(timezone.utc),
             },
         )
