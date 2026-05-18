@@ -944,6 +944,7 @@ onBeforeUnmount(() => {
 
             <template v-if="authMode === AUTH_MODES.REGISTER">
               <input v-model="ojUser.email" placeholder="邮箱（选填）" type="email" autocomplete="email" />
+              <input v-model="ojUser.studentNumber" placeholder="学号（选填）" autocomplete="off" />
               <div class="captcha-row">
                 <input v-model="ojUser.captcha" placeholder="验证码" autocomplete="off" />
                 <img v-if="ojUser.captchaSrc" :src="ojUser.captchaSrc" alt="captcha" @click="refreshCaptcha" title="点击刷新验证码" />

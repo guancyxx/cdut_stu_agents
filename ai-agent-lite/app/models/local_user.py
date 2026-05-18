@@ -16,6 +16,7 @@ class LocalUser(Base):
     username = Column(String(32), nullable=False, unique=True, index=True)
     password_hash = Column(String(128), nullable=False)
     email = Column(String(120), nullable=True)
+    student_number = Column(String(64), nullable=True)
     admin_type = Column(Integer, nullable=False, default=0)
     created_at = Column(
         DateTime(timezone=True),

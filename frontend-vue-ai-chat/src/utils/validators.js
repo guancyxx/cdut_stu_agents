@@ -47,9 +47,10 @@ export function validateRegisterPayload(payload) {
   if (!base.valid) return base
 
   const email = sanitizeTextInput(payload.email, 120)
+  const studentNumber = sanitizeTextInput(payload.studentNumber, 64)
   const captcha = sanitizeTextInput(payload.captcha, 16)
 
-  if (!EMAIL_REGEX.test(email)) {
+  if (email && !EMAIL_REGEX.test(email)) {
     return { valid: false, message: 'Email format is invalid.' }
   }
 
@@ -62,6 +63,7 @@ export function validateRegisterPayload(payload) {
     value: {
       ...base.value,
       email,
+      student_number: studentNumber,
       captcha
     }
   }
