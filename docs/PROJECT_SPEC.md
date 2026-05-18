@@ -94,7 +94,7 @@ This project aims to integrate AI technology into programming contest training, 
 - Database: MongoDB (unstructured data) + MySQL (relational data)
 - Agent cluster management and scheduling system
 
-> **Implementation Note**: The current system uses PostgreSQL for both structured and semi-structured data (via the ai_agent schema), and QDUOJ's Django backend for the OJ subsystem. MongoDB is not currently deployed. The architecture may evolve toward the spec's MongoDB + MySQL design in later phases.
+> **Implementation Note**: The current system uses PostgreSQL for both structured and semi-structured data (via the ai_agent schema), and an independent OJ backend runtime for the OJ subsystem. MongoDB is not currently deployed. The architecture may evolve toward the spec's MongoDB + MySQL design in later phases.
 
 ### 4.5 Evaluation and Optimization
 

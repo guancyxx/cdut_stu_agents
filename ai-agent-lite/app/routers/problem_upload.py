@@ -1,7 +1,7 @@
 """REST API endpoints for admin problem upload (single + batch).
 
 All operations go through ai-agent-lite → direct PostgreSQL DB write.
-No QDUOJ Admin API calls.
+No legacy OJ Admin API calls.
 
 Endpoints:
   POST /admin/problems/create          — Single problem creation

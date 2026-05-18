@@ -585,7 +585,7 @@ const handleSubmitCode = async () => {
   clearPendingAttachments()
   addPendingAttachment({
     filename: codeFilename,
-    content: normalizedCode,
+    content: normalizedEditableCode,
     type: 'code'
   })
 
@@ -611,7 +611,10 @@ const handleSubmitCode = async () => {
     }
   }
 
-  await sendMessage()
+  activeSubmitState.value = {
+    type: activeSubmitState.value.type || 'info',
+    message: `${activeSubmitState.value.message || 'Submission finished.'} 已将代码和判题结果挂载到输入框上方附件，确认后手动发送给 AI。`
+  }
 }
 
 const handleContestSelect = async (contestId) => {

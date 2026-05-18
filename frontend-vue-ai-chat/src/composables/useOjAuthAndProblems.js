@@ -768,10 +768,8 @@ export function useOjAuthAndProblems() {
       const startTimestamp = Date.now()
       const timeoutMs = 45000
       const intervalMs = 1500
-      const queryProblemId = sanitizeTextInput(String(problemQueryId || problemId || ''), 64)
       const query = {
         myself: '1',
-        ...(queryProblemId ? { problem_id: queryProblemId } : {}),
         limit: '20',
         page: '1'
       }

@@ -68,7 +68,7 @@ def _verify_password(raw: str, stored: str) -> bool:
 
 
 def _status_code_from_verdict(verdict: str) -> int:
-    # QDUOJ-compatible status codes used by frontend map
+    # Legacy-OJ-compatible status codes used by frontend map
     mapping = {
         "AC": 0,
         "WA": -1,

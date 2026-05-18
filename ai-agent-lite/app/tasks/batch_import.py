@@ -226,7 +226,7 @@ def _insert_problem_sync(conn, prob: dict) -> dict:
 
     if test_cases:
         # Write to a temp dir first, compute the MD5 from info file,
-        # then rename to the MD5-named directory (QDUOJ convention).
+        # then rename to the MD5-named directory (legacy judge convention).
         import tempfile
         with tempfile.TemporaryDirectory(prefix="tc_") as tmp_dir:
             tmp_path = Path(tmp_dir)
@@ -239,7 +239,7 @@ def _insert_problem_sync(conn, prob: dict) -> dict:
 
     # Insert problem row
     # Note: psycopg2 supports %s::jsonb cast syntax, this is fine.
-    # Note: QDUOJ column names: create_time/last_update_time (not created_at)
+    # Note: legacy OJ column names: create_time/last_update_time (not created_at)
     # Note: Several NOT NULL columns need defaults: template, statistic_info, etc.
     with conn.cursor() as cur:
         cur.execute("""
