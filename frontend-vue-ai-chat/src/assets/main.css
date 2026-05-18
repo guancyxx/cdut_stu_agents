@@ -1078,6 +1078,9 @@ button:disabled {
   color: var(--text-secondary);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03), 0 4px 12px rgba(0, 0, 0, 0.22);
   transition: transform 0.16s ease, border-color 0.16s ease, background 0.16s ease;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
 .problem-item:hover {
@@ -1085,6 +1088,288 @@ button:disabled {
   border-color: rgba(130, 143, 255, 0.45);
   transform: translateY(-1px);
 }
+
+.problem-select-btn {
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  padding: 0;
+  cursor: pointer;
+}
+
+.problem-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn-admin-add,
+.btn-problem-edit {
+  border: 1px solid rgba(130, 143, 255, 0.45);
+  background: rgba(94, 106, 210, 0.12);
+  color: var(--text-primary);
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.btn-admin-add:hover,
+.btn-problem-edit:hover {
+  background: rgba(94, 106, 210, 0.22);
+}
+
+.problem-admin-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal-container {
+  background: #1e1e2e;
+  border-radius: 12px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  color: #cdd6f4;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 18px;
+  border-bottom: 1px solid #313244;
+}
+
+.modal-body {
+  padding: 12px 16px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid #313244;
+}
+
+.modal-close-btn {
+  background: none;
+  border: none;
+  color: #9ca3af;
+  font-size: 1.25rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.modal-close-btn:hover {
+  color: #ffffff;
+}
+
+.alert {
+  padding: 8px 12px;
+  border-radius: 6px;
+  margin-bottom: 12px;
+  font-size: 0.85rem;
+}
+
+.alert-error {
+  background: rgba(243, 139, 168, 0.15);
+  color: #f38ba8;
+}
+
+.alert-success {
+  background: rgba(166, 227, 161, 0.15);
+  color: #a6e3a1;
+}
+
+.btn-submit,
+.btn-cancel {
+  border: 1px solid #4b5563;
+  background: #1f2937;
+  color: #f3f4f6;
+  border-radius: 6px;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+
+.btn-submit:hover,
+.btn-cancel:hover {
+  background: #374151;
+}
+
+.admin-account-screen {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.admin-account-desc {
+  color: var(--text-tertiary);
+  margin-top: -6px;
+}
+
+.admin-account-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.admin-account-create,
+.admin-account-list,
+.admin-account-card {
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.02);
+  padding: 12px;
+}
+
+.admin-account-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.admin-account-form-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.admin-account-form-grid input,
+.admin-account-form-grid select {
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: rgba(16, 18, 20, 0.9);
+  color: var(--text-primary);
+  padding: 8px 10px;
+}
+
+.admin-account-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.admin-account-actions button {
+  border: 1px solid var(--border-subtle);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-primary);
+  border-radius: 8px;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+
+.admin-account-actions button:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.admin-account-actions button.danger {
+  border-color: rgba(239, 68, 68, 0.5);
+  color: #fca5a5;
+}
+
+.admin-account-card-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+}
+
+.admin-account-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.admin-type-badge {
+  margin-left: 8px;
+  font-size: 11px;
+  border-radius: 6px;
+  padding: 2px 6px;
+  border: 1px solid var(--border-subtle);
+}
+
+.admin-type-2 {
+  background: rgba(168, 85, 247, 0.2);
+  border-color: rgba(168, 85, 247, 0.45);
+}
+
+.admin-type-1 {
+  background: rgba(59, 130, 246, 0.2);
+  border-color: rgba(59, 130, 246, 0.45);
+}
+
+.admin-type-0 {
+  background: rgba(107, 114, 128, 0.2);
+  border-color: rgba(107, 114, 128, 0.45);
+}
+
+.admin-account-readonly {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.admin-account-alert {
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
+.admin-account-alert.success {
+  border: 1px solid rgba(16, 185, 129, 0.45);
+  background: rgba(16, 185, 129, 0.15);
+  color: #a7f3d0;
+}
+
+.admin-account-alert.error {
+  border: 1px solid rgba(239, 68, 68, 0.45);
+  background: rgba(239, 68, 68, 0.15);
+  color: #fecaca;
+}
+
+@media (max-width: 960px) {
+  .problem-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .admin-account-form-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .problem-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .problem-toolbar-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+}
+
 
 .pid {
   font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;

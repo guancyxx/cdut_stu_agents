@@ -327,3 +327,91 @@ async def get_tag_list(session: AsyncSession) -> list[dict]:
     sql = text("SELECT id, name FROM problem_tag ORDER BY name")
     result = await session.execute(sql)
     return [{"id": row[0], "name": row[1]} for row in result.fetchall()]
+
+
+async def update_problem(
+    session: AsyncSession,
+    *,
+    problem_id: str,
+    title: str,
+    description: str,
+    input_description: str,
+    output_description: str,
+    hint: str,
+    source: str,
+    difficulty: str,
+    time_limit: int,
+    memory_limit: int,
+    visible: bool,
+    tags: list[str] | None = None,
+) -> dict:
+    """Update an existing problem and refresh tag links.
+
+    problem_id accepts either display _id or numeric id string.
+    """
+    pid = str(problem_id or "").strip()
+    if not pid:
+        raise ValueError("Invalid problem id")
+
+    normalized_title = (title or "").strip()
+    if not normalized_title:
+        raise ValueError("标题不能为空")
+
+    normalized_diff = difficulty if difficulty in VALID_DIFFICULTIES else "Low"
+
+    # Resolve target row by _id or numeric id
+    row = (
+        await session.execute(
+            text(
+                "SELECT id, _id FROM problem "
+                "WHERE _id=:pid OR CAST(id AS TEXT)=:pid "
+                "LIMIT 1"
+            ),
+            {"pid": pid},
+        )
+    ).fetchone()
+
+    if not row:
+        raise ValueError("Problem not found")
+
+    db_id = int(row[0])
+    display_id = str(row[1])
+
+    await session.execute(
+        text(
+            "UPDATE problem SET "
+            "title=:title, description=:description, input_description=:input_description, "
+            "output_description=:output_description, hint=:hint, source=:source, "
+            "difficulty=:difficulty, time_limit=:time_limit, memory_limit=:memory_limit, "
+            "visible=:visible, is_public=:visible, last_update_time=:updated_at "
+            "WHERE id=:db_id"
+        ),
+        {
+            "db_id": db_id,
+            "title": normalized_title,
+            "description": description or "",
+            "input_description": input_description or "",
+            "output_description": output_description or "",
+            "hint": hint or "",
+            "source": source or "",
+            "difficulty": normalized_diff,
+            "time_limit": max(100, int(time_limit or 1000)),
+            "memory_limit": max(16, int(memory_limit or 256)),
+            "visible": bool(visible),
+            "updated_at": datetime.now(timezone.utc),
+        },
+    )
+
+    # Replace tag links.
+    await session.execute(
+        text("DELETE FROM problem_tags WHERE problem_id=:pid"),
+        {"pid": db_id},
+    )
+    await _link_tags(session, db_id, tags or [])
+
+    await session.commit()
+    return {
+        "problem_id": display_id,
+        "db_id": db_id,
+        "message": "题目更新成功",
+    }

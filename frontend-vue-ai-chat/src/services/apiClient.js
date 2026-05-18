@@ -236,6 +236,87 @@ export function createApiClient(baseUrl = '/oj-api', aiAgentBaseUrl = '/oj-test-
       }
     })
 
+  const adminUpdateProblem = (problemId, payload) =>
+    fetch(`${aiAgentBaseUrl}/admin/problems/${encodeURIComponent(problemId)}`, {
+      method: 'PUT',
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payload)
+    }).then(async (response) => {
+      const rawText = await response.text()
+      if (!rawText) return { ok: response.ok, status: response.status, data: { error: `Empty response (${response.status})`, data: '' } }
+      try {
+        return { ok: response.ok, status: response.status, data: JSON.parse(rawText) }
+      } catch {
+        return { ok: response.ok, status: response.status, data: { error: `Invalid JSON response (${response.status})`, data: rawText } }
+      }
+    })
+
+  const adminListAccounts = () =>
+    fetch(`${aiAgentBaseUrl}/admin/accounts`, {
+      credentials: 'include'
+    }).then(async (response) => {
+      const rawText = await response.text()
+      if (!rawText) return { ok: response.ok, status: response.status, data: { error: `Empty response (${response.status})`, data: '' } }
+      try {
+        return { ok: response.ok, status: response.status, data: JSON.parse(rawText) }
+      } catch {
+        return { ok: response.ok, status: response.status, data: { error: `Invalid JSON response (${response.status})`, data: rawText } }
+      }
+    })
+
+  const adminCreateAccount = (payload) =>
+    fetch(`${aiAgentBaseUrl}/admin/accounts`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payload)
+    }).then(async (response) => {
+      const rawText = await response.text()
+      if (!rawText) return { ok: response.ok, status: response.status, data: { error: `Empty response (${response.status})`, data: '' } }
+      try {
+        return { ok: response.ok, status: response.status, data: JSON.parse(rawText) }
+      } catch {
+        return { ok: response.ok, status: response.status, data: { error: `Invalid JSON response (${response.status})`, data: rawText } }
+      }
+    })
+
+  const adminUpdateAccount = (username, payload) =>
+    fetch(`${aiAgentBaseUrl}/admin/accounts/${encodeURIComponent(username)}`, {
+      method: 'PUT',
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payload)
+    }).then(async (response) => {
+      const rawText = await response.text()
+      if (!rawText) return { ok: response.ok, status: response.status, data: { error: `Empty response (${response.status})`, data: '' } }
+      try {
+        return { ok: response.ok, status: response.status, data: JSON.parse(rawText) }
+      } catch {
+        return { ok: response.ok, status: response.status, data: { error: `Invalid JSON response (${response.status})`, data: rawText } }
+      }
+    })
+
+  const adminDeleteAccount = (username) =>
+    fetch(`${aiAgentBaseUrl}/admin/accounts/${encodeURIComponent(username)}`, {
+      method: 'DELETE',
+      credentials: 'include'
+    }).then(async (response) => {
+      const rawText = await response.text()
+      if (!rawText) return { ok: response.ok, status: response.status, data: { error: `Empty response (${response.status})`, data: '' } }
+      try {
+        return { ok: response.ok, status: response.status, data: JSON.parse(rawText) }
+      } catch {
+        return { ok: response.ok, status: response.status, data: { error: `Invalid JSON response (${response.status})`, data: rawText } }
+      }
+    })
+
   return {
     fetchProfile,
     fetchCaptcha,
@@ -259,6 +340,11 @@ export function createApiClient(baseUrl = '/oj-api', aiAgentBaseUrl = '/oj-test-
     adminCreateProblem,
     adminBatchUpload,
     adminImportStatus,
-    adminFetchTags
+    adminFetchTags,
+    adminUpdateProblem,
+    adminListAccounts,
+    adminCreateAccount,
+    adminUpdateAccount,
+    adminDeleteAccount
   }
 }
