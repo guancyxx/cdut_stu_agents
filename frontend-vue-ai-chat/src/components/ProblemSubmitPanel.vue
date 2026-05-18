@@ -280,7 +280,7 @@ const buildResultAttachmentContent = (result) => {
         <div class="card-subtitle">Problem ID: {{ selectedProblem._id }}</div>
       </div>
 
-      <div class="problem-detail-middle">
+      <div class="problem-detail-middle scrollbar-unified">
         <div class="problem-section-loading" v-if="problemDetailLoading">加载题目详情...</div>
 
         <div class="problem-section" v-if="selectedProblemDescription">
@@ -385,7 +385,7 @@ const buildResultAttachmentContent = (result) => {
         </div>
 
         <!-- Submit result area -->
-        <div class="submit-result-area">
+        <div class="submit-result-area scrollbar-unified">
           <div class="submit-result-empty" v-if="submitLoading">
             <div class="result-spinner"></div>
             <span>Judging...</span>

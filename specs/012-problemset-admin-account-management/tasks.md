@@ -38,13 +38,23 @@
   - `frontend-vue-ai-chat/src/pages/ProblemsetPage.vue`
   - `frontend-vue-ai-chat/src/components/ProblemEditModal.vue`
 
-## Task 6 [S] Docker 验证与回归
+## Task 6 [S] 前端：题目卡片整块可点击 + 滚动条样式统一
+- 目标：题库题目卡片整块可点击；统一主要滚动容器视觉滚动条样式。
+- 验收：
+  - 点击题目卡片任意非按钮区域均可进入题目。
+  - 管理员编辑按钮点击仅触发编辑，不触发选题。
+  - `problem-list / problem-detail-middle / submit-result-area / session-list / chat-main` 滚动条样式一致。
+- 文件：
+  - `frontend-vue-ai-chat/src/pages/ProblemsetPage.vue`
+  - `frontend-vue-ai-chat/src/assets/main.css`
+
+## Task 7 [S] Docker 验证与回归
 - 目标：构建、重启、路由/权限/功能验收。
 - 验收：所有成功标准满足。
 - 命令：
   - `docker compose build vue-ai-chat`
   - `docker compose up -d --force-recreate vue-ai-chat`
 
-## Task 7 [S] Git 流程收尾
+## Task 8 [S] Git 流程收尾
 - 目标：提交、推送、PR。
 - 验收：提供 PR 链接与验证结果。

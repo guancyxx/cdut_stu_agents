@@ -73,6 +73,13 @@ const selectProblem = async (problem) => {
   router.push('/')
 }
 
+const handleProblemItemKeydown = (event, problem) => {
+  if (event.key === 'Enter' || event.key === ' ') {
+    event.preventDefault()
+    selectProblem(problem)
+  }
+}
+
 const openEditProblem = async (problem) => {
   if (!isAdmin.value || !problem?._id) return
   const detail = await fetchProblemDetail(String(problem._id))
@@ -131,20 +138,26 @@ onMounted(() => {
       </div>
     </div>
 
-    <div class="problem-list" v-if="!problemLoading">
+    <div class="problem-list scrollbar-unified" v-if="!problemLoading">
       <div class="problem-grid" v-if="filteredProblems.length">
-        <div class="problem-item" v-for="p in filteredProblems" :key="p._id">
-          <button class="problem-select-btn" @click="selectProblem(p)">
-            <div class="problem-item-main">
-              <div class="pid">{{ p._id }}</div>
-              <div class="pdiff">{{ p.difficulty || 'Unknown' }}</div>
-            </div>
-            <div class="ptitle">{{ p.title }}</div>
-          </button>
-          <div v-if="isAdmin" class="problem-admin-actions">
-            <button class="btn-problem-edit" @click="openEditProblem(p)">编辑</button>
+        <article
+          class="problem-item"
+          v-for="p in filteredProblems"
+          :key="p._id"
+          role="button"
+          tabindex="0"
+          @click="selectProblem(p)"
+          @keydown="handleProblemItemKeydown($event, p)"
+        >
+          <div class="problem-item-main">
+            <div class="pid">{{ p._id }}</div>
+            <div class="pdiff">{{ p.difficulty || 'Unknown' }}</div>
           </div>
-        </div>
+          <div class="ptitle">{{ p.title }}</div>
+          <div v-if="isAdmin" class="problem-admin-actions">
+            <button class="btn-problem-edit" @click.stop="openEditProblem(p)">编辑</button>
+          </div>
+        </article>
       </div>
       <div v-else class="empty">暂无符合筛选条件的题目</div>
     </div>
