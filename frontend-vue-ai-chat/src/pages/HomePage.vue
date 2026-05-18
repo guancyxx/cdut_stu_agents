@@ -23,7 +23,7 @@ const traceMessages = computed(() => messages.value.filter((m) => m.role === 'tr
 
 <template>
   <section class="main-panel home-panel">
-    <main class="chat-main">
+    <main class="chat-main scrollbar-unified">
       <MessageBubble
         v-for="(msg, idx) in chatMessages"
         :key="msg._uid || idx"

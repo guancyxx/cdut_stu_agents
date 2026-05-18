@@ -206,7 +206,7 @@ onBeforeUnmount(() => {
               @click="handleClearAllSessions"
             >clear</button>
           </div>
-          <div class="session-list">
+          <div class="session-list scrollbar-unified">
             <button
               v-for="s in sessions"
               :key="s.id"
