@@ -11,7 +11,7 @@ const handleLogout = async () => {
   const succeeded = await logout()
   if (!succeeded) return
   switchToUser('')
-  router.replace('/')
+  router.replace('/auth')
 }
 </script>
 

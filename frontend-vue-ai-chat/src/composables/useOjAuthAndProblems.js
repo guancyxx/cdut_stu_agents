@@ -169,6 +169,7 @@ export function useOjAuthAndProblems() {
   }
   const keyword = ref('')
   const difficulty = ref('')
+  const problemTags = ref([])
 
   const currentPage = ref(1)
   const totalCount = ref(0)
@@ -240,6 +241,11 @@ export function useOjAuthAndProblems() {
     ojUser.value.adminType = profile.adminType || 0
   }
 
+  const isUnauthenticatedError = (error) => {
+    const message = String(error?.message || '').toLowerCase()
+    return message.includes('please login first') || message.includes('not login') || message.includes('unauthorized')
+  }
+
   const fetchUserProfile = async () => {
     const response = await apiClient.fetchProfile()
     const result = response.data
@@ -263,7 +269,11 @@ export function useOjAuthAndProblems() {
     try {
       await fetchUserProfile()
     } catch (error) {
-      console.warn('Failed to hydrate auth session.', error)
+      // Unauthenticated on app load is expected. Do not spam console warnings.
+      if (!isUnauthenticatedError(error)) {
+        console.warn('Failed to hydrate auth session.', error)
+      }
+      ojUser.value.loggedIn = false
     } finally {
       authReady.value = true
     }
@@ -287,12 +297,15 @@ export function useOjAuthAndProblems() {
       return
     }
 
-    applyLoginSuccess(result.data?.username)
+    // Session mode: backend may not return token in body.
+    // Trust cookie-based login and then confirm by profile endpoint.
+    applyLoginSuccess(result.data?.username || validation.value.username)
 
     try {
       await fetchUserProfile()
     } catch (error) {
-      console.warn('Failed to fetch profile after login.', error)
+      ojUser.value.error = error?.message || 'Login succeeded but profile fetch failed.'
+      ojUser.value.loggedIn = false
     }
   }
 
@@ -384,6 +397,25 @@ export function useOjAuthAndProblems() {
       problems.value = []
     } finally {
       problemLoading.value = false
+    }
+  }
+
+  const fetchProblemTags = async () => {
+    try {
+      const response = await apiClient.fetchProblemTags()
+      const result = response.data
+      if (result?.error) {
+        problemTags.value = []
+        return []
+      }
+      const rows = Array.isArray(result?.tags) ? result.tags : []
+      problemTags.value = rows
+        .map((item) => sanitizeTextInput(String(item?.name || item), 64))
+        .filter(Boolean)
+      return problemTags.value
+    } catch {
+      problemTags.value = []
+      return []
     }
   }
 
@@ -915,6 +947,7 @@ export function useOjAuthAndProblems() {
     pruneSubmitResults,
     keyword,
     difficulty,
+    problemTags,
     currentPage,
     totalCount,
     totalPages,
@@ -930,6 +963,7 @@ export function useOjAuthAndProblems() {
     register,
     logout,
     fetchProblems,
+    fetchProblemTags,
     submitSolution,
     reportSubmissionToFallback,
     contestList,

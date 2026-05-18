@@ -76,6 +76,9 @@ export function createApiClient(baseUrl = '/oj-api', aiAgentBaseUrl = '/oj-test-
   const fetchProblemDetail = (problemId) =>
     requestJson(`/api/problem/?problem_id=${encodeURIComponent(problemId)}`)
 
+  const fetchProblemTags = () =>
+    requestJson('/admin/problems/tags')
+
   const submitCode = (payload, csrfToken) =>
     requestJson('/api/submission', {
       method: 'POST',
@@ -241,6 +244,7 @@ export function createApiClient(baseUrl = '/oj-api', aiAgentBaseUrl = '/oj-test-
     logout,
     fetchProblems,
     fetchProblemDetail,
+    fetchProblemTags,
     submitCode,
     fetchSubmissions,
     fetchSubmissionDetail,

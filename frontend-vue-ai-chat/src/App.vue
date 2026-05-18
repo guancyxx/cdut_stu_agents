@@ -189,7 +189,11 @@ onBeforeUnmount(() => {
     <router-view v-if="requiresAuth" />
 
     <!-- ─── 3-Column Layout (home / problemset) ────────────────────────── -->
-    <div class="content-grid" v-else-if="showLayout">
+    <div
+      class="content-grid"
+      :class="{ 'problemset-mode': route.name === 'problemset' }"
+      v-else-if="showLayout"
+    >
       <!-- Left sidebar: sessions -->
       <aside class="left-sidebar">
         <div class="card sessions-card">

@@ -1,8 +1,21 @@
 <script setup>
+import { useRouter } from 'vue-router'
 import { useOjStore } from '../stores/ojStore'
 import { useChatStore } from '../stores/chatStore'
 
-const { AUTH_MODES, authMode, authUsernameRef, ojUser, isLoginMode, refreshCaptcha, login, register } = useOjStore()
+const router = useRouter()
+const {
+  AUTH_MODES,
+  authMode,
+  authUsernameRef,
+  ojUser,
+  isLoginMode,
+  refreshCaptcha,
+  login,
+  register,
+  fetchProblems,
+  fetchContests
+} = useOjStore()
 const { switchToUser, loadSessions } = useChatStore()
 
 const handleAuthSubmit = async () => {
@@ -13,6 +26,10 @@ const handleAuthSubmit = async () => {
   }
   if (ojUser.value.loggedIn) {
     switchToUser(ojUser.value.profileName || ojUser.value.username)
+    loadSessions()
+    await fetchProblems()
+    await fetchContests('all')
+    router.replace('/')
   }
 }
 
