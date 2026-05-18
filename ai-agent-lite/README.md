@@ -156,7 +156,7 @@ Agent 信息（在响应前发送）：
 | LITE_LLM_API_KEY | 否 | - | LLM 提供商 API Key |
 | LITE_LLM_MODEL | 否 | deepseek-chat | 模型名称 |
 | LITE_LLM_TIMEOUT | 否 | 30 | 请求超时（秒） |
-| OJ_API_URL | 否 | - | QDUOJ 后端 URL（OJ 集成用） |
+| OJ_API_URL | 否 | - | OJ 后端 URL（OJ 集成用） |
 | LITE_DATABASE_URL | 否 | postgresql+asyncpg://... | PostgreSQL 连接串 |
 | LITE_DB_SCHEMA | 否 | ai_agent | 数据库 schema 名 |
 
@@ -177,7 +177,7 @@ Agent 信息（在响应前发送）：
 - `ai_agent.messages` — 用户/助手消息
 - `ai_agent.audit_log` — 审计日志
 
-`LITE_DATABASE_URL` 默认指向共享 QDUOJ PostgreSQL 容器 (`oj-postgres`)，通过 schema 逻辑隔离。
+`LITE_DATABASE_URL` 默认通过 `cdut-oj-postgres` 连接 OJ 共享 PostgreSQL，使用 `ai_agent` schema 做逻辑隔离。
 
 ## 端口映射
 

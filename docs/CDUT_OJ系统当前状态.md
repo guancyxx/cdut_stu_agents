@@ -1,7 +1,7 @@
 # CDUT OJ System - Current Status
 
 **Updated**: 2026-04-27
-**OJ Version**: QDUOJ v1.6.1
+**OJ Version**: CDUT OJ (isolate sandbox)
 **System Status**: Running
 
 ---
@@ -44,7 +44,7 @@
 
 ### 1. System Deployment
 - [x] Docker environment on Linux
-- [x] QDUOJ install + config
+- [x] OJ deploy + config
 - [x] Database init
 - [x] Judge service config
 

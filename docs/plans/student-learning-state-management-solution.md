@@ -344,7 +344,7 @@ B. 兜底通道：前端提交结束后上报
 - `problem_display_id`（如 fps-xxxx）
 - `user_id`
 - `language`
-- `result_code`（QDUOJ JudgeStatus）
+- `result_code`（JudgeStatus）
 - `result_label`
 - `score`
 - `time_cost`
@@ -609,7 +609,7 @@ P2（并行推进）
   - 已 AC 后再次提交仅更新熟练度，不再创建 completion 事件
 
 4) 幂等维度不够
-- 当前写 `submission_id + result`，但 QDUOJ 可能 rejudge 同 result 不同 detail。
+- 当前写 `submission_id + result`，但判题系统可能 rejudge 同 result 不同 detail。
 - 建议幂等键改为：`submission_id + judge_version + result + score + time_cost + memory_cost`（或 payload hash）。
 
 ### 18.2 P1 级改进（强烈建议）
