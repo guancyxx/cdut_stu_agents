@@ -16,7 +16,11 @@ from fastapi import FastAPI
 from app.config import settings
 from app.database import init_db
 from app.middleware import RequestMiddleware
-from app.routers import compat_oj_api, health, metrics_router, oj_test_cases, problem_audit, problem_upload, submission_events, submission_judge, websocket
+from app.routers import (
+    auth, contests, health, metrics_router,
+    oj_test_cases, problem_audit, problem_upload, problems,
+    submission_events, submission_judge, submissions, websocket,
+)
 
 logger = logging.getLogger("ai-agent-lite")
 
@@ -28,7 +32,10 @@ async def lifespan(app: FastAPI):
     await init_db()
     from app.di import get_llm_client
     llm = get_llm_client()
-    logger.info("Database initialized. LLM enabled=%s model=%s", llm.enabled, llm.model)
+    logger.info(
+        "Database initialized. LLM enabled=%s model=%s",
+        llm.enabled, llm.model,
+    )
     yield
 
 
@@ -38,7 +45,10 @@ def create_app() -> FastAPI:
     app.add_middleware(RequestMiddleware)
     app.include_router(health.router)
     app.include_router(metrics_router.router)
-    app.include_router(compat_oj_api.router)
+    app.include_router(auth.router)
+    app.include_router(problems.router)
+    app.include_router(submissions.router)
+    app.include_router(contests.router)
     app.include_router(oj_test_cases.router)
     app.include_router(problem_audit.router)
     app.include_router(problem_upload.router)

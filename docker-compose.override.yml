@@ -1,0 +1,8 @@
+services:
+  ai-agent-lite:
+    environment:
+      - LITE_DATABASE_URL=postgresql+asyncpg://cdut:cdut_oj_2024@cdut-postgres:5432/cdut_oj
+
+  ai-agent-celery-worker:
+    environment:
+      - LITE_DATABASE_URL=postgresql+asyncpg://cdut:cdut_oj_2024@cdut-postgres:5432/cdut_oj
