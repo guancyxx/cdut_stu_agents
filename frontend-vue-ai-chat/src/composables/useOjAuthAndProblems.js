@@ -40,8 +40,8 @@ const persistLastUsername = (username) => {
   window.localStorage.setItem(AUTH_LAST_USERNAME_KEY, normalized)
 }
 
-// Map QDUOJ string-based admin_type to numeric values.
-// QDUOJ stores admin_type as text (enum): 'Super Admin'=2, 'Admin'=1, 'Regular User'=0
+// Map backend string-based admin_type to numeric values.
+// Stored values: 'Super Admin'=2, 'Admin'=1, 'Regular User'=0
 const ADMIN_TYPE_MAP = {
   'super admin': 2,
   'admin': 1,
@@ -494,9 +494,7 @@ export function useOjAuthAndProblems() {
     }
   }
 
-  // QDUOJ JudgeStatus enum — non-standard values.  See skill:qduoj-submission-judge-debugging
-  //   0=ACCEPTED, -1=WRONG_ANSWER, -2=COMPILE_ERROR, 1=CPU_TLE, 2=REAL_TLE, 3=MLE,
-  //   4=RUNTIME_ERROR, 5=SYSTEM_ERROR, 6=PENDING, 7=JUDGING, 8=PARTIALLY_ACCEPTED
+  // Judge status map used by frontend display and fallback reporting
   const JUDGE_STATUS_MAP = {
     '0': { label: 'ACCEPTED', display: 'Accepted', icon: '✅', color: '#10b981' },
     '-1': { label: 'WRONG_ANSWER', display: 'Wrong Answer', icon: '❌', color: '#ef4444' },
@@ -548,7 +546,7 @@ export function useOjAuthAndProblems() {
     }
   }
 
-  // QDUOJ: only PENDING (6) and JUDGING (7) are non-terminal states
+  // Only PENDING (6) and JUDGING (7) are non-terminal states
   const isFinalSubmissionStatus = (status) => ![6, 7].includes(status)
 
   // Parse test case detail from submission detail API response.

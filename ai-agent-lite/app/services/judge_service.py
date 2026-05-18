@@ -118,7 +118,7 @@ async def _get_problem_info(problem_id: str) -> Optional[dict]:
                 SELECT _id, test_case_id, time_limit, memory_limit,
                        spj, spj_code, spj_language, spj_version
                 FROM problem
-                WHERE _id = :pid
+                WHERE _id = :pid OR CAST(id AS TEXT) = :pid
             """),
             {"pid": problem_id},
         )
