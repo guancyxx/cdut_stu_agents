@@ -1,211 +1,20 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import CodeEditor from './components/CodeEditor.vue'
-import MessageBubble from './components/MessageBubble.vue'
-import AdminProblemUpload from './components/AdminProblemUpload.vue'
-import ContestCreateModal from './components/ContestCreateModal.vue'
-import { useChatFeature } from './composables/useChatFeature'
-import { AUTH_MODES, OJ_DIFFICULTY_OPTIONS, initMessageRenderer, sanitizeHtmlContent, sanitizeTextInput } from './utils/validators'
+import { computed, onBeforeUnmount, onMounted, watch } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
+import { useOjStore } from './stores/ojStore'
+import { useChatStore } from './stores/chatStore'
+import ProblemSubmitPanel from './components/ProblemSubmitPanel.vue'
+import { AUTH_MODES, OJ_DIFFICULTY_OPTIONS, initMessageRenderer } from './utils/validators'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
-import { useOjAuthAndProblems } from './composables/useOjAuthAndProblems'
 
-const activeTab = ref('home')
-const rightPanelTab = ref('problem')
-const selectedProblemId = ref('')
-const selectedContestProblemId = ref('')
-const contestCreateForm = ref({
-  title: '',
-  description: '',
-  startTime: '',
-  endTime: '',
-  problemIdsRaw: ''
-})
-const contestCreateState = ref({ type: '', message: '' })
-const showContestCreateModal = ref(false)
-const langDropdownOpen = ref(false)
-
-// Close dropdown when clicking anywhere outside
-const handleClickOutside = (e) => {
-  const wrap = document.querySelector('.lang-select-wrap')
-  if (langDropdownOpen.value && wrap && !wrap.contains(e.target)) {
-    langDropdownOpen.value = false
-  }
-}
-
-// Each language gets its own editor instance; codes persist independently.
-// When user switches language, we just show/hide the relevant editor — no code copying.
-const DEFAULT_LANGUAGE = 'C++'
-const ALL_LANGUAGES = ['C++', 'C', 'Java', 'Python3']
-
-const createSubmitDraft = () => ({
-  language: DEFAULT_LANGUAGE,
-  // Per-language code buffers, one for each CodeEditor instance
-  // These buffers contain ONLY the user-editable section shown in editor.
-  codes: Object.fromEntries(ALL_LANGUAGES.map((lang) => [lang, ''])),
-  // Keep original starter template for each language so submission can rebuild full source.
-  templateRawByLanguage: Object.fromEntries(ALL_LANGUAGES.map((lang) => [lang, ''])),
-  state: { type: '', message: '' }
-})
-
-const submitDraftBySessionId = ref({})
-
-const ensureSubmitDraftForSession = (sessionId) => {
-  if (!sessionId) {
-    return createSubmitDraft()
-  }
-
-  if (!submitDraftBySessionId.value[sessionId]) {
-    submitDraftBySessionId.value[sessionId] = createSubmitDraft()
-  }
-
-  return submitDraftBySessionId.value[sessionId]
-}
-
-const getActiveSubmitDraft = () => ensureSubmitDraftForSession(currentSessionId.value)
-
-const STARTER_CODE = {
-  'C++': '#include <iostream>\nusing namespace std;\n\nint main() {\n    \n    return 0;\n}\n',
-  'C': '#include <stdio.h>\n\nint main() {\n    \n    return 0;\n}\n',
-  'Java': 'import java.util.Scanner;\n\npublic class Main {\n    public static void main(String[] args) {\n        Scanner sc = new Scanner(System.in);\n        \n    }\n}\n',
-  'Python3': '# Read input\n# n = int(input())\n# Process\n# Print output\n'
-}
-
-const getStarterCode = (problem, language) => {
-  const tpl = problem?.template || {}
-  return tpl[language] || STARTER_CODE[language] || ''
-}
-
-const TEMPLATE_MARKERS = {
-  prependBegin: '//PREPEND BEGIN',
-  prependEnd: '//PREPEND END',
-  templateBegin: '//TEMPLATE BEGIN',
-  templateEnd: '//TEMPLATE END',
-  appendBegin: '//APPEND BEGIN',
-  appendEnd: '//APPEND END'
-}
-
-const extractEditableTemplateSection = (code) => {
-  const text = String(code || '')
-  const begin = text.indexOf(TEMPLATE_MARKERS.templateBegin)
-  const end = text.indexOf(TEMPLATE_MARKERS.templateEnd)
-  if (begin === -1 || end === -1 || end <= begin) {
-    return text
-  }
-
-  const bodyStart = begin + TEMPLATE_MARKERS.templateBegin.length
-  let editable = text.slice(bodyStart, end)
-  editable = editable.replace(/^\s*\n/, '')
-  editable = editable.replace(/\n\s*$/, '\n')
-  return editable
-}
-
-const buildSubmissionCode = (templateRaw, editableSection) => {
-  const tpl = String(templateRaw || '')
-  if (!tpl) {
-    return String(editableSection || '')
-  }
-
-  const begin = tpl.indexOf(TEMPLATE_MARKERS.templateBegin)
-  const end = tpl.indexOf(TEMPLATE_MARKERS.templateEnd)
-  if (begin === -1 || end === -1 || end <= begin) {
-    return String(editableSection || '')
-  }
-
-  const insertionStart = begin + TEMPLATE_MARKERS.templateBegin.length
-  const before = tpl.slice(0, insertionStart)
-  const after = tpl.slice(end)
-  const editable = String(editableSection || '').replace(/\s+$/, '')
-  return `${before}\n${editable}\n${after}`
-}
-
-const activeSubmitLanguage = computed({
-  get: () => getActiveSubmitDraft().language,
-  set: (value) => { getActiveSubmitDraft().language = String(value || DEFAULT_LANGUAGE) }
-})
-
-const activeSubmitCode = computed({
-  get: () => {
-    const draft = getActiveSubmitDraft()
-    return draft.codes[draft.language] || ''
-  },
-  set: (value) => {
-    const draft = getActiveSubmitDraft()
-    draft.codes[draft.language] = String(value || '')
-  }
-})
-
-const activeSubmitState = computed({
-  get: () => getActiveSubmitDraft().state,
-  set: (value) => {
-    getActiveSubmitDraft().state = value && typeof value === 'object' ? value : { type: '', message: '' }
-  }
-})
-
-const pruneSubmitDrafts = () => {
-  const validSessionIds = new Set(sessions.value.map((session) => session.id))
-  submitDraftBySessionId.value = Object.fromEntries(
-    Object.entries(submitDraftBySessionId.value).filter(([sessionId]) => validSessionIds.has(sessionId))
-  )
-}
-
-const {
-  input,
-  listRef,
-  sending,
-  sessions,
-  currentSessionId,
-  messages,
-  pendingAttachments,
-  hasPendingAttachments,
-  addPendingAttachment,
-  removePendingAttachment,
-  clearPendingAttachments,
-  pruneOrphanAttachments,
-  pruneOrphanSuggestions,
-  nextStepSuggestions,
-  sendSuggestion,
-  clearSuggestions,
-  loadSessions,
-  switchToUser,
-  selectSession,
-  selectOrCreateProblemSession,
-  ensureSessionMetadata,
-  sendMessage,
-  sendProblemContextToAi,
-  clearAllConversationData,
-  closeSocket
-} = useChatFeature()
-
-// Separate trace messages from normal chat messages
-// Trace is displayed in a fixed overlay above the input, not in the scrollable chat flow
-const chatMessages = computed(() => messages.value.filter((m) => m.role !== 'trace'))
-const traceMessages = computed(() => messages.value.filter((m) => m.role === 'trace'))
+const router = useRouter()
+const route = useRoute()
 
 const {
   authMode,
-  authUsernameRef,
   authReady,
   ojUser,
-  problems,
-  problemLoading,
-  problemError,
-  problemDetail,
-  problemDetailLoading,
-  fetchProblemDetail,
-  submitLoading,
-  submitResultBySessionId,
-  getSubmitResultForSession,
-  setSubmitResultForSession,
-  pruneSubmitResults,
-  keyword,
-  difficulty,
-  currentPage,
-  totalCount,
-  totalPages,
-  PAGE_SIZE,
-  goToPage,
-  searchProblems,
   isLoginMode,
   isAdmin,
   hydrateAuthSession,
@@ -215,1052 +24,183 @@ const {
   register,
   logout,
   fetchProblems,
-  submitSolution,
-  reportSubmissionToFallback,
-  contestList,
-  contestListLoading,
-  contestError,
-  currentContestId,
-  contestDetail,
-  contestDetailLoading,
-  contestRankRows,
-  contestRankLoading,
-  fetchContests,
-  fetchContestDetail,
-  joinContest,
-  fetchContestRank
-} = useOjAuthAndProblems()
+  fetchContests
+} = useOjStore()
 
-const authActionText = computed(() => (ojUser.value.loggedIn ? ojUser.value.profileName : '去登录'))
-const isProfileTab = computed(() => activeTab.value === 'profile')
-const isContestTab = computed(() => activeTab.value === 'contest')
+const {
+  sessions,
+  currentSessionId,
+  switchToUser,
+  loadSessions,
+  selectSession,
+  closeSocket
+} = useChatStore()
+
+// ─── Computed ───────────────────────────────────────────────────────────────
+
 const requiresAuth = computed(() => authReady.value && !ojUser.value.loggedIn)
-const sessionCount = computed(() => sessions.value.length)
-const hasSessions = computed(() => sessionCount.value > 0)
 
-const selectedContest = computed(() => {
-  const cid = String(currentContestId.value || '')
-  if (!cid) return null
-  return contestList.value.find((item) => String(item.id) === cid) || null
+const routeTitle = computed(() => route.meta?.title || 'CDUT AI')
+
+// Whether to show the 3-column layout (left sidebar + main + right sidebar)
+const showLayout = computed(() => {
+  if (requiresAuth.value) return false
+  return route.name === 'home' || route.name === 'problemset'
 })
 
-const contestStatusText = computed(() => {
-  const status = String(contestDetail.value?.status || selectedContest.value?.status || '').toLowerCase()
-  if (status === 'running') return '进行中'
-  if (status === 'upcoming') return '即将开始'
-  if (status === 'ended') return '已结束'
-  return '-'
-})
+const showRightSidebar = computed(() => route.name === 'home')
 
-const selectedContestProblem = computed(() => {
-  const rows = Array.isArray(contestDetail.value?.problems) ? contestDetail.value.problems : []
-  const pid = String(selectedContestProblemId.value || '')
-  if (!pid) return null
-  return rows.find((item) => String(item._id) === pid) || null
-})
+const authActionText = computed(() =>
+  ojUser.value.loggedIn ? ojUser.value.profileName : '去登录'
+)
 
-// Per-session submit result — switches automatically when session changes
-const submitResult = computed(() => getSubmitResultForSession(currentSessionId.value))
+// ─── Navigation ─────────────────────────────────────────────────────────────
 
-// Auto-search when keyword looks like a problem ID pattern (e.g. LQ1273, fps-28e2, 1273)
-let keywordSearchTimer = null
-watch(keyword, (newVal) => {
-  if (keywordSearchTimer) clearTimeout(keywordSearchTimer)
-  if (!newVal || !newVal.trim()) return
-
-  const trimmed = newVal.trim()
-  // Auto-trigger on problem ID-like patterns: letter+digit, digit-only, or known prefixes
-  const looksLikeProblemId = /^(?:[A-Za-z]{1,4}[-_]?\d{1,5}|\d{2,6})$/.test(trimmed)
-
-  if (looksLikeProblemId) {
-    // Search immediately for ID-like input (no debounce needed, user likely entering full ID)
-    keywordSearchTimer = setTimeout(() => {
-      if (keyword.value === newVal) {
-        searchProblems()
-      }
-    }, 400)
+const navItems = computed(() => {
+  const items = [
+    { label: '主页', to: '/' },
+    { label: '题库', to: '/problemset' },
+    { label: '比赛', to: '/contest' }
+  ]
+  if (isAdmin.value) {
+    items.push({ label: '管理', to: '/admin' })
   }
+  items.push({ label: '个人中心', to: '/profile' })
+  return items
 })
 
-const visiblePages = computed(() => {
-  const total = totalPages.value
-  const current = currentPage.value
-  const delta = 2
-  const pages = []
-
-  const start = Math.max(1, current - delta)
-  const end = Math.min(total, current + delta)
-
-  for (let i = start; i <= end; i++) {
-    pages.push(i)
-  }
-
-  return pages
-})
-const selectedProblem = computed(() => problems.value.find((item) => String(item._id) === selectedProblemId.value) || null)
-const hasSelectedProblem = computed(() => Boolean(selectedProblem.value))
-
-// Full problem detail from detail API (includes input_description, output_description, samples, hint, source)
-const problemDetailData = computed(() => {
-  // Prefer the detail API response; fall back to list item data
-  if (problemDetail.value && String(problemDetail.value._id) === String(selectedProblemId.value)) {
-    return problemDetail.value
-  }
-  return selectedProblem.value
-})
-
-const selectedProblemDescription = computed(() => {
-  const detail = problemDetailData.value
-  if (!detail) return ''
-  const candidate =
-    detail.description ||
-    detail.content ||
-    detail.desc ||
-    detail.problem_description ||
-    ''
-  const normalized = String(candidate).trim()
-  return normalized || '暂无题目描述'
-})
-
-const selectedProblemInputDesc = computed(() => {
-  const detail = problemDetailData.value
-  if (!detail) return ''
-  return String(detail.input_description || '').trim()
-})
-
-const selectedProblemOutputDesc = computed(() => {
-  const detail = problemDetailData.value
-  if (!detail) return ''
-  return String(detail.output_description || '').trim()
-})
-
-const selectedProblemSamples = computed(() => {
-  const detail = problemDetailData.value
-  if (!detail) return []
-  const raw = detail.samples
-  if (Array.isArray(raw)) return raw
-  // QDUOJ sometimes stores samples as a JSON string
-  if (typeof raw === 'string') {
-    try { return JSON.parse(raw) } catch { return [] }
-  }
-  return []
-})
-
-const selectedProblemHint = computed(() => {
-  const detail = problemDetailData.value
-  if (!detail) return ''
-  return String(detail.hint || '').trim()
-})
-
-const selectedProblemSource = computed(() => {
-  const detail = problemDetailData.value
-  if (!detail) return ''
-  return String(detail.source || '').trim()
-})
-
-const selectedProblemDescriptionHtml = computed(() => sanitizeHtmlContent(selectedProblemDescription.value))
-const selectedProblemInputHtml = computed(() => sanitizeHtmlContent(selectedProblemInputDesc.value))
-const selectedProblemOutputHtml = computed(() => sanitizeHtmlContent(selectedProblemOutputDesc.value))
-const selectedProblemHintHtml = computed(() => sanitizeHtmlContent(selectedProblemHint.value))
-
-const handleGoToAuth = () => {
+const goToAuth = () => {
   if (ojUser.value.loggedIn) {
-    activeTab.value = 'profile'
-    fetchUserProfile().catch((error) => {
-      console.warn('Failed to refresh profile data.', error)
-    })
+    router.push('/profile')
+    fetchUserProfile().catch(() => {})
     return
   }
-
-  activeTab.value = 'auth'
-  rightPanelTab.value = 'problem'
-  activeSubmitState.value = { type: '', message: '' }
-}
-
-const handleAuthSubmit = async () => {
-  if (isLoginMode.value) {
-    await login()
-  } else {
-    await register()
-  }
-
-  if (ojUser.value.loggedIn) {
-    // Switch session storage to the newly authenticated user
-    switchToUser(ojUser.value.profileName || ojUser.value.username)
-
-    await fetchProblems()
-    activeTab.value = 'home'
-    syncCurrentSessionUserId(ojUser.value.profileName || ojUser.value.username)
-  }
-}
-
-const handleAuthKeydown = (event) => {
-  if (event.key === 'Enter') {
-    event.preventDefault()
-    handleAuthSubmit()
-  }
+  router.push('/auth')
 }
 
 const handleLogout = async () => {
-  const succeeded = await logout()
-  if (!succeeded) return
-
-  // Switch to anonymous scope — clears in-memory sessions and WebSocket
+  await logout()
   switchToUser('')
-
-  activeTab.value = 'auth'
-  selectedProblemId.value = ''
-  rightPanelTab.value = 'problem'
-  activeSubmitCode.value = ''
-  activeSubmitState.value = { type: '', message: '' }
+  router.push('/auth')
 }
 
-const switchRightPanelTab = (tab) => {
-  rightPanelTab.value = tab
+const handleClearAllSessions = () => {
+  const { clearAllConversationData } = useChatStore()
+  clearAllConversationData()
+  router.push('/problemset')
 }
 
 const handleSelectSession = (sessionId) => {
   selectSession(sessionId)
-  const targetSession = sessions.value.find((session) => session.id === sessionId)
-  selectedProblemId.value = targetSession?.problemId ? String(targetSession.problemId) : ''
-  // Fetch problem detail for the selected session's problem
-  if (targetSession?.problemId) {
-    fetchProblemDetail(String(targetSession.problemId))
-  }
-  activeTab.value = 'home'
+  router.push('/')
 }
 
 const getSessionTag = (session) => {
-  if (session?.problemId) {
-    return String(session.problemId)
-  }
-
+  if (session?.problemId) return String(session.problemId)
   return String(session?.id || 'chat').slice(-4)
 }
 
-const selectProblemForRightPanel = async (problem) => {
-  if (!problem?._id) return
-
-  const targetSession = selectOrCreateProblemSession(problem)
-  if (!targetSession) return
-
-  const resolvedUserId = sanitizeTextInput(ojUser.value.profileName || ojUser.value.username, 32)
-
-  selectedProblemId.value = String(problem._id)
-  rightPanelTab.value = 'problem'
-  activeTab.value = 'home'
-
-  // Fetch full problem detail (description, input, output, samples, hint, source)
-  await fetchProblemDetail(String(problem._id))
-
-  // Populate starter code for ALL languages from problem detail template or fallback skeleton.
-  // Each CodeEditor instance binds to its own codes[lang], so pre-populating all
-  // languages means switching language just shows/hides editors — no code copying.
-  const draft = getActiveSubmitDraft()
-  const starterSource = problemDetail.value && String(problemDetail.value._id || '') === String(problem._id || '')
-    ? problemDetail.value
-    : problem
-  for (const lang of ALL_LANGUAGES) {
-    const starterRaw = getStarterCode(starterSource, lang)
-    // Only populate if the buffer is empty (first time selecting this problem)
-    if (!draft.codes[lang]) {
-      draft.codes[lang] = extractEditableTemplateSection(starterRaw)
-    }
-    draft.templateRawByLanguage[lang] = starterRaw
-  }
-
-  ensureSessionMetadata(targetSession.id, {
-    problemId: String(problem._id),
-    problemTitle: problem.title,
-    youtuSessionId: `problem_${problem._id}`,
-    userId: resolvedUserId
-  })
-
-  if (targetSession.messages.length === 0) {
-    await sendProblemContextToAi(problem, { targetSessionId: targetSession.id })
-  }
-}
-
-const handleClearAllSessions = () => {
-  clearAllConversationData()
-  selectedProblemId.value = ''
-  rightPanelTab.value = 'problem'
-  activeTab.value = 'problemset'
-  activeSubmitCode.value = ''
-  activeSubmitState.value = { type: '', message: '' }
-  // Clear all per-session submit results since all sessions are gone
-  submitResultBySessionId.value = {}
-  pruneOrphanAttachments()
-  pruneOrphanSuggestions()
-}
-
-const syncCurrentSessionUserId = (userId) => {
-  const sessionId = currentSessionId.value
-  if (!sessionId || !userId) return
-
-  ensureSessionMetadata(sessionId, {
-    userId
-  })
-}
-
-const mapSubmissionLabelToUiMessage = (result) => {
-  if (!result) {
-    return {
-      type: 'error',
-      message: 'No submission result returned.'
-    }
-  }
-
-  if (result.label === 'ERROR') {
-    return {
-      type: 'error',
-      message: result.message || 'Submission failed.'
-    }
-  }
-
-  if (result.label === 'TIMEOUT') {
-    return {
-      type: 'warning',
-      message: 'Judge polling timed out. Please refresh later.'
-    }
-  }
-
-  const detailMessage = `Result: ${result.label} | Score: ${result.score} | Time: ${result.timeCost}ms | Memory: ${result.memoryCost}KB | Submission: ${result.submissionId || '-'}`
-  if (result.label === 'ACCEPTED') {
-    return {
-      type: 'success',
-      message: detailMessage
-    }
-  }
-
-  return {
-    type: 'info',
-    message: detailMessage
-  }
-}
-
-const handleSubmitCode = async () => {
-  activeSubmitState.value = { type: '', message: '' }
-
-  if (!selectedProblem.value) {
-    activeSubmitState.value = { type: 'error', message: 'Please select a problem first.' }
-    return
-  }
-
-  const normalizedEditableCode = sanitizeTextInput(activeSubmitCode.value, 20000)
-  activeSubmitCode.value = normalizedEditableCode
-
-  if (normalizedEditableCode.length < 10) {
-    activeSubmitState.value = { type: 'error', message: 'Code must be at least 10 characters.' }
-    return
-  }
-
-  const currentDraft = getActiveSubmitDraft()
-  const templateRaw = currentDraft.templateRawByLanguage[activeSubmitLanguage.value] || ''
-  const normalizedCode = sanitizeTextInput(buildSubmissionCode(templateRaw, normalizedEditableCode), 20000)
-
-  const result = await submitSolution({
-    problemId: selectedProblem.value.id,
-    problemQueryId: selectedProblem.value._id,
-    language: activeSubmitLanguage.value,
-    code: normalizedCode,
-    sessionId: currentSessionId.value
-  })
-
-  activeSubmitState.value = mapSubmissionLabelToUiMessage(result)
-
-  if (!result || !result.label || !currentSessionId.value) {
-    return
-  }
-
-  const fallbackResult = await reportSubmissionToFallback({
-    sessionId: currentSessionId.value,
-    problemId: selectedProblem.value._id || selectedProblem.value.id,
-    language: activeSubmitLanguage.value,
-    result
-  })
-
-  const language = activeSubmitLanguage.value
-  const codeFilename = `${language.toLowerCase().replace('3', '')}_${selectedProblem.value._id}.${language === 'C++' ? 'cpp' : language === 'C' ? 'c' : language === 'Java' ? 'java' : 'py'}`
-  clearPendingAttachments()
-  addPendingAttachment({
-    filename: codeFilename,
-    content: normalizedEditableCode,
-    type: 'code'
-  })
-
-  const resultContent = buildResultAttachmentContent(result)
-  if (resultContent) {
-    addPendingAttachment({
-      filename: 'submit-result.txt',
-      content: resultContent,
-      type: 'result'
-    })
-  }
-
-  if (fallbackResult?.is_first_ac && fallbackResult?.recommendation) {
-    const rec = fallbackResult.recommendation
-    const recTitle = sanitizeTextInput(String(rec.title || ''), 80)
-    const recPid = sanitizeTextInput(String(rec.problem_id || ''), 64)
-    if (recPid) {
-      addPendingAttachment({
-        filename: 'next-problem.txt',
-        content: `推荐下一题: ${recPid}${recTitle ? ` ${recTitle}` : ''}`,
-        type: 'result'
-      })
-    }
-  }
-
-  activeSubmitState.value = {
-    type: activeSubmitState.value.type || 'info',
-    message: `${activeSubmitState.value.message || 'Submission finished.'} 已将代码和判题结果挂载到输入框上方附件，确认后手动发送给 AI。`
-  }
-}
-
-const handleContestSelect = async (contestId) => {
-  const cid = sanitizeTextInput(String(contestId || ''), 64)
-  if (!cid) return
-  await fetchContestDetail(cid)
-  await fetchContestRank(cid)
-  const firstProblem = Array.isArray(contestDetail.value?.problems) ? contestDetail.value.problems[0] : null
-  selectedContestProblemId.value = firstProblem?._id ? String(firstProblem._id) : ''
-}
-
-const handleContestJoin = async () => {
-  const cid = sanitizeTextInput(String(currentContestId.value || ''), 64)
-  if (!cid) return
-  const ok = await joinContest(cid)
-  if (ok) {
-    await fetchContestDetail(cid)
-    await fetchContestRank(cid)
-  }
-}
-
-const handleContestProblemPick = async (problem) => {
-  if (!problem?._id) return
-  selectedContestProblemId.value = String(problem._id)
-  selectedProblemId.value = String(problem._id)
-  await fetchProblemDetail(String(problem._id))
-  rightPanelTab.value = 'submit'
-
-  // Populate starter code for all languages from problem detail
-  const draft = getActiveSubmitDraft()
-  const source = problemDetail.value && String(problemDetail.value._id) === String(problem._id)
-    ? problemDetail.value
-    : problem
-  for (const lang of ALL_LANGUAGES) {
-    const starterRaw = getStarterCode(source, lang)
-    draft.codes[lang] = extractEditableTemplateSection(starterRaw)
-    draft.templateRawByLanguage[lang] = starterRaw
-  }
-}
-
-const handleContestSubmitCode = async () => {
-  activeSubmitState.value = { type: '', message: '' }
-
-  if (!selectedContestProblem.value) {
-    activeSubmitState.value = { type: 'error', message: '请先选择比赛题目。' }
-    return
-  }
-  if (!currentContestId.value) {
-    activeSubmitState.value = { type: 'error', message: 'Invalid contest id.' }
-    return
-  }
-
-  const normalizedEditableCode = sanitizeTextInput(activeSubmitCode.value, 20000)
-  activeSubmitCode.value = normalizedEditableCode
-  if (normalizedEditableCode.length < 10) {
-    activeSubmitState.value = { type: 'error', message: 'Code must be at least 10 characters.' }
-    return
-  }
-
-  const currentDraft = getActiveSubmitDraft()
-  const templateRaw = currentDraft.templateRawByLanguage[activeSubmitLanguage.value] || ''
-  const normalizedCode = sanitizeTextInput(buildSubmissionCode(templateRaw, normalizedEditableCode), 20000)
-
-  const result = await submitSolution({
-    problemId: selectedContestProblem.value.id,
-    problemQueryId: selectedContestProblem.value._id,
-    language: activeSubmitLanguage.value,
-    code: normalizedCode,
-    sessionId: currentSessionId.value,
-    contestId: currentContestId.value
-  })
-
-  activeSubmitState.value = mapSubmissionLabelToUiMessage(result)
-  await fetchContestRank(currentContestId.value)
-}
-
-const handleContestRefresh = async () => {
-  await fetchContests('all')
-  if (currentContestId.value) {
-    await fetchContestDetail(currentContestId.value)
-    await fetchContestRank(currentContestId.value)
-  }
-}
-
-const onContestCreated = async (result) => {
-  await fetchContests('all')
-  if (result?.contest_id) {
-    currentContestId.value = result.contest_id
-  }
-}
-
-const handleCreateContest = async () => {
-  contestCreateState.value = { type: '', message: '' }
-  const title = sanitizeTextInput(contestCreateForm.value.title, 255)
-  const description = sanitizeTextInput(contestCreateForm.value.description, 1000)
-  const normalizeLocalDateTime = (raw) => {
-    const text = sanitizeTextInput(String(raw || ''), 64)
-    if (!text) return ''
-    return text.includes('T') ? `${text}:00Z` : text
-  }
-  const startTime = normalizeLocalDateTime(contestCreateForm.value.startTime)
-  const endTime = normalizeLocalDateTime(contestCreateForm.value.endTime)
-  const problemIds = String(contestCreateForm.value.problemIdsRaw || '')
-    .split(',')
-    .map((item) => sanitizeTextInput(item.trim(), 64))
-    .filter(Boolean)
-
-  if (!title || !startTime || !endTime || !problemIds.length) {
-    contestCreateState.value = { type: 'error', message: 'Please fill all required fields.' }
-    return
-  }
-
-  const resp = await fetch('/oj-api/api/contest/create', {
-    method: 'POST',
-    credentials: 'include',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      title,
-      description,
-      start_time: startTime,
-      end_time: endTime,
-      problem_ids: problemIds
-    })
-  })
-  const data = await resp.json().catch(() => ({ error: 'Invalid response' }))
-  if (data?.error) {
-    contestCreateState.value = { type: 'error', message: typeof data.data === 'string' ? data.data : data.error }
-    return
-  }
-
-  contestCreateState.value = { type: 'success', message: 'Contest created.' }
-  contestCreateForm.value = { title: '', description: '', startTime: '', endTime: '', problemIdsRaw: '' }
-  await fetchContests('all')
-}
-
-const buildResultAttachmentContent = (result) => {
-  if (!result) return ''
-  const lines = []
-  lines.push(`[${result.label}] ${result.display || result.label}`)
-  if (result.submissionId) lines.push(`Submission: ${result.submissionId}`)
-  if (result.score) lines.push(`Score: ${result.score}`)
-  lines.push(`Time: ${result.timeCost}ms | Memory: ${formatMemory(result.memoryCost)}`)
-  if (result.errInfo) lines.push(`\nError: ${result.errInfo}`)
-  if (result.testCases && result.testCases.length > 0) {
-    lines.push(`\nTest Cases:`)
-    result.testCases.forEach((tc) => {
-      lines.push(`  #${tc.index} ${tc.icon} ${tc.display} | ${tc.cpuTime}ms | ${formatMemory(tc.memory)}${tc.score > 0 ? ` | ${tc.score}pts` : ''}`)
-    })
-  }
-  return lines.join('\n')
-}
-
-const getResultClass = (result) => {
-  if (!result || !result.label) return 'result-unknown'
-  if (result.label === 'ACCEPTED') return 'result-accepted'
-  if (result.label === 'COMPILE_ERROR') return 'result-compile-error'
-  if (['WRONG_ANSWER', 'RUNTIME_ERROR', 'CPU_TIME_LIMIT_EXCEEDED', 'REAL_TIME_LIMIT_EXCEEDED', 'MEMORY_LIMIT_EXCEEDED', 'SYSTEM_ERROR', 'PARTIALLY_ACCEPTED'].includes(result.label)) return 'result-wrong'
-  if (result.label === 'ERROR') return 'result-error'
-  return 'result-unknown'
-}
-
-const getTestCaseClass = (tc) => {
-  if (tc.status === 0 || tc.label === 'ACCEPTED') return 'tc-passed'
-  return 'tc-failed'
-}
-
-const formatMemory = (kb) => {
-  if (!kb || kb <= 0) return '0KB'
-  if (kb >= 1024) return `${(kb / 1024).toFixed(1)}MB`
-  return `${kb}KB`
-}
+// ─── Auth guard: redirect to auth page if not logged in ─────────────────────
 
 watch(
-  [currentSessionId, sessions],
-  ([sessionId, sessionList]) => {
-    pruneSubmitDrafts()
-    pruneOrphanAttachments()
-    pruneOrphanSuggestions()
-    pruneSubmitResults(sessionList.map((s) => s.id))
-
-    if (!sessionId) {
-      selectedProblemId.value = ''
-      rightPanelTab.value = 'problem'
-      activeSubmitState.value = { type: '', message: '' }
-      return
-    }
-
-    ensureSubmitDraftForSession(sessionId)
-
-    const targetSession = sessionList.find((session) => session.id === sessionId)
-    selectedProblemId.value = targetSession?.problemId ? String(targetSession.problemId) : ''
-  },
-  { immediate: true }
-)
-
-watch(problems, (items) => {
-  const targetExists = items.some((item) => String(item._id) === selectedProblemId.value)
-  if (!targetExists) {
-    selectedProblemId.value = ''
-  }
-})
-
-watch(
-  () => ojUser.value.loggedIn,
-  (loggedIn) => {
-    if (!authReady.value) return
-
-    if (!loggedIn) {
-      activeTab.value = 'auth'
-      return
-    }
-
-    syncCurrentSessionUserId(ojUser.value.profileName || ojUser.value.username)
-
-    if (activeTab.value === 'auth') {
-      activeTab.value = 'home'
+  [authReady, () => ojUser.value.loggedIn],
+  ([ready, loggedIn]) => {
+    if (!ready) return
+    if (!loggedIn && route.name !== 'auth') {
+      router.replace('/auth')
     }
   }
 )
 
-watch(authMode, async (mode) => {
-  if (mode === AUTH_MODES.REGISTER) {
-    await refreshCaptcha()
+// Protect admin route
+watch(
+  () => route.name,
+  (name) => {
+    if (name === 'admin' && !isAdmin.value) {
+      router.replace('/')
+    }
   }
-})
+)
+
+// ─── Lifecycle ──────────────────────────────────────────────────────────────
 
 onMounted(async () => {
-  // Initialize Markdown/HTML message renderer
   initMessageRenderer(marked, DOMPurify)
-
-  // Start with anonymous scope; will switch after auth hydration
   loadSessions()
   await hydrateAuthSession()
 
-  document.addEventListener('click', handleClickOutside)
-
   if (!ojUser.value.loggedIn) {
     await refreshCaptcha()
-    activeTab.value = 'auth'
+    router.replace('/auth')
     return
   }
 
-  // Switch session storage to the authenticated user
   switchToUser(ojUser.value.profileName || ojUser.value.username)
-
-  // Restore problem context from the active session after refresh
-  // Without this, problem description + starter code are lost on page reload
-  const restoredSession = sessions.value.find((s) => s.id === currentSessionId.value)
-  if (restoredSession?.problemId) {
-    selectedProblemId.value = String(restoredSession.problemId)
-    await fetchProblemDetail(String(restoredSession.problemId))
-
-    // Rebuild submit draft (starter code) for the restored problem
-    const draft = getActiveSubmitDraft()
-    const detail = problemDetail.value
-    const source = (detail && String(detail._id) === String(restoredSession.problemId)) ? detail : null
-    for (const lang of ALL_LANGUAGES) {
-      const starterRaw = source
-        ? (source.template?.[lang] || STARTER_CODE[lang] || '')
-        : (STARTER_CODE[lang] || '')
-      if (!draft.codes[lang]) {
-        draft.codes[lang] = extractEditableTemplateSection(starterRaw)
-      }
-      draft.templateRawByLanguage[lang] = starterRaw
-    }
-  }
-
   await fetchProblems()
   await fetchContests('all')
-  activeTab.value = 'home'
+
+  if (route.name === 'auth') {
+    router.replace('/')
+  }
 })
 
 onBeforeUnmount(() => {
   closeSocket()
-  document.removeEventListener('click', handleClickOutside)
 })
 </script>
 
 <template>
   <div class="app-shell">
+    <!-- ─── Top Navigation ──────────────────────────────────────────────── -->
     <header class="top-nav">
       <div class="top-brand">
         <img src="/logo.svg" alt="CDUT AI" class="top-logo" />
         <span class="top-brand-name">CDUT AI 学习助手</span>
       </div>
-      <div class="tabs" v-if="!requiresAuth">
-        <button :class="{ active: activeTab === 'home' }" @click="activeTab = 'home'">主页</button>
-        <button :class="{ active: activeTab === 'problemset' }" @click="activeTab = 'problemset'">题库</button>
-        <button :class="{ active: activeTab === 'contest' }" @click="activeTab = 'contest'">比赛</button>
-        <button v-if="isAdmin" :class="{ active: activeTab === 'admin' }" @click="activeTab = 'admin'">管理</button>
-        <button :class="{ active: activeTab === 'profile' }" @click="activeTab = 'profile'">个人中心</button>
-      </div>
-      <div class="tabs" v-else>
-        <button class="active">登录 / 注册</button>
-      </div>
+
+      <!-- Authenticated nav -->
+      <nav class="tabs" v-if="!requiresAuth">
+        <router-link
+          v-for="item in navItems"
+          :key="item.to"
+          :to="item.to"
+          active-class="active"
+          exact-active-class="active"
+        >{{ item.label }}</router-link>
+      </nav>
+
+      <!-- Unauthenticated nav -->
+      <nav class="tabs" v-else>
+        <router-link to="/auth" active-class="active">登录 / 注册</router-link>
+      </nav>
 
       <div class="top-status-wrap">
         <button
           class="auth-open-btn"
           :class="{ 'auth-user-btn': ojUser.loggedIn }"
-          @click="handleGoToAuth"
+          @click="goToAuth"
         >
           {{ authActionText }}
         </button>
-        <div class="top-status">{{ sending ? 'AI 思考中...' : '在线' }}</div>
       </div>
     </header>
 
-      <!-- Auth Screen -->
-      <div class="auth-screen" v-if="requiresAuth">
-        <div class="auth-page card">
-          <div class="auth-page-header">
-            <div class="auth-brand-icon">
-              <img src="/logo.svg" alt="CDUT AI" style="width:56px;height:56px;" />
-            </div>
-            <h2>登录 OJ 账号</h2>
-            <p>请先完成登录或注册后继续使用题库和聊天功能</p>
-          </div>
+    <!-- ─── Auth Screen (full-page, no layout) ──────────────────────────── -->
+    <router-view v-if="requiresAuth" />
 
-          <div class="auth-switch-row">
-            <button :class="{ active: authMode === AUTH_MODES.LOGIN }" @click="authMode = AUTH_MODES.LOGIN">登录</button>
-            <button :class="{ active: authMode === AUTH_MODES.REGISTER }" @click="authMode = AUTH_MODES.REGISTER">注册</button>
-          </div>
-
-          <div class="auth-form auth-page-form" @keydown="handleAuthKeydown">
-            <input ref="authUsernameRef" v-model="ojUser.username" placeholder="用户名" autocomplete="username" />
-            <input v-model="ojUser.password" placeholder="密码" type="password" autocomplete="current-password" />
-
-            <template v-if="authMode === AUTH_MODES.REGISTER">
-              <input v-model="ojUser.email" placeholder="邮箱（选填）" type="email" autocomplete="email" />
-              <input v-model="ojUser.studentNumber" placeholder="学号（选填）" autocomplete="off" />
-              <div class="captcha-row">
-                <input v-model="ojUser.captcha" placeholder="验证码" autocomplete="off" />
-                <img v-if="ojUser.captchaSrc" :src="ojUser.captchaSrc" alt="captcha" @click="refreshCaptcha" title="点击刷新验证码" />
-              </div>
-            </template>
-
-            <button class="auth-submit-btn" @click="handleAuthSubmit">
-              {{ authMode === AUTH_MODES.LOGIN ? '登录 OJ' : '注册 OJ' }}
-            </button>
-            <div class="error" v-if="ojUser.error">{{ ojUser.error }}</div>
-          </div>
-        </div>
-      </div>
-
-    <section class="profile-screen" v-else-if="isProfileTab">
-      <div class="profile-page card">
-        <div class="profile-header">
-          <div class="profile-avatar" v-if="ojUser.avatar">
-            <img :src="ojUser.avatar" alt="avatar" />
-          </div>
-          <div class="profile-avatar profile-avatar-fallback" v-else>{{ (ojUser.profileName || 'U').slice(0, 1).toUpperCase() }}</div>
-
-          <div class="profile-title-group">
-            <h2>{{ ojUser.profileName || ojUser.username || '未命名用户' }}</h2>
-            <p>{{ ojUser.email || 'No email available' }}</p>
-          </div>
-        </div>
-
-        <div class="profile-grid">
-          <div class="profile-item">
-            <span>用户名</span>
-            <strong>{{ ojUser.username || '-' }}</strong>
-          </div>
-          <div class="profile-item">
-            <span>学号</span>
-            <strong>{{ ojUser.studentNumber || '-' }}</strong>
-          </div>
-          <div class="profile-item profile-item-full">
-            <span>个性签名</span>
-            <strong>{{ ojUser.signature || '-' }}</strong>
-          </div>
-        </div>
-
-        <div class="profile-actions">
-          <button class="secondary-btn" @click="activeTab = 'home'">返回主页</button>
-          <button class="danger-btn" @click="handleLogout">退出登录</button>
-        </div>
-
-        <div class="error" v-if="ojUser.error">{{ ojUser.error }}</div>
-      </div>
-    </section>
-
-    <section class="contest-screen" v-else-if="isContestTab">
-      <div class="contest-layout">
-        <div class="contest-left card">
-          <div class="contest-head-row">
-            <h3>比赛列表</h3>
-            <button @click="handleContestRefresh" :disabled="contestListLoading">刷新</button>
-          </div>
-          <div class="contest-list" v-if="!contestListLoading">
-            <button
-              v-for="item in contestList"
-              :key="item.id"
-              class="contest-item"
-              :class="{ active: String(item.id) === String(currentContestId) }"
-              @click="handleContestSelect(item.id)"
-            >
-              <div class="contest-item-top">
-                <strong>{{ item.title }}</strong>
-                <span class="contest-badge" :class="item.status">{{ item.status }}</span>
-              </div>
-              <div class="contest-item-meta">{{ item.start_time }} ~ {{ item.end_time }}</div>
-            </button>
-            <div class="empty" v-if="!contestList.length">暂无比赛</div>
-          </div>
-          <div class="empty" v-else>加载中...</div>
-          <div class="error" v-if="contestError">{{ contestError }}</div>
-
-          <div class="contest-create" v-if="isAdmin">
-            <h4>创建比赛</h4>
-            <input v-model="contestCreateForm.title" placeholder="标题" />
-            <textarea v-model="contestCreateForm.description" placeholder="描述（可选）" />
-            <input v-model="contestCreateForm.startTime" type="datetime-local" />
-            <input v-model="contestCreateForm.endTime" type="datetime-local" />
-            <input v-model="contestCreateForm.problemIdsRaw" placeholder="题目ID，逗号分隔，如 LQ1001,LQ1002" />
-            <button @click="handleCreateContest">创建</button>
-            <div class="error" v-if="contestCreateState.type === 'error'">{{ contestCreateState.message }}</div>
-            <div class="success-tip" v-if="contestCreateState.type === 'success'">{{ contestCreateState.message }}</div>
-          </div>
-        </div>
-
-        <div class="contest-main card">
-          <div class="contest-title-row" v-if="contestDetail">
-            <div>
-              <h3>{{ contestDetail.title }}</h3>
-              <p>{{ contestDetail.description || 'No description' }}</p>
-            </div>
-            <div class="contest-actions">
-              <span class="contest-badge" :class="contestDetail.status">{{ contestStatusText }}</span>
-              <button v-if="!contestDetail.joined" @click="handleContestJoin">报名</button>
-            </div>
-          </div>
-
-          <div class="contest-problems" v-if="contestDetail">
-            <h4>题目</h4>
-            <div class="contest-problem-list">
-              <button
-                v-for="p in (contestDetail.problems || [])"
-                :key="p._id"
-                class="contest-problem-item"
-                :class="{ active: String(selectedContestProblemId) === String(p._id) }"
-                @click="handleContestProblemPick(p)"
-              >
-                <span>{{ p._id }}</span>
-                <strong>{{ p.title }}</strong>
-              </button>
-            </div>
-          </div>
-
-          <!-- Problem description (rendered when a contest problem is selected) -->
-          <div class="contest-problem-detail" v-if="contestDetail && selectedContestProblem">
-            <div class="problem-detail-top">
-              <div class="card-title">{{ selectedContestProblem.title }}</div>
-              <div class="card-subtitle">Problem ID: {{ selectedContestProblem._id }}</div>
-            </div>
-
-            <!-- Description -->
-            <div class="problem-section" v-if="selectedProblemDescription && selectedProblemDescription !== '暂无题目描述'">
-              <h4 class="problem-section-title">Description</h4>
-              <div class="problem-description" v-html="selectedProblemDescriptionHtml" />
-            </div>
-
-            <!-- Input -->
-            <div class="problem-section" v-if="selectedProblemInputDesc">
-              <h4 class="problem-section-title">Input</h4>
-              <div class="problem-description" v-html="selectedProblemInputHtml" />
-            </div>
-
-            <!-- Output -->
-            <div class="problem-section" v-if="selectedProblemOutputDesc">
-              <h4 class="problem-section-title">Output</h4>
-              <div class="problem-description" v-html="selectedProblemOutputHtml" />
-            </div>
-
-            <!-- Samples -->
-            <div class="problem-section" v-if="selectedProblemSamples.length">
-              <div v-for="(sample, idx) in selectedProblemSamples" :key="idx" class="problem-sample-block">
-                <div class="problem-sample-item">
-                  <h4 class="problem-section-title">Sample Input{{ selectedProblemSamples.length > 1 ? ' ' + (idx + 1) : '' }}</h4>
-                  <pre class="problem-sample-code">{{ sample.input }}</pre>
-                </div>
-                <div class="problem-sample-item">
-                  <h4 class="problem-section-title">Sample Output{{ selectedProblemSamples.length > 1 ? ' ' + (idx + 1) : '' }}</h4>
-                  <pre class="problem-sample-code">{{ sample.output }}</pre>
-                </div>
-              </div>
-            </div>
-
-            <!-- Hint -->
-            <div class="problem-section" v-if="selectedProblemHint">
-              <h4 class="problem-section-title">Hint</h4>
-              <div class="problem-description" v-html="selectedProblemHintHtml" />
-            </div>
-
-            <!-- Limits -->
-            <div class="detail-grid compact-detail-grid">
-              <div class="detail-row compact-detail-row"><span>Time Limit</span><strong>{{ selectedContestProblem.time_limit || '-' }} ms</strong></div>
-              <div class="detail-row compact-detail-row"><span>Memory Limit</span><strong>{{ selectedContestProblem.memory_limit || '-' }} MB</strong></div>
-              <div class="detail-row compact-detail-row"><span>Difficulty</span><strong>{{ selectedContestProblem.difficulty || 'Unknown' }}</strong></div>
-            </div>
-          </div>
-
-          <div class="contest-submit" v-if="contestDetail && selectedContestProblem">
-            <h4>比赛提交 - {{ selectedContestProblem._id }}</h4>
-            <div class="lang-select-wrap" ref="langSelectWrap">
-              <div class="lang-select-trigger" :class="{ open: langDropdownOpen }" @click="langDropdownOpen = !langDropdownOpen" @keydown.enter.prevent="langDropdownOpen = !langDropdownOpen" tabindex="0" role="combobox" aria-expanded="langDropdownOpen">
-                <span class="lang-select-label">{{ activeSubmitLanguage }}</span>
-                <span class="lang-select-arrow">▼</span>
-              </div>
-              <div v-if="langDropdownOpen" class="lang-select-dropdown" @mouseleave="langDropdownOpen = false">
-                <div
-                  v-for="lang in ALL_LANGUAGES"
-                  :key="`contest-${lang}`"
-                  class="lang-select-option"
-                  :class="{ selected: activeSubmitLanguage === lang }"
-                  @click="activeSubmitLanguage = lang; langDropdownOpen = false"
-                >
-                  {{ lang }}
-                </div>
-              </div>
-            </div>
-            <CodeEditor
-              v-for="lang in ALL_LANGUAGES"
-              :key="`contest-editor-${lang}`"
-              v-show="activeSubmitLanguage === lang"
-              v-model="getActiveSubmitDraft().codes[lang]"
-              class="oj-code-editor"
-              :language="lang"
-              placeholder="Enter your source code here"
-            />
-            <div class="submit-action-row">
-              <button :disabled="submitLoading" @click="handleContestSubmitCode">{{ submitLoading ? '提交中...' : '提交代码' }}</button>
-            </div>
-            <div class="error" v-if="activeSubmitState.message && !submitResult">{{ activeSubmitState.message }}</div>
-
-            <!-- Contest submit result panel (same detailed view as teaching mode) -->
-            <div class="submit-result-area" v-if="submitResult">
-              <!-- Loading state -->
-              <div class="submit-result-empty" v-if="submitLoading">
-                <div class="result-spinner"></div>
-                <span>Judging...</span>
-              </div>
-
-              <!-- Detailed result -->
-              <div class="submit-result-panel" v-else :class="getResultClass(submitResult)">
-                <div class="result-header">
-                  <span class="result-icon">{{ submitResult.icon || '❓' }}</span>
-                  <span class="result-label">{{ submitResult.display || submitResult.label }}</span>
-                  <span class="result-submission-id" v-if="submitResult.submissionId">#{{ submitResult.submissionId }}</span>
-                </div>
-
-                <div class="result-stats-row">
-                  <div class="result-stat" v-if="submitResult.score > 0">
-                    <span class="stat-label">Score</span>
-                    <span class="stat-value">{{ submitResult.score }}</span>
-                  </div>
-                  <div class="result-stat">
-                    <span class="stat-label">Time</span>
-                    <span class="stat-value">{{ submitResult.timeCost }}ms</span>
-                  </div>
-                  <div class="result-stat">
-                    <span class="stat-label">Memory</span>
-                    <span class="stat-value">{{ formatMemory(submitResult.memoryCost) }}</span>
-                  </div>
-                </div>
-
-                <div class="result-error-block" v-if="submitResult.errInfo">
-                  <div class="error-block-header">
-                    <span class="error-block-icon">⚠</span>
-                    <span>{{ submitResult.label === 'COMPILE_ERROR' ? 'Compile Error' : 'Error Details' }}</span>
-                  </div>
-                  <pre class="error-block-content">{{ submitResult.errInfo }}</pre>
-                </div>
-
-                <div class="result-test-cases" v-if="submitResult.testCases && submitResult.testCases.length > 0">
-                  <div class="test-cases-header">
-                    <span class="tc-summary-label">Test Cases</span>
-                    <span class="tc-pass-count">
-                      {{ submitResult.testCases.filter(tc => tc.status === 0 || tc.label === 'ACCEPTED').length }}/{{ submitResult.testCases.length }} passed
-                    </span>
-                  </div>
-                  <div class="tc-progress-bar">
-                    <div
-                      v-for="tc in submitResult.testCases"
-                      :key="'bar-' + tc.index"
-                      class="tc-progress-segment"
-                      :class="getTestCaseClass(tc)"
-                      :title="`#${tc.index} ${tc.display}`"
-                    ></div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div class="empty" v-if="!contestDetail && !contestDetailLoading">请选择一个比赛</div>
-          <div class="empty" v-if="contestDetailLoading">加载中...</div>
-        </div>
-
-        <div class="contest-rank card">
-          <h3>排行榜</h3>
-          <div v-if="contestRankLoading" class="empty">加载中...</div>
-          <div v-else class="rank-list">
-            <div class="rank-row rank-head">
-              <span>#</span><span>用户</span><span>通过</span><span>罚时(ms)</span>
-            </div>
-            <div class="rank-row" v-for="row in contestRankRows" :key="`${row.rank}-${row.user_id}`">
-              <span>{{ row.rank }}</span>
-              <span>{{ row.user_id }}</span>
-              <span>{{ row.solved_count }}</span>
-              <span>{{ row.penalty_time_ms }}</span>
-            </div>
-            <div class="empty" v-if="!contestRankRows.length">暂无排行数据</div>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <section class="admin-screen" v-else-if="activeTab === 'admin' && isAdmin">
-      <div class="admin-actions-bar">
-        <button class="btn-create-contest" @click="showContestCreateModal = true">+ Create Contest</button>
-      </div>
-      <AdminProblemUpload />
-      <ContestCreateModal
-        v-if="showContestCreateModal"
-        @close="showContestCreateModal = false"
-        @created="onContestCreated"
-      />
-    </section>
-
-    <div class="content-grid" :class="{ 'problemset-mode': activeTab === 'problemset' || !hasSessions }" v-else>
+    <!-- ─── 3-Column Layout (home / problemset) ────────────────────────── -->
+    <div class="content-grid" v-else-if="showLayout">
+      <!-- Left sidebar: sessions -->
       <aside class="left-sidebar">
         <div class="card sessions-card">
           <div class="session-header-row">
-            <div class="session-count">{{ sessionCount }} 会话</div>
+            <div class="session-count">{{ sessions.length }} 会话</div>
             <button
               class="session-clear-btn"
               type="button"
               title="清空所有对话"
               @click="handleClearAllSessions"
-            >
-              clear
-            </button>
+            >clear</button>
           </div>
           <div class="session-list">
             <button
@@ -1280,420 +220,46 @@ onBeforeUnmount(() => {
         </div>
       </aside>
 
-      <section class="main-panel" v-if="activeTab === 'home'">
-        <main class="chat-main" ref="listRef">
-          <MessageBubble 
-            v-for="(msg, idx) in chatMessages" 
-            :key="msg._uid || idx" 
-            :message="msg" 
-            :is-last="idx === chatMessages.length - 1"
-          />
-        </main>
+      <!-- Main content (router-view) -->
+      <router-view />
 
-        <footer class="chat-input-area">
-          <TransitionGroup name="trace-slide" tag="div" class="trace-bar" v-if="traceMessages.length">
-            <div
-              v-for="tmsg in traceMessages"
-              :key="tmsg._uid || tmsg.time"
-              class="trace-bar-item"
-              :class="tmsg.stage?.endsWith('_result') ? 'done' : 'running'"
-            >
-              <span class="trace-bar-icon">{{ tmsg.stage?.endsWith('_result') ? '✓' : '⟳' }}</span>
-              <span class="trace-bar-title">{{ tmsg.title }}</span>
-              <span v-if="tmsg.detail" class="trace-bar-detail">{{ tmsg.detail }}</span>
-            </div>
-          </TransitionGroup>
-          <div class="suggestion-chips" v-if="nextStepSuggestions.length && !sending">
-            <button
-              v-for="(sug, idx) in nextStepSuggestions"
-              :key="idx"
-              class="suggestion-chip"
-              :class="sug.type"
-              :title="sug.reason || ''"
-              @click="sendSuggestion(sug)"
-            >
-              <span class="sug-icon">{{ { practice: '🎯', learn: '📖', review: '🔍', debug: '🐛', compete: '🏆' }[sug.type] || '💡' }}</span>
-              <span class="sug-title">{{ sug.title }}</span>
-            </button>
-          </div>
-          <div class="pending-attachments" v-if="pendingAttachments.length">
-            <div
-              v-for="(att, idx) in pendingAttachments"
-              :key="idx"
-              class="attachment-chip"
-              :class="att.type"
-            >
-              <span class="chip-filename">{{ att.filename }}</span>
-              <button class="chip-remove" type="button" @click="removePendingAttachment(idx)">&times;</button>
-            </div>
-          </div>
-          <div class="chat-input-row">
-            <textarea
-              v-model="input"
-              placeholder="请输入你的问题，Enter发送，Shift+Enter换行"
-              :disabled="sending"
-              @keydown.enter.exact.prevent="sendMessage"
-            />
-            <button :disabled="sending || (!input.trim() && !hasPendingAttachments)" @click="sendMessage">发送</button>
-          </div>
-        </footer>
-      </section>
-
-      <section class="main-panel problem-panel" v-else>
-        <div class="problem-toolbar">
-          <input v-model="keyword" placeholder="搜索题目编号或关键词 (如 LQ1273)" @keyup.enter="searchProblems" />
-          <select v-model="difficulty" @change="searchProblems">
-            <option :value="''">全部难度</option>
-            <option v-for="level in OJ_DIFFICULTY_OPTIONS.filter((item) => item)" :key="level" :value="level">
-              {{ level }}
-            </option>
-          </select>
-          <button @click="searchProblems">刷新</button>
-        </div>
-
-        <div class="problem-list" v-if="!problemLoading">
-          <div class="problem-grid" v-if="problems.length">
-            <button class="problem-item" v-for="p in problems" :key="p._id" @click="selectProblemForRightPanel(p)">
-              <div class="problem-item-main">
-                <div class="pid">{{ p._id }}</div>
-                <div class="pdiff">{{ p.difficulty || 'Unknown' }}</div>
-              </div>
-              <div class="ptitle">{{ p.title }}</div>
-            </button>
-          </div>
-          <div v-else class="empty">暂无题目</div>
-        </div>
-        <div class="empty" v-else>加载中...</div>
-        <div class="error" v-if="problemError">{{ problemError }}</div>
-
-        <div class="pagination" v-if="!problemLoading && totalPages > 1">
-          <button
-            class="page-btn"
-            :disabled="currentPage === 1"
-            @click="goToPage(1)"
-          >&laquo;</button>
-          <button
-            class="page-btn"
-            :disabled="currentPage === 1"
-            @click="goToPage(currentPage - 1)"
-          >&lsaquo;</button>
-
-          <button
-            v-if="visiblePages[0] > 1"
-            class="page-btn page-ellipsis"
-            disabled
-          >...</button>
-
-          <button
-            v-for="page in visiblePages"
-            :key="page"
-            class="page-btn"
-            :class="{ active: page === currentPage }"
-            @click="goToPage(page)"
-          >{{ page }}</button>
-
-          <button
-            v-if="visiblePages[visiblePages.length - 1] < totalPages"
-            class="page-btn page-ellipsis"
-            disabled
-          >...</button>
-
-          <button
-            class="page-btn"
-            :disabled="currentPage === totalPages"
-            @click="goToPage(currentPage + 1)"
-          >&rsaquo;</button>
-          <button
-            class="page-btn"
-            :disabled="currentPage === totalPages"
-            @click="goToPage(totalPages)"
-          >&raquo;</button>
-
-          <span class="page-info">{{ currentPage }} / {{ totalPages }} ({{ totalCount }})</span>
-        </div>
-      </section>
-
-      <aside class="right-sidebar" v-if="activeTab === 'home'">
-        <div class="card side-tab-card">
-          <div class="switch-row side-tabs">
-            <button :class="{ active: rightPanelTab === 'problem' }" @click="switchRightPanelTab('problem')">题目信息</button>
-            <button :class="{ active: rightPanelTab === 'submit' }" @click="switchRightPanelTab('submit')">OJ提交</button>
-          </div>
-        </div>
-
-        <div class="card side-content-card" v-if="rightPanelTab === 'problem'">
-          <div class="problem-detail" v-if="hasSelectedProblem">
-            <div class="problem-detail-top">
-              <div class="card-title">{{ selectedProblem.title }}</div>
-              <div class="card-subtitle">Problem ID: {{ selectedProblem._id }}</div>
-            </div>
-
-            <div class="problem-detail-middle">
-              <!-- Loading indicator -->
-              <div class="problem-section-loading" v-if="problemDetailLoading">加载题目详情...</div>
-
-              <!-- Description -->
-              <div class="problem-section" v-if="selectedProblemDescription">
-                <h4 class="problem-section-title">Description</h4>
-                <div class="problem-description" v-html="selectedProblemDescriptionHtml" />
-              </div>
-
-              <!-- Input -->
-              <div class="problem-section" v-if="selectedProblemInputDesc">
-                <h4 class="problem-section-title">Input</h4>
-                <div class="problem-description" v-html="selectedProblemInputHtml" />
-              </div>
-
-              <!-- Output -->
-              <div class="problem-section" v-if="selectedProblemOutputDesc">
-                <h4 class="problem-section-title">Output</h4>
-                <div class="problem-description" v-html="selectedProblemOutputHtml" />
-              </div>
-
-              <!-- Samples -->
-              <div class="problem-section" v-if="selectedProblemSamples.length">
-                <div v-for="(sample, idx) in selectedProblemSamples" :key="idx" class="problem-sample-block">
-                  <div class="problem-sample-item">
-                    <h4 class="problem-section-title">Sample Input {{ selectedProblemSamples.length > 1 ? idx + 1 : '' }}</h4>
-                    <pre class="problem-sample-code">{{ sample.input }}</pre>
-                  </div>
-                  <div class="problem-sample-item">
-                    <h4 class="problem-section-title">Sample Output {{ selectedProblemSamples.length > 1 ? idx + 1 : '' }}</h4>
-                    <pre class="problem-sample-code">{{ sample.output }}</pre>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Hint -->
-              <div class="problem-section" v-if="selectedProblemHint">
-                <h4 class="problem-section-title">Hint</h4>
-                <div class="problem-description" v-html="selectedProblemHintHtml" />
-              </div>
-
-              <!-- Source -->
-              <div class="problem-section problem-source" v-if="selectedProblemSource">
-                <span class="problem-source-label">Source:</span> {{ selectedProblemSource }}
-              </div>
-            </div>
-
-            <div class="problem-detail-bottom">
-              <div class="detail-grid compact-detail-grid">
-                <div class="detail-row compact-detail-row"><span>难度</span><strong>{{ selectedProblem.difficulty || 'Unknown' }}</strong></div>
-                <div class="detail-row compact-detail-row"><span>时间限制</span><strong>{{ selectedProblem.time_limit || '-' }}</strong></div>
-                <div class="detail-row compact-detail-row"><span>内存限制</span><strong>{{ selectedProblem.memory_limit || '-' }}</strong></div>
-                <div class="detail-row compact-detail-row"><span>提交数</span><strong>{{ selectedProblem.submission_number || 0 }}</strong></div>
-                <div class="detail-row compact-detail-row"><span>通过数</span><strong>{{ selectedProblem.accepted_number || 0 }}</strong></div>
-                <div class="detail-row compact-detail-row"><span>通过率</span><strong>{{ selectedProblem.submission_number ? `${Math.round((selectedProblem.accepted_number / selectedProblem.submission_number) * 100)}%` : '0%' }}</strong></div>
-              </div>
-            </div>
-          </div>
-          <div class="empty" v-else>请先在题库中选择一道题目</div>
-        </div>
-
-        <div class="card side-content-card" v-else>
-          <template v-if="hasSelectedProblem">
-            <div class="submit-layout">
-              <div class="submit-editor-area">
-                <div class="submit-form">
-                  <!-- Custom language select (avoids native browser popup white background) -->
-                  <div class="lang-select-wrap" ref="langSelectWrap">
-                    <div class="lang-select-trigger" :class="{ open: langDropdownOpen }" @click="langDropdownOpen = !langDropdownOpen" @keydown.enter.prevent="langDropdownOpen = !langDropdownOpen" tabindex="0" role="combobox" aria-expanded="langDropdownOpen">
-                      <span class="lang-select-label">{{ activeSubmitLanguage }}</span>
-                      <span class="lang-select-arrow">▼</span>
-                    </div>
-                    <div v-if="langDropdownOpen" class="lang-select-dropdown" @mouseleave="langDropdownOpen = false">
-                      <div
-                        v-for="lang in ALL_LANGUAGES"
-                        :key="lang"
-                        class="lang-select-option"
-                        :class="{ selected: activeSubmitLanguage === lang }"
-                        @click="activeSubmitLanguage = lang; langDropdownOpen = false"
-                      >
-                        <span class="lang-select-option-icon" :class="{ cpp: lang === 'C++', c: lang === 'C', java: lang === 'Java', py: lang === 'Python3' }">
-                          {{ lang === 'C++' ? '++' : lang[0] }}
-                        </span>
-                        {{ lang }}
-                      </div>
-                    </div>
-                  </div>
-                  <!-- Multiple editor instances — one per language, switched by v-show.
-                       Each editor keeps its own CodeMirror state and code buffer.
-                       No template copying needed on language switch. -->
-                  <CodeEditor
-                    v-for="lang in ALL_LANGUAGES"
-                    :key="lang"
-                    v-show="activeSubmitLanguage === lang"
-                    v-model="getActiveSubmitDraft().codes[lang]"
-                    class="oj-code-editor"
-                    :language="lang"
-                    placeholder="Enter your source code here"
-                  />
-                  <div class="submit-action-row">
-                    <button :disabled="submitLoading" @click="handleSubmitCode">{{ submitLoading ? '提交中...' : '提交代码' }}</button>
-                  </div>
-                </div>
-              </div>
-              <div class="submit-result-area">
-                <!-- Loading state -->
-                <div class="submit-result-empty" v-if="submitLoading">
-                  <div class="result-spinner"></div>
-                  <span>Judging...</span>
-                </div>
-
-                <!-- Detailed result panel -->
-                <div class="submit-result-panel" v-else-if="submitResult" :class="getResultClass(submitResult)">
-                  <!-- Status header -->
-                  <div class="result-header">
-                    <span class="result-icon">{{ submitResult.icon || '❓' }}</span>
-                    <span class="result-label">{{ submitResult.display || submitResult.label }}</span>
-                    <span class="result-submission-id" v-if="submitResult.submissionId">#{{ submitResult.submissionId }}</span>
-                  </div>
-
-                  <!-- Stats row -->
-                  <div class="result-stats-row">
-                    <div class="result-stat" v-if="submitResult.score > 0">
-                      <span class="stat-label">Score</span>
-                      <span class="stat-value">{{ submitResult.score }}</span>
-                    </div>
-                    <div class="result-stat">
-                      <span class="stat-label">Time</span>
-                      <span class="stat-value">{{ submitResult.timeCost }}ms</span>
-                    </div>
-                    <div class="result-stat">
-                      <span class="stat-label">Memory</span>
-                      <span class="stat-value">{{ formatMemory(submitResult.memoryCost) }}</span>
-                    </div>
-                  </div>
-
-                  <!-- Error details (compile error, runtime error, system error) -->
-                  <div class="result-error-block" v-if="submitResult.errInfo">
-                    <div class="error-block-header">
-                      <span class="error-block-icon">⚠</span>
-                      <span>{{ submitResult.label === 'COMPILE_ERROR' ? 'Compile Error' : 'Error Details' }}</span>
-                    </div>
-                    <pre class="error-block-content">{{ submitResult.errInfo }}</pre>
-                  </div>
-
-                  <!-- Test case results -->
-                  <div class="result-test-cases" v-if="submitResult.testCases && submitResult.testCases.length > 0">
-                    <!-- Summary bar -->
-                    <div class="test-cases-header">
-                      <span class="tc-summary-label">Test Cases</span>
-                      <span class="tc-pass-count">
-                        {{ submitResult.testCases.filter(tc => tc.status === 0 || tc.label === 'ACCEPTED').length }}/{{ submitResult.testCases.length }} passed
-                      </span>
-                    </div>
-                    <!-- Visual progress bar -->
-                    <div class="tc-progress-bar">
-                      <div
-                        v-for="tc in submitResult.testCases"
-                        :key="'bar-' + tc.index"
-                        class="tc-progress-segment"
-                        :class="getTestCaseClass(tc)"
-                        :title="`#${tc.index} ${tc.display}`"
-                      ></div>
-                    </div>
-                    <!-- Individual test case cards -->
-                    <div class="test-cases-list">
-                      <div
-                        v-for="tc in submitResult.testCases"
-                        :key="'card-' + tc.index"
-                        class="test-case-card"
-                        :class="getTestCaseClass(tc)"
-                      >
-                        <div class="tc-card-header">
-                          <span class="tc-index">#{{ tc.index }}</span>
-                          <span class="tc-icon">{{ tc.icon }}</span>
-                          <span class="tc-status-label">{{ tc.display }}</span>
-                        </div>
-                        <div class="tc-card-metrics">
-                          <span class="tc-metric" v-if="tc.cpuTime">
-                            <span class="tc-metric-label">Time</span>
-                            <span class="tc-metric-value">{{ tc.cpuTime }}ms</span>
-                          </span>
-                          <span class="tc-metric" v-if="tc.realTime && tc.realTime !== tc.cpuTime">
-                            <span class="tc-metric-label">Real</span>
-                            <span class="tc-metric-value">{{ tc.realTime }}ms</span>
-                          </span>
-                          <span class="tc-metric" v-if="tc.memory">
-                            <span class="tc-metric-label">Mem</span>
-                            <span class="tc-metric-value">{{ formatMemory(tc.memory) }}</span>
-                          </span>
-                          <span class="tc-metric" v-if="tc.score > 0">
-                            <span class="tc-metric-label">Score</span>
-                            <span class="tc-metric-value">{{ tc.score }}pts</span>
-                          </span>
-                          <span class="tc-metric" v-if="tc.signal != null">
-                            <span class="tc-metric-label">Signal</span>
-                            <span class="tc-metric-value">{{ tc.signal }}</span>
-                          </span>
-                        </div>
-                        <!-- Test case I/O content -->
-                        <div class="tc-card-io" v-if="tc.input || tc.expectedOutput || tc.actualOutput">
-                          <div class="tc-io-section" v-if="tc.input">
-                            <div class="tc-io-label">Input</div>
-                            <pre class="tc-io-content tc-input">{{ tc.input }}</pre>
-                          </div>
-                          <div class="tc-io-section" v-if="tc.expectedOutput">
-                            <div class="tc-io-label">Expected</div>
-                            <pre class="tc-io-content tc-expected">{{ tc.expectedOutput }}</pre>
-                          </div>
-                          <div class="tc-io-section" v-if="tc.actualOutput">
-                            <div class="tc-io-label">Output</div>
-                            <pre class="tc-io-content tc-actual">{{ tc.actualOutput }}</pre>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <!-- Flat error message fallback -->
-                  <div class="result-fallback-message" v-if="activeSubmitState.message && !submitResult.errInfo && !(submitResult.testCases && submitResult.testCases.length > 0)">
-                    {{ activeSubmitState.message }}
-                  </div>
-                </div>
-
-                <!-- Placeholder -->
-                <div class="submit-result-empty" v-else>
-                  <span class="empty-icon">📋</span>
-                  <span>Submit code to see results</span>
-                </div>
-              </div>
-            </div>
-          </template>
-          <div class="empty" v-else>请先选择题目后再提交代码</div>
-        </div>
+      <!-- Right sidebar: problem info + OJ submit (home only) -->
+      <aside class="right-sidebar" v-if="showRightSidebar">
+        <ProblemSubmitPanel />
       </aside>
     </div>
+
+    <!-- ─── Full-Width Pages (contest / admin / profile) ────────────────── -->
+    <router-view v-else />
   </div>
 </template>
 
 <style>
-  .admin-screen {
-    flex: 1;
-    overflow-y: auto;
-    padding: 16px;
-  }
+.admin-screen {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+}
 
-  .admin-actions-bar {
-    display: flex;
-    gap: 10px;
-    margin-bottom: 14px;
-  }
+.admin-actions-bar {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 14px;
+}
 
-  .btn-create-contest {
-    padding: 8px 18px;
-    border-radius: 6px;
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    background: #191a1b;
-    color: #f7f8f8;
-    font-size: 0.9rem;
-    cursor: pointer;
-    font-weight: 500;
-    transition: background 0.15s;
-  }
+.btn-create-contest {
+  padding: 8px 18px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: #191a1b;
+  color: #f7f8f8;
+  font-size: 0.9rem;
+  cursor: pointer;
+  font-weight: 500;
+  transition: background 0.15s;
+}
 
-  .btn-create-contest:hover {
-    background: rgba(255, 255, 255, 0.08);
-  }
+.btn-create-contest:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
 </style>
