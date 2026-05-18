@@ -217,7 +217,7 @@ async def _require_admin_username(request: Request) -> str:
 async def captcha(response: Response):
     # Frontend only checks non-empty data; no real captcha required for local compat.
     response.set_cookie("csrftoken", "lite-csrf-token", httponly=False, samesite="lax")
-    return {"error": None, "data": "data:image/svg+xml;base64,PHN2Zy8+"}
+    return {"error": None, "data": "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=="}
 
 
 @router.get("/profile")
