@@ -213,11 +213,35 @@ async def _require_admin_username(request: Request) -> str:
     return username
 
 
+def _captcha_svg_data_url() -> str:
+    """Generate a visible inline SVG captcha data URL for compat UI."""
+    alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+    captcha_text = "".join(secrets.choice(alphabet) for _ in range(4))
+
+    noise = "".join(
+        f'<line x1="{i * 17 + 8}" y1="6" x2="{(i + 1) * 19}" y2="38" stroke="#9ca3af" stroke-width="1" opacity="0.35" />'
+        for i in range(3)
+    )
+
+    svg = (
+        '<svg xmlns="http://www.w3.org/2000/svg" width="100" height="44" viewBox="0 0 100 44">'
+        '<rect width="100" height="44" rx="6" fill="#111827" />'
+        f'{noise}'
+        f'<text x="50" y="29" text-anchor="middle" fill="#f9fafb" '
+        'font-family="monospace" font-size="22" font-weight="700" letter-spacing="3">'
+        f'{captcha_text}'
+        '</text>'
+        '</svg>'
+    )
+    encoded = base64.b64encode(svg.encode("utf-8")).decode("ascii")
+    return f"data:image/svg+xml;base64,{encoded}"
+
+
 @router.get("/captcha")
 async def captcha(response: Response):
-    # Frontend only checks non-empty data; no real captcha required for local compat.
+    # Frontend register flow expects an image data URL.
     response.set_cookie("csrftoken", "lite-csrf-token", httponly=False, samesite="lax")
-    return {"error": None, "data": "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=="}
+    return {"error": None, "data": _captcha_svg_data_url()}
 
 
 @router.get("/profile")
