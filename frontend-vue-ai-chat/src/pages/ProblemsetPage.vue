@@ -4,18 +4,23 @@ import { useRouter } from 'vue-router'
 import { useOjStore } from '../stores/ojStore'
 import { useChatStore } from '../stores/chatStore'
 import { OJ_DIFFICULTY_OPTIONS } from '../utils/validators'
+import AdminWorkspaceModal from '../components/AdminWorkspaceModal.vue'
+import ProblemEditModal from '../components/ProblemEditModal.vue'
 
 const router = useRouter()
 
 const {
   problems, problemLoading, problemError,
   keyword, difficulty, currentPage, totalCount, totalPages,
-  goToPage, searchProblems, fetchProblemDetail, fetchProblemTags, problemTags
+  goToPage, searchProblems, fetchProblemDetail, fetchProblemTags, problemTags,
+  isAdmin
 } = useOjStore()
 
 const { selectOrCreateProblemSession } = useChatStore()
 
 const selectedTag = ref('')
+const showAdminWorkspaceModal = ref(false)
+const editProblemTarget = ref(null)
 
 const normalizedTags = (value) => {
   if (Array.isArray(value)) return value.map((item) => String(item || '').trim()).filter(Boolean)
@@ -68,9 +73,32 @@ const selectProblem = async (problem) => {
   router.push('/')
 }
 
+const openEditProblem = async (problem) => {
+  if (!isAdmin.value || !problem?._id) return
+  const detail = await fetchProblemDetail(String(problem._id))
+  editProblemTarget.value = detail
+    ? {
+        ...problem,
+        ...detail,
+        _id: detail._id || problem._id,
+        id: detail.id || problem.id,
+        visible: detail.visible ?? problem.visible ?? false,
+        tags: detail.tags || problem.tags || []
+      }
+    : {
+        ...problem,
+        visible: problem.visible ?? false,
+        tags: problem.tags || []
+      }
+}
+
 const handleSearch = () => {
   selectedTag.value = ''
   searchProblems()
+}
+
+const handleAfterProblemSaved = async () => {
+  await searchProblems()
 }
 
 onMounted(() => {
@@ -97,18 +125,26 @@ onMounted(() => {
         </option>
       </select>
 
-      <button @click="handleSearch">刷新</button>
+      <div class="problem-toolbar-actions">
+        <button @click="handleSearch">搜索</button>
+        <button v-if="isAdmin" class="btn-admin-add" @click="showAdminWorkspaceModal = true">新增题目</button>
+      </div>
     </div>
 
     <div class="problem-list" v-if="!problemLoading">
       <div class="problem-grid" v-if="filteredProblems.length">
-        <button class="problem-item" v-for="p in filteredProblems" :key="p._id" @click="selectProblem(p)">
-          <div class="problem-item-main">
-            <div class="pid">{{ p._id }}</div>
-            <div class="pdiff">{{ p.difficulty || 'Unknown' }}</div>
+        <div class="problem-item" v-for="p in filteredProblems" :key="p._id">
+          <button class="problem-select-btn" @click="selectProblem(p)">
+            <div class="problem-item-main">
+              <div class="pid">{{ p._id }}</div>
+              <div class="pdiff">{{ p.difficulty || 'Unknown' }}</div>
+            </div>
+            <div class="ptitle">{{ p.title }}</div>
+          </button>
+          <div v-if="isAdmin" class="problem-admin-actions">
+            <button class="btn-problem-edit" @click="openEditProblem(p)">编辑</button>
           </div>
-          <div class="ptitle">{{ p.title }}</div>
-        </button>
+        </div>
       </div>
       <div v-else class="empty">暂无符合筛选条件的题目</div>
     </div>
@@ -131,5 +167,17 @@ onMounted(() => {
       <button class="page-btn" :disabled="currentPage === totalPages" @click="goToPage(totalPages)">&raquo;</button>
       <span class="page-info">{{ currentPage }} / {{ totalPages }} ({{ totalCount }})</span>
     </div>
+
+    <AdminWorkspaceModal
+      v-if="showAdminWorkspaceModal"
+      @close="showAdminWorkspaceModal = false"
+    />
+
+    <ProblemEditModal
+      v-if="editProblemTarget"
+      :problem="editProblemTarget"
+      @close="editProblemTarget = null"
+      @saved="handleAfterProblemSaved"
+    />
   </section>
 </template>

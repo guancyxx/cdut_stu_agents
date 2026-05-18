@@ -17,13 +17,13 @@ import tempfile
 import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, Query, Request, UploadFile
 from pydantic import BaseModel, Field
 
 from app.celery_app import celery_app
 from app.database import async_session
 from app.services.problem_import import detect_format
-from app.services.problem_service import create_problem, get_tag_list
+from app.services.problem_service import create_problem, get_tag_list, update_problem
 from app.tasks.batch_import import batch_import_problems, get_import_progress
 
 logger = logging.getLogger("ai-agent-lite.problem_upload_api")
@@ -64,6 +64,28 @@ class ProblemCreateRequest(BaseModel):
 
 
 class ProblemCreateResponse(BaseModel):
+    success: bool
+    problem_id: str
+    db_id: int
+    message: str
+
+
+class ProblemUpdateRequest(BaseModel):
+    """Request body for problem update."""
+    title: str = Field(..., min_length=1, max_length=128)
+    description: str = ""
+    input_description: str = ""
+    output_description: str = ""
+    hint: str = ""
+    source: str = ""
+    difficulty: str = "Low"
+    time_limit: int = Field(default=1000, ge=100, le=60000)
+    memory_limit: int = Field(default=256, ge=16, le=1024)
+    visible: bool = False
+    tags: list[str] = []
+
+
+class ProblemUpdateResponse(BaseModel):
     success: bool
     problem_id: str
     db_id: int
@@ -145,6 +167,43 @@ async def create_single_problem(req: ProblemCreateRequest):
         except Exception as e:
             logger.error("Failed to create problem: %s", e, exc_info=True)
             raise HTTPException(status_code=500, detail=f"创建题目失败: {str(e)}")
+
+
+@router.put("/{problem_id}", response_model=ProblemUpdateResponse)
+async def update_single_problem(problem_id: str, req: ProblemUpdateRequest, request: Request):
+    """Update a problem by display id or numeric id."""
+    from app.utils.auth_helpers import require_admin_username
+
+    await require_admin_username(request)
+
+    async with async_session() as session:
+        try:
+            result = await update_problem(
+                session,
+                problem_id=problem_id,
+                title=req.title,
+                description=req.description,
+                input_description=req.input_description,
+                output_description=req.output_description,
+                hint=req.hint,
+                source=req.source,
+                difficulty=req.difficulty,
+                time_limit=req.time_limit,
+                memory_limit=req.memory_limit,
+                visible=req.visible,
+                tags=req.tags,
+            )
+            return ProblemUpdateResponse(
+                success=True,
+                problem_id=result["problem_id"],
+                db_id=result["db_id"],
+                message=result["message"],
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        except Exception as e:
+            logger.error("Failed to update problem: %s", e, exc_info=True)
+            raise HTTPException(status_code=500, detail=f"更新题目失败: {str(e)}")
 
 
 @router.post("/upload/batch", response_model=BatchImportResponse)

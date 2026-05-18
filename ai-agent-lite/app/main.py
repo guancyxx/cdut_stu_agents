@@ -17,6 +17,7 @@ from app.config import settings
 from app.database import init_db
 from app.middleware import RequestMiddleware
 from app.routers import (
+    admin_accounts,
     auth, contests, health, metrics_router,
     oj_test_cases, problem_audit, problem_upload, problems,
     submission_events, submission_judge, submissions, websocket,
@@ -52,6 +53,7 @@ def create_app() -> FastAPI:
     app.include_router(oj_test_cases.router)
     app.include_router(problem_audit.router)
     app.include_router(problem_upload.router)
+    app.include_router(admin_accounts.router)
     app.include_router(submission_events.router)
     app.include_router(submission_judge.router)
     app.include_router(websocket.router)
