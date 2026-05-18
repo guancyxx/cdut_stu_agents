@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import CodeEditor from './CodeEditor.vue'
 import { useOjStore } from '../stores/ojStore'
 import { useChatStore } from '../stores/chatStore'
@@ -109,6 +109,75 @@ const getStarterCode = (problem, language) => {
   const tpl = problem?.template || {}
   return tpl[language] || STARTER_CODE[language] || ''
 }
+
+const loadedSessionProblemKey = ref('')
+let problemDetailRequestSeq = 0
+
+const buildSessionProblemKey = (sessionId, problemId) => `${String(sessionId || '')}::${String(problemId || '')}`
+
+const resetStarterCodes = () => {
+  for (const lang of ALL_LANGUAGES) {
+    codes.value[lang] = ''
+    templateRawByLanguage.value[lang] = ''
+  }
+  activeSubmitLanguage.value = DEFAULT_LANGUAGE
+  loadedSessionProblemKey.value = ''
+}
+
+const applyStarterCodesFromProblem = (problemSource) => {
+  if (!problemSource?._id) return
+  const pid = String(problemSource._id)
+  for (const lang of ALL_LANGUAGES) {
+    const starterRaw = getStarterCode(problemSource, lang)
+    codes.value[lang] = extractEditableTemplateSection(starterRaw)
+    templateRawByLanguage.value[lang] = starterRaw
+  }
+  activeSubmitLanguage.value = DEFAULT_LANGUAGE
+  loadedSessionProblemKey.value = buildSessionProblemKey(currentSessionId.value, pid)
+}
+
+watch(
+  [() => currentSessionId.value, () => selectedProblemId.value],
+  async ([sessionId, pid]) => {
+    if (!pid) {
+      resetStarterCodes()
+      return
+    }
+
+    const expectedKey = buildSessionProblemKey(sessionId, pid)
+    const requestSeq = ++problemDetailRequestSeq
+
+    const detail = await fetchProblemDetail(String(pid))
+
+    if (requestSeq !== problemDetailRequestSeq) return
+    if (buildSessionProblemKey(currentSessionId.value, selectedProblemId.value) !== expectedKey) return
+
+    if (detail?._id && String(detail._id) === String(pid)) {
+      applyStarterCodesFromProblem(detail)
+      return
+    }
+
+    if (selectedProblem.value?._id && String(selectedProblem.value._id) === String(pid)) {
+      applyStarterCodesFromProblem(selectedProblem.value)
+    }
+  },
+  { immediate: true }
+)
+
+watch(
+  () => problemDetail.value,
+  (detail) => {
+    if (!detail?._id) return
+    const pid = String(selectedProblemId.value || '')
+    if (!pid || String(detail._id) !== pid) return
+
+    const expectedKey = buildSessionProblemKey(currentSessionId.value, pid)
+    if (loadedSessionProblemKey.value === expectedKey) return
+
+    applyStarterCodesFromProblem(detail)
+  },
+  { immediate: true }
+)
 
 const handleSubmitCode = async () => {
   activeSubmitState.value = { type: '', message: '' }
