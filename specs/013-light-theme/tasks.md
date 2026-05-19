@@ -49,12 +49,35 @@ Spec: `specs/013-light-theme/spec.md`
   - Files:
     - `frontend-vue-ai-chat/src/assets/main.css`
 
-## Phase 3: Validation
+## Phase 3: Theme consistency follow-up (2026-05-19)
 
-- [x] Task 4: Run Docker-only frontend build and static theme-audit grep checks.
+- [ ] Task 4: Make `CodeEditor` theme-aware (light/dark) instead of hardcoding oneDark.
+  - Acceptance:
+    - Contest submit editor follows current UI theme.
+    - Dark mode keeps existing readability; light mode removes dark canvas mismatch.
+  - Verify:
+    - Code inspection in `CodeEditor.vue`.
+    - Docker frontend build succeeds.
+  - Files:
+    - `frontend-vue-ai-chat/src/components/CodeEditor.vue`
+
+- [ ] Task 5: Remove hardcoded dark background in admin account inputs/selects.
+  - Acceptance:
+    - `.admin-account-form-grid input/select` use theme tokens only.
+    - Light mode account form no longer shows dark-only fields.
+  - Verify:
+    - grep check confirms no `background: rgba(16, 18, 20, 0.9)` in admin account form block.
+    - Docker frontend build succeeds.
+  - Files:
+    - `frontend-vue-ai-chat/src/assets/main.css`
+
+## Phase 4: Validation
+
+- [ ] Task 6: Run Docker-only frontend build and targeted light-theme regression checks.
   - Acceptance:
     - `docker compose build vue-ai-chat` passes.
-    - Expected hardcoded dark-only fragments in audited sections are removed.
+    - Contest code editor + admin account inputs render theme-consistent.
   - Verify:
     - Build output success.
-    - search_files output captures remaining intentional base-token definitions only.
+    - Light-theme manual sanity on Contest/Admin pages.
+    - search_files output for removed hardcoded dark fragments.
