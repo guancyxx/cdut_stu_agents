@@ -146,6 +146,71 @@ def _get_test_case_path(test_case_id: str) -> Path:
     return Path("/data/test_cases") / test_case_id
 
 
+async def _ensure_test_case_files(
+    test_case_id: str,
+    problem_id: str,
+) -> Path | None:
+    """Ensure .in/.out files exist on disk, generating from DB samples if needed.
+
+    Returns the path to the test case directory (may differ from the stored
+    test_case_id if generation produced a new hash), or None if no files could
+    be created.
+    """
+    test_case_dir = _get_test_case_path(test_case_id)
+    import json as _json
+
+    # Already has .in files on disk — nothing to do
+    if test_case_dir.is_dir() and list(test_case_dir.glob("*.in")):
+        return test_case_dir
+
+    # Fetch samples from DB
+    from sqlalchemy import text
+    from app.database import async_session
+
+    async with async_session() as session:
+        result = await session.execute(
+            text("""
+                SELECT samples FROM problem
+                WHERE _id = :pid OR CAST(id AS TEXT) = :pid
+            """),
+            {"pid": problem_id},
+        )
+        row = result.fetchone()
+        if not row:
+            return None
+
+        samples_raw = row[0]
+        if samples_raw is None:
+            return None
+
+    # psycopg2/asyncpg may return list or str
+    samples: list[dict] = samples_raw if isinstance(samples_raw, list) else _json.loads(samples_raw)
+    if not isinstance(samples, list) or not samples:
+        return None
+
+    import hashlib
+    from app.services.problem_service import write_test_case_files
+
+    test_cases = [{"input": s.get("input", ""), "output": s.get("output", "")} for s in samples]
+
+    import tempfile
+    with tempfile.TemporaryDirectory(prefix="tc_") as tmp_dir:
+        tmp_path = Path(tmp_dir)
+        new_hash, _ = write_test_case_files(tmp_path, test_cases)
+        final_dir = _get_test_case_path(new_hash)
+        if not final_dir.exists():
+            import shutil
+            shutil.copytree(tmp_path, final_dir)
+            import logging
+            _log = logging.getLogger("ai-agent-lite")
+            _log.info(
+                "Generated %d test cases from DB samples for problem %s -> %s",
+                len(samples), problem_id, new_hash,
+            )
+
+    return final_dir
+
+
 # ── output comparison ─────────────────────────────────────────────────
 
 def _normalize(output: str) -> str:
@@ -281,13 +346,23 @@ async def judge_submission(
 
     test_case_dir = _get_test_case_path(test_case_id)
     if not test_case_dir.is_dir():
-        return JudgeResult(
-            verdict=Verdict.SE,
-            compile_error=f"Test case directory not found: {test_case_dir}",
-        )
+        # Try to generate from DB samples
+        generated = await _ensure_test_case_files(test_case_id, problem_id)
+        if generated is None:
+            return JudgeResult(
+                verdict=Verdict.SE,
+                compile_error=f"Test case directory not found: {test_case_dir}",
+            )
+        test_case_dir = generated
 
     # 2. Discover test cases (pairs of .in / .out or .in / .ans)
     input_files = sorted(test_case_dir.glob("*.in"))
+    if not input_files:
+        # One more attempt: directory exists but empty
+        generated = await _ensure_test_case_files(test_case_id, problem_id)
+        if generated is not None:
+            test_case_dir = generated
+            input_files = sorted(test_case_dir.glob("*.in"))
     if not input_files:
         return JudgeResult(
             verdict=Verdict.SE,
