@@ -91,6 +91,8 @@ Implement a full UX refresh for the contest page and refine light theme texture 
 14. 比赛卡片需要提升信息层级与排版，整卡可点击，操作按钮固定在右上角并同排显示。
 15. 赛题区在比赛进行中需撑满可用高度，题目列表必须采用卡片式并支持整卡点击。
 16. 比赛进行中右侧区域需同时展示代码编辑区与 OJ 提交结果区，并共同撑满父容器。
+17. 比赛卡片、赛题卡片与折叠图标按钮需要具备清晰的 hover/focus-visible/active 微交互反馈。
+18. 键盘导航到整卡可点击元素时，需有可见焦点态，不得仅依赖浏览器默认样式。
 
 ## Verification
 
@@ -104,7 +106,8 @@ Implement a full UX refresh for the contest page and refine light theme texture 
   - collapse list,
   - open detail modal,
   - join action gating,
-  - countdown + running workspace render.
+  - countdown + running workspace render,
+  - card/button hover/focus-visible/active interaction checks.
 
 ## Risks
 
