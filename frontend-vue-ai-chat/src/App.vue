@@ -4,6 +4,8 @@ import { useRouter, useRoute } from 'vue-router'
 import { useOjStore } from './stores/ojStore'
 import { useChatStore } from './stores/chatStore'
 import ProblemSubmitPanel from './components/ProblemSubmitPanel.vue'
+import ThemeToggle from './components/ThemeToggle.vue'
+import { useTheme } from './composables/useTheme'
 import { AUTH_MODES, OJ_DIFFICULTY_OPTIONS, initMessageRenderer } from './utils/validators'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
@@ -175,6 +177,7 @@ onBeforeUnmount(() => {
       </nav>
 
       <div class="top-status-wrap">
+        <ThemeToggle />
         <button
           class="auth-open-btn"
           :class="{ 'auth-user-btn': ojUser.loggedIn }"

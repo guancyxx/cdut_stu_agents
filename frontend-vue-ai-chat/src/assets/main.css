@@ -17,6 +17,46 @@
   --brand-hover: #828fff;
   --success: #10b981;
   --danger: #ef4444;
+  --brand-subtle-bg: rgba(94, 106, 210, 0.2);
+  --brand-subtle-text: #c7d2fe;
+  --danger-subtle-bg: rgba(239, 68, 68, 0.2);
+  --danger-subtle-text: #fecaca;
+  --success-subtle-bg: rgba(16, 185, 129, 0.1);
+  --success-subtle-text: #34d399;
+  --nav-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.03) 0%, rgba(255, 255, 255, 0.015) 100%);
+  --scrollbar-thumb: rgba(130, 143, 255, 0.35);
+  --scrollbar-thumb-hover: rgba(130, 143, 255, 0.55);
+  --input-bg: rgba(255, 255, 255, 0.03);
+  --input-bg-focus: rgba(255, 255, 255, 0.045);
+}
+
+/* Light theme */
+[data-theme=light] {
+  --bg-marketing: #f8f9fa;
+  --bg-panel: #ffffff;
+  --bg-surface: #f1f3f5;
+  --bg-soft: rgba(0, 0, 0, 0.025);
+  --bg-soft-hover: rgba(0, 0, 0, 0.05);
+  --border-subtle: rgba(0, 0, 0, 0.06);
+  --border-standard: rgba(0, 0, 0, 0.10);
+  --text-primary: #1a1a2e;
+  --text-secondary: #495057;
+  --text-tertiary: #868e96;
+  --brand: #4c51bf;
+  --brand-hover: #667eea;
+  --success: #059669;
+  --danger: #dc2626;
+  --brand-subtle-bg: rgba(76, 81, 191, 0.1);
+  --brand-subtle-text: #4338ca;
+  --danger-subtle-bg: rgba(220, 38, 38, 0.1);
+  --danger-subtle-text: #991b1b;
+  --success-subtle-bg: rgba(5, 150, 105, 0.1);
+  --success-subtle-text: #047857;
+  --nav-bg: linear-gradient(180deg, rgba(0, 0, 0, 0.015) 0%, rgba(0, 0, 0, 0.005) 100%);
+  --scrollbar-thumb: rgba(0, 0, 0, 0.15);
+  --scrollbar-thumb-hover: rgba(0, 0, 0, 0.25);
+  --input-bg: rgba(0, 0, 0, 0.025);
+  --input-bg-focus: rgba(0, 0, 0, 0.04);
 }
 
 html,
@@ -47,7 +87,7 @@ body {
   justify-content: space-between;
   padding: 0 20px;
   border-bottom: 1px solid var(--border-subtle);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.03) 0%, rgba(255, 255, 255, 0.015) 100%);
+  background: var(--nav-bg);
   backdrop-filter: blur(4px);
 }
 
@@ -79,8 +119,8 @@ body {
 
 .tabs button,
 .tabs a {
-  background: rgba(255, 255, 255, 0.02);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--bg-soft);
+  border: 1px solid var(--border-standard);
   color: var(--text-secondary);
   border-radius: 8px;
   padding: 8px 14px;
@@ -168,8 +208,8 @@ body {
   display: grid;
   place-items: center;
   font-size: 24px;
-  color: #c7d2fe;
-  background: rgba(94, 106, 210, 0.2);
+  color: var(--brand-subtle-text);
+  background: var(--brand-subtle-bg);
 }
 
 .profile-title-group h2 {
@@ -221,25 +261,25 @@ body {
 }
 
 .danger-btn {
-  background: rgba(239, 68, 68, 0.2);
+  background: var(--danger-subtle-bg);
   border: 1px solid rgba(239, 68, 68, 0.45);
-  color: #fecaca;
+  color: var(--danger-subtle-text);
 }
 
 .danger-btn:hover:not(:disabled) {
-  background: rgba(239, 68, 68, 0.32);
+  background: var(--danger-subtle-bg);
 }
 
 .auth-page {
   width: min(440px, 100%);
   padding: 40px 32px 36px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border-standard);
   border-radius: 14px;
   background:
-    radial-gradient(ellipse 70% 50% at 50% 0%, rgba(94, 106, 210, 0.18) 0%, transparent 60%),
+    radial-gradient(ellipse 70% 50% at 50% 0%, var(--brand-subtle-bg) 0%, transparent 60%),
     linear-gradient(180deg, rgba(15, 16, 17, 0.97) 0%, rgba(15, 16, 17, 0.92) 100%);
   box-shadow:
-    0 0 0 1px rgba(255, 255, 255, 0.03),
+    0 0 0 1px var(--input-bg),
     0 24px 48px rgba(0, 0, 0, 0.5),
     0 8px 16px rgba(0, 0, 0, 0.2);
   animation: authCardFadeIn 0.4s ease-out;
@@ -256,7 +296,7 @@ body {
 }
 
 .auth-brand-icon svg {
-  filter: drop-shadow(0 4px 12px rgba(94, 106, 210, 0.35));
+  filter: drop-shadow(0 4px 12px var(--brand-subtle-bg));
 }
 
 .auth-page-header h2 {
@@ -278,8 +318,8 @@ body {
   display: flex;
   gap: 0;
   margin-bottom: 24px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: var(--input-bg);
+  border: 1px solid var(--border-standard);
   border-radius: 8px;
   padding: 3px;
 }
@@ -303,7 +343,7 @@ body {
 }
 
 .auth-switch-row button.active {
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--border-standard);
   color: var(--text-primary);
   font-weight: 590;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
@@ -318,9 +358,9 @@ body {
 .auth-page-form select {
   height: 44px;
   padding: 0 14px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border-standard);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--input-bg);
   color: var(--text-primary);
   font-size: 14px;
   font-family: inherit;
@@ -336,13 +376,13 @@ body {
 
 .auth-page-form input:focus {
   border-color: rgba(130, 143, 255, 0.5);
-  background: rgba(255, 255, 255, 0.045);
-  box-shadow: 0 0 0 3px rgba(94, 106, 210, 0.12);
+  background: var(--input-bg-focus);
+  box-shadow: 0 0 0 3px var(--brand-subtle-bg);
 }
 
 .auth-page-form input:hover:not(:focus) {
-  border-color: rgba(255, 255, 255, 0.14);
-  background: rgba(255, 255, 255, 0.04);
+  border-color: var(--border-standard);
+  background: var(--bg-soft-hover);
 }
 
 .auth-page .captcha-row {
@@ -356,7 +396,7 @@ body {
   width: 100px;
   height: 44px;
   border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border-standard);
   cursor: pointer;
   transition: opacity 0.2s ease;
   object-fit: cover;
@@ -394,8 +434,8 @@ body {
   color: var(--danger, #ef4444);
   line-height: 1.4;
   padding: 8px 12px;
-  background: rgba(239, 68, 68, 0.08);
-  border: 1px solid rgba(239, 68, 68, 0.2);
+  background: var(--danger-subtle-bg);
+  border: 1px solid var(--danger-subtle-bg);
   border-radius: 6px;
 }
 
@@ -413,10 +453,10 @@ body {
 }
 
 .top-status {
-  color: #34d399;
+  color: var(--success-subtle-text);
   font-size: 12px;
   border: 1px solid rgba(52, 211, 153, 0.35);
-  background: rgba(16, 185, 129, 0.1);
+  background: var(--success-subtle-bg);
   border-radius: 999px;
   padding: 5px 10px;
 }
@@ -455,7 +495,7 @@ body {
 }
 
 .main-panel {
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border-standard);
   border-radius: 14px;
   background: linear-gradient(180deg, rgba(15, 16, 17, 0.95) 0%, rgba(15, 16, 17, 0.88) 100%);
   display: grid;
@@ -468,7 +508,7 @@ body {
 /* Unified scrollbar style */
 .scrollbar-unified {
   scrollbar-width: thin;
-  scrollbar-color: rgba(130, 143, 255, 0.35) transparent;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
 }
 
 .scrollbar-unified::-webkit-scrollbar {
@@ -659,7 +699,7 @@ body {
   line-height: 1.4;
   font-weight: 500;
   border: 1px solid var(--border-standard, #4a5568);
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--border-subtle);
   color: var(--text-secondary);
 }
 
@@ -703,7 +743,7 @@ body {
   padding: 0;
   border: none;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--border-standard);
   color: inherit;
   font-size: 14px;
   line-height: 1;
@@ -712,7 +752,7 @@ body {
 }
 
 .chip-remove:hover {
-  background: rgba(255, 255, 255, 0.2);
+  background: var(--brand-subtle-bg);
 }
 
 /* --- Suggestion chips (next-step actions from AI) --- */
@@ -820,7 +860,7 @@ textarea,
 input {
   border: 1px solid var(--border-standard);
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.02);
+  background: var(--bg-soft);
   color: var(--text-secondary);
   padding: 10px 12px;
   font-family: inherit;
@@ -861,7 +901,7 @@ input {
 
 .lang-select-trigger.open {
   border-color: var(--brand);
-  background: rgba(94, 106, 210, 0.12);
+  background: var(--brand-subtle-bg);
   border-bottom-color: transparent;
   border-radius: 8px 8px 0 0;
 }
@@ -892,7 +932,7 @@ input {
   border-top: none;
   border-radius: 0 0 8px 8px;
   background: linear-gradient(180deg, #131417 0%, #0f1011 100%);
-  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(94, 106, 210, 0.15);
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.5), 0 0 0 1px var(--brand-subtle-bg);
   overflow: hidden;
   animation: langDropFadeIn 0.15s ease-out;
 }
@@ -919,12 +959,12 @@ input {
 }
 
 .lang-select-option:hover {
-  background: rgba(94, 106, 210, 0.18);
+  background: var(--brand-subtle-bg);
   color: var(--text-primary);
 }
 
 .lang-select-option.selected {
-  background: rgba(94, 106, 210, 0.12);
+  background: var(--brand-subtle-bg);
   color: var(--brand-hover);
   font-weight: 600;
 }
@@ -1029,14 +1069,14 @@ button:disabled {
   height: 36px;
   border-radius: 10px;
   border: 1px solid var(--border-subtle);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.045) 0%, rgba(255, 255, 255, 0.02) 100%);
+  background: linear-gradient(180deg, var(--input-bg-focus) 0%, var(--bg-soft) 100%);
   color: var(--text-primary);
   padding: 0 34px 0 12px;
   font-size: 13px;
   outline: none;
   appearance: none;
   -webkit-appearance: none;
-  color-scheme: dark;
+  color-scheme: light dark;
   background-image:
     linear-gradient(45deg, transparent 50%, var(--text-tertiary) 50%),
     linear-gradient(135deg, var(--text-tertiary) 50%, transparent 50%);
@@ -1081,12 +1121,12 @@ button:disabled {
   min-height: 96px;
   text-align: left;
   border: 1px solid var(--border-subtle);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.035) 0%, rgba(255, 255, 255, 0.015) 100%);
+  background: linear-gradient(180deg, var(--input-bg) 0%, var(--bg-soft) 100%);
   border-radius: 10px;
   padding: 10px 12px;
   margin-bottom: 0;
   color: var(--text-secondary);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03), 0 4px 12px rgba(0, 0, 0, 0.22);
+  box-shadow: inset 0 1px 0 var(--input-bg), 0 4px 12px rgba(0, 0, 0, 0.22);
   transition: transform 0.16s ease, border-color 0.16s ease, background 0.16s ease;
   display: flex;
   flex-direction: column;
@@ -1095,7 +1135,7 @@ button:disabled {
 }
 
 .problem-item:hover {
-  background: linear-gradient(180deg, rgba(94, 106, 210, 0.18) 0%, rgba(94, 106, 210, 0.08) 100%);
+  background: linear-gradient(180deg, var(--brand-subtle-bg) 0%, rgba(94, 106, 210, 0.08) 100%);
   border-color: rgba(130, 143, 255, 0.45);
   transform: translateY(-1px);
 }
@@ -1109,7 +1149,7 @@ button:disabled {
 .btn-admin-add,
 .btn-problem-edit {
   border: 1px solid rgba(130, 143, 255, 0.45);
-  background: rgba(94, 106, 210, 0.12);
+  background: var(--brand-subtle-bg);
   color: var(--text-primary);
   border-radius: 8px;
   padding: 6px 10px;
@@ -1119,7 +1159,7 @@ button:disabled {
 
 .btn-admin-add:hover,
 .btn-problem-edit:hover {
-  background: rgba(94, 106, 210, 0.22);
+  background: var(--brand-subtle-bg);
 }
 
 .problem-admin-actions {
@@ -1237,7 +1277,7 @@ button:disabled {
 .admin-account-card {
   border: 1px solid var(--border-subtle);
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.02);
+  background: var(--bg-soft);
   padding: 12px;
 }
 
@@ -1272,7 +1312,7 @@ button:disabled {
 
 .admin-account-actions button {
   border: 1px solid var(--border-subtle);
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--border-standard);
   color: var(--text-primary);
   border-radius: 8px;
   padding: 6px 12px;
@@ -1280,7 +1320,7 @@ button:disabled {
 }
 
 .admin-account-actions button:hover {
-  background: rgba(255, 255, 255, 0.12);
+  background: var(--bg-soft-hover);
 }
 
 .admin-account-actions button.danger {
@@ -1347,7 +1387,7 @@ button:disabled {
 .admin-account-alert.error {
   border: 1px solid rgba(239, 68, 68, 0.45);
   background: rgba(239, 68, 68, 0.15);
-  color: #fecaca;
+  color: var(--danger-subtle-text);
 }
 
 @media (max-width: 960px) {
@@ -1403,7 +1443,7 @@ button:disabled {
   height: 30px;
   border: 1px solid var(--border-subtle);
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--input-bg);
   color: var(--text-secondary);
   font-size: 13px;
   cursor: pointer;
@@ -1412,13 +1452,13 @@ button:disabled {
 }
 
 .page-btn:not(:disabled):hover {
-  background: rgba(94, 106, 210, 0.15);
+  background: var(--brand-subtle-bg);
   border-color: rgba(130, 143, 255, 0.4);
   color: var(--text-primary);
 }
 
 .page-btn.active {
-  background: rgba(94, 106, 210, 0.3);
+  background: var(--brand-subtle-bg);
   border-color: rgba(130, 143, 255, 0.6);
   color: var(--text-primary);
   font-weight: 600;
@@ -1443,7 +1483,7 @@ button:disabled {
 }
 
 .card {
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border-standard);
   border-radius: 14px;
   background: linear-gradient(180deg, rgba(15, 16, 17, 0.96) 0%, rgba(15, 16, 17, 0.9) 100%);
   padding: 12px;
@@ -1627,7 +1667,7 @@ button:disabled {
   padding: 5px 8px;
   border-radius: 6px;
   border: 1px solid var(--border-subtle);
-  background: rgba(255, 255, 255, 0.015);
+  background: var(--bg-soft);
   gap: 6px;
 }
 
@@ -1754,7 +1794,7 @@ button:disabled {
 }
 
 .submit-result-panel.result-error {
-  background: rgba(239, 68, 68, 0.08);
+  background: var(--danger-subtle-bg);
   border-left: 3px solid #ef4444;
   box-shadow: inset 0 0 30px rgba(239, 68, 68, 0.03);
 }
@@ -1782,7 +1822,7 @@ button:disabled {
   letter-spacing: 0.3px;
 }
 
-.result-accepted .result-label { color: #34d399; }
+.result-accepted .result-label { color: var(--success-subtle-text); }
 .result-wrong .result-label,
 .result-error .result-label { color: #fca5a5; }
 .result-compile-error .result-label { color: #fcd34d; }
@@ -1811,7 +1851,7 @@ button:disabled {
   align-items: center;
   padding: 6px 14px;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--bg-soft-hover);
   border: 1px solid rgba(255,255,255,0.06);
   backdrop-filter: blur(8px);
   min-width: 72px;
@@ -1819,7 +1859,7 @@ button:disabled {
 }
 
 .result-stat:hover {
-  background: rgba(255, 255, 255, 0.07);
+  background: var(--border-standard);
 }
 
 .stat-label {
@@ -1839,7 +1879,7 @@ button:disabled {
 /* Error details block */
 .result-error-block {
   border-radius: 8px;
-  border: 1px solid rgba(239, 68, 68, 0.2);
+  border: 1px solid var(--danger-subtle-bg);
   background: rgba(239, 68, 68, 0.04);
   backdrop-filter: blur(8px);
   overflow: hidden;
@@ -1857,7 +1897,7 @@ button:disabled {
   text-transform: uppercase;
   letter-spacing: 0.5px;
   color: #fca5a5;
-  background: rgba(239, 68, 68, 0.08);
+  background: var(--danger-subtle-bg);
   border-bottom: 1px solid rgba(239, 68, 68, 0.12);
   display: flex;
   align-items: center;
@@ -2085,8 +2125,8 @@ button:disabled {
 }
 
 .tc-actual {
-  background: rgba(239, 68, 68, 0.08);
-  border: 1px solid rgba(239, 68, 68, 0.2);
+  background: var(--danger-subtle-bg);
+  border: 1px solid var(--danger-subtle-bg);
   color: #fca5a5;
 }
 
@@ -2175,7 +2215,7 @@ button:disabled {
 
 .session-clear-btn:hover {
   border-color: rgba(239, 68, 68, 0.45);
-  color: #fecaca;
+  color: var(--danger-subtle-text);
   background: rgba(239, 68, 68, 0.12);
 }
 
@@ -2193,19 +2233,19 @@ button:disabled {
   min-height: 76px;
   height: auto;
   text-align: left;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.045) 0%, rgba(255, 255, 255, 0.018) 100%);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: linear-gradient(180deg, var(--input-bg-focus) 0%, var(--bg-soft) 100%);
+  border: 1px solid var(--border-standard);
   border-radius: 10px;
   padding: 8px 10px;
   color: var(--text-secondary);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 5px 14px rgba(0, 0, 0, 0.18);
+  box-shadow: inset 0 1px 0 var(--bg-soft-hover), 0 5px 14px rgba(0, 0, 0, 0.18);
   transition: transform 0.16s ease, border-color 0.16s ease, background 0.16s ease;
 }
 
 .session-item:hover {
   transform: translateY(-1px);
   border-color: rgba(130, 143, 255, 0.4);
-  background: linear-gradient(180deg, rgba(94, 106, 210, 0.2) 0%, rgba(94, 106, 210, 0.08) 100%);
+  background: linear-gradient(180deg, var(--brand-subtle-bg) 0%, rgba(94, 106, 210, 0.08) 100%);
 }
 
 .session-main {
@@ -2222,20 +2262,20 @@ button:disabled {
   font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 10px;
   color: #9ca3af;
-  border: 1px solid rgba(255, 255, 255, 0.14);
+  border: 1px solid var(--border-standard);
   border-radius: 999px;
   padding: 2px 8px;
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--bg-soft-hover);
 }
 
 .session-item.active {
   border-color: var(--brand);
-  background: rgba(94, 106, 210, 0.2);
+  background: var(--brand-subtle-bg);
 }
 
 .session-item.active .session-tag {
   border-color: rgba(130, 143, 255, 0.45);
-  color: #c7d2fe;
+  color: var(--brand-subtle-text);
 }
 
 .stitle {
@@ -2389,7 +2429,7 @@ button:disabled {
 .contest-item.active,
 .contest-problem-item.active {
   border-color: var(--brand);
-  background: rgba(94, 106, 210, 0.14);
+  background: var(--brand-subtle-bg);
 }
 
 .contest-item-top {
