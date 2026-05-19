@@ -1714,7 +1714,7 @@ button:disabled {
   height: 100%;
   min-height: 0;
   display: grid;
-  grid-template-rows: 2fr 1fr;
+  grid-template-rows: minmax(0, 2fr) minmax(0, 1fr);
   gap: 10px;
 }
 
@@ -2417,8 +2417,9 @@ button:disabled {
 
 .contest-screen {
   height: 100%;
+  min-height: calc(100vh - 56px);
   padding: 14px;
-  min-height: 0;
+  display: grid;
 }
 
 .contest-layout {
@@ -2823,6 +2824,8 @@ button:disabled {
 
 .contest-workspace {
   padding: 0;
+  height: 100%;
+  min-height: 0;
 }
 
 .contest-empty-hero {
@@ -2871,10 +2874,14 @@ button:disabled {
 .contest-work-left,
 .contest-rank-panel {
   min-height: 0;
-  overflow: auto;
   display: grid;
   gap: 12px;
-  align-content: flex-start;
+  grid-auto-rows: min-content;
+  align-content: stretch;
+}
+
+.contest-work-left {
+  overflow: auto;
 }
 
 .contest-rank-panel {
@@ -2882,6 +2889,7 @@ button:disabled {
   border-radius: 12px;
   background: var(--bg-soft);
   padding: 10px;
+  overflow: auto;
 }
 
 .contest-info-panel,
@@ -2890,6 +2898,9 @@ button:disabled {
   border-radius: 12px;
   background: var(--bg-soft);
   padding: 12px;
+  height: 100%;
+  min-height: 0;
+  display: grid;
 }
 
 .panel-head {
@@ -2995,6 +3006,7 @@ button:disabled {
 
 .running-submit-column {
   min-width: 0;
+  display: grid;
 }
 
 .running-problem-column h4,
@@ -3138,6 +3150,10 @@ button:disabled {
 }
 
 @media (max-width: 980px) {
+  .contest-screen {
+    min-height: calc(100vh - 56px);
+  }
+
   .contest-layout-v2,
   .contest-layout-v2.list-collapsed {
     grid-template-columns: 1fr;
