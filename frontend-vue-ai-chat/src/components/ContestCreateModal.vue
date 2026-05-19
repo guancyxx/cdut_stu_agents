@@ -1,119 +1,119 @@
 <template>
-  <div class="modal-overlay" @click.self="$emit('close')">
-    <div class="modal-container" role="dialog" aria-label="Create contest">
-      <div class="modal-header">
-        <h3>Create Contest</h3>
-        <button class="modal-close-btn" @click="$emit('close')" aria-label="Close">&times;</button>
+  <div class="contest-modal-overlay" @click.self="$emit('close')">
+    <div class="contest-modal" role="dialog" aria-label="Create contest">
+      <div class="contest-modal-header">
+        <h3>新增比赛</h3>
+        <button class="modal-close-btn" @click="$emit('close')" aria-label="Close">×</button>
       </div>
 
-      <div class="modal-body">
+      <div class="contest-modal-tabs">
+        <button :class="{ active: activeTab === 'info' }" @click="activeTab = 'info'">比赛信息</button>
+        <button :class="{ active: activeTab === 'problems' }" @click="activeTab = 'problems'">题目信息</button>
+      </div>
+
+      <div class="contest-modal-body">
         <div v-if="state.message" :class="['alert', state.type === 'error' ? 'alert-error' : 'alert-success']">
           {{ state.message }}
         </div>
 
-        <div class="form-grid">
-          <label class="form-group">
-            <span class="label-text">Title *</span>
-            <input
-              v-model="form.title"
-              placeholder="e.g. 2026 Spring Training Round 1"
-              maxlength="255"
-              :disabled="submitting"
-            />
-          </label>
+        <section v-if="activeTab === 'info'" class="contest-tab-pane">
+          <div class="form-grid">
+            <label class="form-group">
+              <span class="label-text">比赛标题 *</span>
+              <input v-model="form.title" placeholder="例如：2026 春季训练赛 Round 1" maxlength="255" :disabled="submitting" />
+            </label>
 
-          <label class="form-group">
-            <span class="label-text">Description</span>
-            <textarea
-              v-model="form.description"
-              placeholder="Optional description"
-              rows="2"
-              maxlength="1000"
-              :disabled="submitting"
-            />
-          </label>
+            <label class="form-group">
+              <span class="label-text">比赛描述</span>
+              <textarea v-model="form.description" placeholder="可选，简要说明比赛主题和规则" rows="3" maxlength="1000" :disabled="submitting" />
+            </label>
 
-          <label class="form-group">
-            <span class="label-text">Start Time *</span>
-            <input
-              v-model="form.startTime"
-              type="datetime-local"
-              :disabled="submitting"
-            />
-          </label>
-
-          <label class="form-group">
-            <span class="label-text">End Time *</span>
-            <input
-              v-model="form.endTime"
-              type="datetime-local"
-              :disabled="submitting"
-            />
-            <span v-if="timeError" class="field-hint field-hint-error">{{ timeError }}</span>
-          </label>
-
-          <label class="form-group-check">
-            <input v-model="form.visible" type="checkbox" :disabled="submitting" />
-            <span class="label-text">Visible to students</span>
-          </label>
-        </div>
-
-        <div class="section-divider">
-          <span>Select Problems</span>
-        </div>
-
-        <div class="problem-picker">
-          <div class="search-row">
-            <input
-              v-model="problemKeyword"
-              placeholder="Search by ID or title..."
-              class="search-input"
-              :disabled="submitting"
-              @keydown.enter="searchProblems"
-            />
-            <button class="btn-search" :disabled="submitting || problemSearching" @click="searchProblems">
-              {{ problemSearching ? 'Searching...' : 'Search' }}
-            </button>
-          </div>
-
-          <div v-if="problemSearchResults.length" class="search-results">
-            <div
-              v-for="p in problemSearchResults"
-              :key="p._id"
-              class="search-item"
-              :class="{ selected: isProblemSelected(p._id) }"
-            >
-              <input
-                :id="`problem-${p._id}`"
-                type="checkbox"
-                :checked="isProblemSelected(p._id)"
-                :disabled="submitting"
-                @change="toggleProblem(p._id)"
-              />
-              <label :for="`problem-${p._id}`" class="search-item-label">
-                <span class="problem-id">{{ p._id }}</span>
-                <span class="problem-title">{{ p.title }}</span>
-                <span class="problem-diff" :class="p.difficulty?.toLowerCase()">{{ p.difficulty || 'Low' }}</span>
+            <div class="form-row-2">
+              <label class="form-group">
+                <span class="label-text">开始时间 *</span>
+                <input v-model="form.startTime" type="datetime-local" :disabled="submitting" />
+              </label>
+              <label class="form-group">
+                <span class="label-text">结束时间 *</span>
+                <input v-model="form.endTime" type="datetime-local" :disabled="submitting" />
               </label>
             </div>
-          </div>
 
-          <div v-if="selectedProblems.length" class="selected-section">
-            <h4>Selected ({{ selectedProblems.length }})</h4>
-            <div class="selected-tags">
-              <span v-for="pid in selectedProblems" :key="pid" class="selected-tag">
-                {{ pid }}
-                <button class="tag-remove" @click="toggleProblem(pid)" :disabled="submitting" aria-label="Remove">&times;</button>
-              </span>
-            </div>
+            <span v-if="timeError" class="field-hint field-hint-error">{{ timeError }}</span>
+
+            <label class="form-group-check">
+              <input v-model="form.visible" type="checkbox" :disabled="submitting" />
+              <span class="label-text">对学生可见</span>
+            </label>
           </div>
-        </div>
+        </section>
+
+        <section v-else class="contest-tab-pane problem-pane">
+          <div class="problem-pane-layout">
+            <aside class="selected-problem-pane">
+              <div class="pane-title-row">
+                <h4>已选题目 ({{ selectedProblems.length }})</h4>
+              </div>
+              <div class="selected-problem-list">
+                <div v-for="(pid, idx) in selectedProblems" :key="pid" class="selected-problem-card">
+                  <div class="selected-problem-index">{{ idx + 1 }}</div>
+                  <div class="selected-problem-main">
+                    <div class="problem-id">{{ pid }}</div>
+                    <div class="problem-title">{{ selectedProblemMetaMap[pid]?.title || '未命名题目' }}</div>
+                  </div>
+                  <button class="remove-btn" @click="toggleProblem(pid)" :disabled="submitting">移除</button>
+                </div>
+                <div v-if="!selectedProblems.length" class="empty-tip">请从右侧题库中选择题目</div>
+              </div>
+            </aside>
+
+            <section class="browser-problem-pane">
+              <div class="problem-filter-row">
+                <input
+                  v-model="problemKeyword"
+                  placeholder="按题号或标题筛选"
+                  class="search-input"
+                  :disabled="submitting"
+                  @keydown.enter="searchProblems"
+                />
+                <select v-model="problemDifficulty" class="difficulty-select" :disabled="submitting">
+                  <option value="">全部难度</option>
+                  <option value="Low">Low</option>
+                  <option value="Mid">Mid</option>
+                  <option value="High">High</option>
+                </select>
+                <button class="btn-search" :disabled="submitting || problemSearching" @click="searchProblems">
+                  {{ problemSearching ? '筛选中...' : '筛选' }}
+                </button>
+              </div>
+
+              <div class="problem-card-grid">
+                <button
+                  v-for="p in problemSearchResults"
+                  :key="p._id"
+                  class="problem-grid-card"
+                  :class="{ selected: isProblemSelected(p._id) }"
+                  :disabled="submitting"
+                  @click="toggleProblem(p._id)"
+                >
+                  <span class="selector-dot" :class="{ checked: isProblemSelected(p._id) }"></span>
+                  <div class="grid-card-head">
+                    <span class="problem-id">{{ p._id }}</span>
+                    <span class="problem-diff" :class="String(p.difficulty || '').toLowerCase()">{{ p.difficulty || 'Low' }}</span>
+                  </div>
+                  <div class="problem-title">{{ p.title || 'Untitled Problem' }}</div>
+                </button>
+                <div v-if="!problemSearching && !problemSearchResults.length" class="empty-tip">未找到匹配题目</div>
+              </div>
+            </section>
+          </div>
+        </section>
       </div>
 
-      <div class="modal-footer">
-        <button class="btn-cancel" @click="$emit('close')" :disabled="submitting">Cancel</button>
+      <div class="contest-modal-footer">
+        <button class="btn-cancel" @click="$emit('close')" :disabled="submitting">取消</button>
         <button class="btn-submit" :disabled="submitting || !canSubmit" @click="handleSubmit">
-          {{ submitting ? 'Creating...' : 'Create Contest' }}
+          {{ submitting ? '创建中...' : '创建比赛' }}
         </button>
       </div>
     </div>
@@ -121,7 +121,7 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { createApiClient } from '../services/apiClient'
 import { sanitizeTextInput } from '../utils/validators'
 
@@ -131,8 +131,11 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['close', 'created'])
-
 const apiClient = createApiClient(props.apiBaseUrl, props.agentApiBaseUrl)
+
+const activeTab = ref('info')
+const submitting = ref(false)
+const state = ref({ type: '', message: '' })
 
 const form = ref({
   title: '',
@@ -142,14 +145,18 @@ const form = ref({
   visible: true
 })
 
-const submitting = ref(false)
-const state = ref({ type: '', message: '' })
+const problemKeyword = ref('')
+const problemDifficulty = ref('')
+const problemSearching = ref(false)
+const problemSearchResults = ref([])
+const selectedProblems = ref([])
+const selectedProblemMetaMap = ref({})
 
 const timeError = computed(() => {
   if (!form.value.startTime || !form.value.endTime) return ''
   const st = form.value.startTime.includes('T') ? `${form.value.startTime}:00` : form.value.startTime
   const et = form.value.endTime.includes('T') ? `${form.value.endTime}:00` : form.value.endTime
-  if (st && et && st >= et) return 'End time must be after start time'
+  if (st >= et) return '结束时间必须晚于开始时间'
   return ''
 })
 
@@ -158,20 +165,14 @@ const canSubmit = computed(() => {
   const hasStart = form.value.startTime.trim().length > 0
   const hasEnd = form.value.endTime.trim().length > 0
   const hasProblems = selectedProblems.value.length > 0
-  const timeOk = !timeError.value
-  return hasTitle && hasStart && hasEnd && hasProblems && timeOk && !submitting.value
+  return hasTitle && hasStart && hasEnd && hasProblems && !timeError.value && !submitting.value
 })
-
-// Problem search
-const problemKeyword = ref('')
-const problemSearching = ref(false)
-const problemSearchResults = ref([])
-const selectedProblems = ref([])
 
 const isProblemSelected = (pid) => selectedProblems.value.includes(String(pid))
 
 const toggleProblem = (pid) => {
-  const id = String(pid)
+  const id = String(pid || '')
+  if (!id) return
   const idx = selectedProblems.value.indexOf(id)
   if (idx >= 0) {
     selectedProblems.value.splice(idx, 1)
@@ -181,19 +182,38 @@ const toggleProblem = (pid) => {
 }
 
 const searchProblems = async () => {
-  const kw = sanitizeTextInput(problemKeyword.value, 64)
-  if (!kw) return
-
+  const keyword = sanitizeTextInput(problemKeyword.value, 64)
+  const difficulty = sanitizeTextInput(problemDifficulty.value, 16)
   problemSearching.value = true
   try {
-    const resp = await apiClient.fetchProblems({ keyword: kw, limit: '50', offset: '0' })
+    const resp = await apiClient.fetchProblems({
+      keyword,
+      difficulty,
+      limit: '60',
+      offset: '0'
+    })
     const rows = Array.isArray(resp.data?.data?.results) ? resp.data.data.results : []
     problemSearchResults.value = rows
+    const cache = { ...selectedProblemMetaMap.value }
+    rows.forEach((item) => {
+      if (!item?._id) return
+      cache[String(item._id)] = {
+        title: sanitizeTextInput(String(item.title || ''), 255),
+        difficulty: sanitizeTextInput(String(item.difficulty || ''), 16)
+      }
+    })
+    selectedProblemMetaMap.value = cache
   } catch {
     problemSearchResults.value = []
   } finally {
     problemSearching.value = false
   }
+}
+
+const normalizeDateTime = (raw) => {
+  const text = sanitizeTextInput(String(raw || ''), 64)
+  if (!text) return ''
+  return text.includes('T') ? `${text}:00Z` : text
 }
 
 const handleSubmit = async () => {
@@ -202,12 +222,6 @@ const handleSubmit = async () => {
 
   submitting.value = true
   try {
-    const normalizeDateTime = (raw) => {
-      const text = sanitizeTextInput(String(raw || ''), 64)
-      if (!text) return ''
-      return text.includes('T') ? `${text}:00Z` : text
-    }
-
     const payload = {
       title: sanitizeTextInput(form.value.title, 255),
       description: sanitizeTextInput(form.value.description, 1000),
@@ -219,312 +233,312 @@ const handleSubmit = async () => {
 
     const resp = await apiClient.createContest(payload)
     const data = resp.data
-
     if (data?.error) {
       state.value = { type: 'error', message: typeof data.data === 'string' ? data.data : data.error }
       return
     }
 
-    state.value = { type: 'success', message: `Contest created (${data.data?.contest_id || 'OK'})` }
+    state.value = { type: 'success', message: `创建成功 (${data.data?.contest_id || 'OK'})` }
     emit('created', data.data)
-
-    setTimeout(() => emit('close'), 1500)
+    setTimeout(() => emit('close'), 1200)
   } catch (e) {
-    state.value = { type: 'error', message: e.message || 'Failed to create contest' }
+    state.value = { type: 'error', message: e?.message || '创建失败' }
   } finally {
     submitting.value = false
   }
 }
+
+onMounted(() => {
+  searchProblems()
+})
 </script>
 
 <style scoped>
-.modal-overlay {
+.contest-modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.55);
+  background: rgba(0, 0, 0, 0.52);
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
+  z-index: 1200;
 }
 
-.modal-container {
-  background: #1e1e2e;
-  border-radius: 12px;
-  width: min(620px, 95vw);
-  max-height: 90vh;
-  display: flex;
-  flex-direction: column;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
-  color: #cdd6f4;
+.contest-modal {
+  width: min(1100px, 96vw);
+  max-height: 92vh;
+  display: grid;
+  grid-template-rows: auto auto 1fr auto;
+  border: 1px solid var(--border-standard);
+  border-radius: 14px;
+  background: linear-gradient(180deg, var(--bg-panel) 0%, var(--bg-surface) 100%);
+  color: var(--text-primary);
+  box-shadow: var(--elevated-shadow);
 }
 
-.modal-header {
+.contest-modal-header {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  padding: 16px 20px;
-  border-bottom: 1px solid #313244;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border-subtle);
 }
 
-.modal-header h3 {
-  margin: 0;
-  font-size: 1.1rem;
-  font-weight: 600;
-}
+.contest-modal-header h3 { margin: 0; font-size: 18px; }
 
 .modal-close-btn {
-  background: none;
-  border: none;
-  font-size: 1.4rem;
-  color: #6c7086;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-soft);
+  color: var(--text-secondary);
   cursor: pointer;
-  line-height: 1;
-  padding: 0 4px;
 }
 
-.modal-close-btn:hover { color: #cdd6f4; }
-
-.modal-body {
-  padding: 16px 20px;
-  overflow-y: auto;
-  flex: 1;
-}
-
-.modal-footer {
-  display: flex;
-  justify-content: flex-end;
+.contest-modal-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: 8px;
-  padding: 12px 20px;
-  border-top: 1px solid #313244;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border-subtle);
 }
 
-.alert {
-  padding: 8px 12px;
-  border-radius: 6px;
-  margin-bottom: 12px;
-  font-size: 0.85rem;
-}
-.alert-error { background: rgba(243, 139, 168, 0.15); color: #f38ba8; }
-.alert-success { background: rgba(166, 227, 161, 0.15); color: #a6e3a1; }
-
-.form-grid {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+.contest-modal-tabs button {
+  height: 34px;
+  border-radius: 8px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-soft);
+  color: var(--text-secondary);
+  cursor: pointer;
 }
 
-.form-group {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+.contest-modal-tabs button.active {
+  border-color: transparent;
+  background: var(--brand);
+  color: #fff;
 }
 
-.form-group-check {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 4px;
+.contest-modal-body {
+  min-height: 0;
+  overflow: auto;
+  padding: 14px 16px;
 }
 
-.label-text {
-  font-size: 0.85rem;
-  font-weight: 500;
-  color: #a6adc8;
-}
+.form-grid { display: grid; gap: 10px; }
+.form-row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.form-group { display: grid; gap: 4px; }
+.label-text { font-size: 12px; color: var(--text-tertiary); }
 
 .form-group input,
-.form-group textarea {
-  padding: 7px 10px;
-  border-radius: 6px;
-  border: 1px solid #45475a;
-  background: #181825;
-  color: #cdd6f4;
-  font-size: 0.9rem;
+.form-group textarea,
+.search-input,
+.difficulty-select {
+  border: 1px solid var(--border-standard);
+  background: var(--input-bg);
+  color: var(--text-primary);
+  border-radius: 8px;
+  padding: 8px 10px;
   font-family: inherit;
 }
 
-.form-group input:focus,
-.form-group textarea:focus {
-  outline: none;
-  border-color: #89b4fa;
+.form-group-check { display: inline-flex; align-items: center; gap: 8px; margin-top: 4px; }
+.field-hint-error { color: var(--danger); font-size: 12px; }
+
+.problem-pane-layout {
+  display: grid;
+  grid-template-columns: 320px minmax(0, 1fr);
+  gap: 12px;
+  min-height: 500px;
 }
 
-.field-hint { font-size: 0.78rem; }
-.field-hint-error { color: #f38ba8; }
-
-.section-divider {
-  margin: 16px 0 10px;
-  border-top: 1px solid #313244;
-  text-align: center;
+.selected-problem-pane,
+.browser-problem-pane {
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  background: var(--bg-soft);
+  min-height: 0;
 }
 
-.section-divider span {
-  position: relative;
-  top: -10px;
-  background: #1e1e2e;
-  padding: 0 10px;
-  font-size: 0.82rem;
-  color: #6c7086;
-}
+.pane-title-row { padding: 10px 12px; border-bottom: 1px solid var(--border-subtle); }
+.pane-title-row h4 { margin: 0; font-size: 13px; color: var(--text-secondary); }
 
-.problem-picker {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.search-row {
-  display: flex;
+.selected-problem-list {
+  padding: 10px;
+  display: grid;
   gap: 8px;
+  max-height: 430px;
+  overflow: auto;
 }
 
-.search-input {
-  flex: 1;
-  padding: 7px 10px;
-  border-radius: 6px;
-  border: 1px solid #45475a;
-  background: #181825;
-  color: #cdd6f4;
-  font-size: 0.9rem;
+.selected-problem-card {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  padding: 8px;
+  border-radius: 8px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-panel);
 }
 
-.search-input:focus {
-  outline: none;
-  border-color: #89b4fa;
+.selected-problem-index {
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border-standard);
+  color: var(--text-tertiary);
+  font-size: 12px;
 }
 
-.btn-search {
-  padding: 7px 14px;
-  border-radius: 6px;
-  border: 1px solid #45475a;
-  background: #313244;
-  color: #cdd6f4;
-  cursor: pointer;
-  font-size: 0.85rem;
+.selected-problem-main .problem-id { font-family: monospace; font-size: 12px; color: var(--brand); }
+.selected-problem-main .problem-title {
+  font-size: 12px;
+  color: var(--text-secondary);
   white-space: nowrap;
-}
-
-.btn-search:hover { background: #45475a; }
-.btn-search:disabled { opacity: 0.5; cursor: not-allowed; }
-
-.search-results {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  max-height: 200px;
-  overflow-y: auto;
-  border: 1px solid #313244;
-  border-radius: 6px;
-  background: #181825;
-}
-
-.search-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 10px;
-  border-bottom: 1px solid #11111b;
-}
-
-.search-item:last-child { border-bottom: none; }
-.search-item.selected { background: rgba(137, 180, 250, 0.08); }
-
-.search-item-label {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex: 1;
-  cursor: pointer;
-  font-size: 0.85rem;
-}
-
-.problem-id {
-  color: #89b4fa;
-  font-family: monospace;
-  font-size: 0.8rem;
-  min-width: 70px;
-}
-
-.problem-title {
-  flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
+}
+
+.remove-btn,
+.btn-search,
+.btn-cancel,
+.btn-submit {
+  border: 1px solid var(--border-standard);
+  border-radius: 8px;
+  background: var(--bg-panel);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.remove-btn { padding: 4px 8px; font-size: 12px; }
+
+.problem-filter-row {
+  padding: 10px;
+  border-bottom: 1px solid var(--border-subtle);
+  display: grid;
+  grid-template-columns: 1fr 130px 84px;
+  gap: 8px;
+}
+
+.btn-search { font-size: 12px; }
+
+.problem-card-grid {
+  padding: 10px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 8px;
+  max-height: 430px;
+  overflow: auto;
+}
+
+.problem-grid-card {
+  text-align: left;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--bg-panel);
+  padding: 8px;
+  display: grid;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.problem-grid-card.selected {
+  border-color: var(--brand);
+  background: var(--brand-subtle-bg);
+}
+
+.grid-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.selector-dot {
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  border: 2px solid var(--border-standard);
+  background: transparent;
+}
+
+.selector-dot.checked {
+  border-color: var(--brand);
+  background: radial-gradient(circle, var(--brand) 45%, transparent 48%);
+}
+
+.problem-id { font-size: 11px; color: var(--brand); font-family: monospace; }
+.problem-title {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+  min-height: 34px;
+  overflow: hidden;
 }
 
 .problem-diff {
-  font-size: 0.72rem;
+  font-size: 11px;
   padding: 2px 6px;
-  border-radius: 4px;
-  background: #313244;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  color: var(--text-tertiary);
 }
 
-.problem-diff.low { color: #a6e3a1; }
-.problem-diff.mid { color: #f9e2af; }
-.problem-diff.high { color: #f38ba8; }
+.problem-diff.low { color: var(--success); }
+.problem-diff.mid { color: var(--warning); }
+.problem-diff.high { color: var(--danger); }
 
-.selected-section {
-  border: 1px solid #313244;
-  border-radius: 6px;
+.empty-tip {
+  color: var(--text-tertiary);
+  font-size: 12px;
+  border: 1px dashed var(--border-standard);
+  border-radius: 8px;
   padding: 10px;
-  background: #181825;
 }
 
-.selected-section h4 {
-  margin: 0 0 8px;
-  font-size: 0.85rem;
-  color: #a6adc8;
+.alert {
+  padding: 8px 10px;
+  border-radius: 8px;
+  margin-bottom: 10px;
+  font-size: 12px;
 }
 
-.selected-tags {
+.alert-error {
+  color: var(--danger);
+  background: var(--danger-subtle-bg);
+  border: 1px solid var(--border-subtle);
+}
+
+.alert-success {
+  color: var(--success);
+  background: var(--success-subtle-bg);
+  border: 1px solid var(--border-subtle);
+}
+
+.contest-modal-footer {
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.selected-tag {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 3px 8px;
-  border-radius: 4px;
-  background: #313244;
-  font-size: 0.8rem;
-  font-family: monospace;
-}
-
-.tag-remove {
-  background: none;
-  border: none;
-  color: #f38ba8;
-  cursor: pointer;
-  font-size: 1rem;
-  line-height: 1;
-  padding: 0;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border-subtle);
 }
 
 .btn-cancel,
 .btn-submit {
-  padding: 8px 18px;
-  border-radius: 6px;
-  border: 1px solid #45475a;
-  font-size: 0.9rem;
-  cursor: pointer;
-}
-
-.btn-cancel {
-  background: #1e1e2e;
-  color: #a6adc8;
+  padding: 8px 14px;
 }
 
 .btn-submit {
-  background: #313244;
-  color: #cdd6f4;
-  border-color: #89b4fa;
+  border-color: rgba(130, 143, 255, 0.45);
+  color: var(--text-primary);
 }
 
-.btn-submit:hover:not(:disabled) { background: #45475a; }
-.btn-submit:disabled { opacity: 0.5; cursor: not-allowed; }
-.btn-cancel:disabled { opacity: 0.5; cursor: not-allowed; }
+@media (max-width: 980px) {
+  .problem-pane-layout { grid-template-columns: 1fr; }
+  .problem-filter-row { grid-template-columns: 1fr; }
+  .form-row-2 { grid-template-columns: 1fr; }
+}
 </style>

@@ -164,3 +164,10 @@ All endpoints are under existing compat prefix `/api` in ai-agent-lite:
 ## Open Questions
 1. Keep rank fully visible during running state with “provisional” label (chosen for MVP).
 2. Do not add freeze board/rejudge in this round.
+
+## Follow-up UX Expansion (2026-05-19)
+Contest information architecture and visual redesign requirements are tracked in:
+- `specs/014-contest-page-experience/spec.md`
+- `specs/014-contest-page-experience/tasks.md`
+
+This MVP spec remains the backend/flow baseline; new page-structure and light-theme texture work should follow Spec 014.
