@@ -71,6 +71,12 @@ const contestStatusText = (status) => {
   return '-'
 }
 
+const formatContestTimeRange = (contest) => {
+  const start = contest?.start_time || '-'
+  const end = contest?.end_time || '-'
+  return `${start} ~ ${end}`
+}
+
 const sortedContestList = computed(() => {
   const rows = Array.isArray(contestList.value) ? [...contestList.value] : []
   return rows.sort((a, b) => {
@@ -308,6 +314,20 @@ const handleCollapseToggle = () => {
   listCollapsed.value = !listCollapsed.value
 }
 
+const handleContestCardKeydown = (event, contestId) => {
+  if (event.key === 'Enter' || event.key === ' ') {
+    event.preventDefault()
+    handleContestSelect(contestId)
+  }
+}
+
+const handleProblemCardKeydown = (event, problem) => {
+  if (event.key === 'Enter' || event.key === ' ') {
+    event.preventDefault()
+    handleContestProblemPick(problem)
+  }
+}
+
 let timerHandle = null
 onMounted(() => {
   timerHandle = window.setInterval(() => {
@@ -333,8 +353,19 @@ onUnmounted(() => {
             <span class="contest-list-count">{{ sortedContestList.length }} 场</span>
           </div>
           <div class="contest-list-head-actions">
-            <button class="mini-btn" @click="handleCollapseToggle">{{ listCollapsed ? '展开' : '折叠' }}</button>
-            <button v-if="isAdmin && !listCollapsed" class="mini-btn primary" @click="showContestCreateModal = true">新增比赛</button>
+            <button
+              v-if="isAdmin && !listCollapsed"
+              class="mini-btn primary"
+              @click="showContestCreateModal = true"
+            >新增比赛</button>
+            <button
+              class="icon-btn collapse-btn"
+              @click="handleCollapseToggle"
+              :title="listCollapsed ? '展开比赛列表' : '折叠比赛列表'"
+              :aria-label="listCollapsed ? '展开比赛列表' : '折叠比赛列表'"
+            >
+              <span class="collapse-icon" :class="{ collapsed: listCollapsed }">▸</span>
+            </button>
           </div>
         </div>
 
@@ -345,23 +376,28 @@ onUnmounted(() => {
               :key="item.id"
               class="contest-card-item"
               :class="{ active: String(item.id) === String(currentContestId) }"
+              role="button"
+              tabindex="0"
+              @click="handleContestSelect(item.id)"
+              @keydown="handleContestCardKeydown($event, item.id)"
             >
-              <button class="contest-card-main" @click="handleContestSelect(item.id)">
-                <div class="contest-card-title-row">
-                  <strong>{{ item.title }}</strong>
-                  <span class="contest-badge" :class="deriveContestStatus(item)">{{ contestStatusText(deriveContestStatus(item)) }}</span>
+              <div class="contest-card-topbar">
+                <span class="contest-badge" :class="deriveContestStatus(item)">{{ contestStatusText(deriveContestStatus(item)) }}</span>
+                <div class="contest-card-actions">
+                  <button class="mini-btn" @click.stop="handleContestSelect(item.id); showContestDetailModal = true">详情</button>
+                  <button
+                    class="mini-btn"
+                    :disabled="isCardJoinDisabled(item)"
+                    :title="cardJoinTitle(item)"
+                    @click.stop="handleContestQuickJoin(item)"
+                  >{{ getCardJoinLabel(item) }}</button>
                 </div>
-                <div class="contest-card-meta">{{ item.start_time }} ~ {{ item.end_time }}</div>
-              </button>
-
-              <div class="contest-card-actions">
-                <button class="mini-btn" @click="handleContestSelect(item.id); showContestDetailModal = true">详情</button>
-                <button
-                  class="mini-btn"
-                  :disabled="isCardJoinDisabled(item)"
-                  :title="cardJoinTitle(item)"
-                  @click="handleContestQuickJoin(item)"
-                >{{ getCardJoinLabel(item) }}</button>
+              </div>
+              <div class="contest-card-main">
+                <div class="contest-card-title-row">
+                  <strong class="contest-card-title">{{ item.title }}</strong>
+                </div>
+                <div class="contest-card-meta">{{ formatContestTimeRange(item) }}</div>
               </div>
             </article>
             <div class="empty" v-if="!sortedContestList.length">暂无比赛</div>
@@ -393,8 +429,13 @@ onUnmounted(() => {
                 <div class="panel-head-right">
                   <span class="contest-badge" :class="activeContestStatus">{{ contestStatusText(activeContestStatus) }}</span>
                   <span class="contest-timer-chip">{{ contestTimerText }}</span>
-                  <button class="mini-btn" @click="contestInfoCollapsed = !contestInfoCollapsed">
-                    {{ contestInfoCollapsed ? '展开信息' : '折叠信息' }}
+                  <button
+                    class="icon-btn"
+                    @click="contestInfoCollapsed = !contestInfoCollapsed"
+                    :title="contestInfoCollapsed ? '展开比赛信息' : '折叠比赛信息'"
+                    :aria-label="contestInfoCollapsed ? '展开比赛信息' : '折叠比赛信息'"
+                  >
+                    <span class="collapse-icon" :class="{ collapsed: contestInfoCollapsed }">▸</span>
                   </button>
                 </div>
               </div>
@@ -418,72 +459,100 @@ onUnmounted(() => {
                   <div class="running-problem-column">
                     <h4>赛题列表</h4>
                     <div class="contest-problem-list">
-                      <button
+                      <article
                         v-for="p in (contestDetail.problems || [])"
                         :key="p._id"
                         class="contest-problem-item"
                         :class="{ active: String(selectedContestProblemId) === String(p._id) }"
+                        role="button"
+                        tabindex="0"
                         @click="handleContestProblemPick(p)"
+                        @keydown="(event) => handleProblemCardKeydown(event, p)"
                       >
-                        <span>{{ p._id }}</span>
+                        <div class="contest-problem-card-id">{{ p._id }}</div>
                         <strong>{{ p.title }}</strong>
-                      </button>
+                      </article>
                     </div>
                   </div>
 
                   <div class="running-submit-column">
-                    <div class="contest-problem-detail" v-if="selectedContestProblem">
-                      <div class="problem-detail-top">
-                        <div class="card-title">{{ selectedContestProblem.title }}</div>
-                        <div class="card-subtitle">Problem ID: {{ selectedContestProblem._id }}</div>
-                      </div>
-                      <div class="problem-section" v-if="selectedProblemDescription && selectedProblemDescription !== '暂无题目描述'">
-                        <h4 class="problem-section-title">Description</h4>
-                        <div class="problem-description" v-html="selectedProblemDescriptionHtml" />
-                      </div>
-                    </div>
-
-                    <div class="contest-submit">
-                      <div class="contest-submit-hint" v-if="!canSubmitContest">{{ contestSubmitBlockReason }}</div>
-                      <div class="lang-select-wrap" v-if="canSubmitContest">
-                        <div
-                          class="lang-select-trigger"
-                          :class="{ open: langDropdownOpen }"
-                          @click="langDropdownOpen = !langDropdownOpen"
-                          tabindex="0"
-                          role="combobox"
-                          :aria-expanded="langDropdownOpen"
-                        >
-                          <span class="lang-select-label">{{ activeSubmitLanguage }}</span>
-                          <span class="lang-select-arrow">▼</span>
+                    <div class="contest-submit-layout" v-if="selectedContestProblem">
+                      <div class="contest-problem-detail">
+                        <div class="problem-detail-top">
+                          <div class="card-title">{{ selectedContestProblem.title }}</div>
+                          <div class="card-subtitle">Problem ID: {{ selectedContestProblem._id }}</div>
                         </div>
-                        <div v-if="langDropdownOpen" class="lang-select-dropdown" @mouseleave="langDropdownOpen = false">
-                          <div
+                        <div class="problem-section" v-if="selectedProblemDescription && selectedProblemDescription !== '暂无题目描述'">
+                          <h4 class="problem-section-title">Description</h4>
+                          <div class="problem-description" v-html="selectedProblemDescriptionHtml" />
+                        </div>
+                      </div>
+
+                      <div class="submit-layout">
+                        <div class="contest-submit">
+                          <div class="contest-submit-hint" v-if="!canSubmitContest">{{ contestSubmitBlockReason }}</div>
+                          <div class="lang-select-wrap" v-if="canSubmitContest">
+                            <div
+                              class="lang-select-trigger"
+                              :class="{ open: langDropdownOpen }"
+                              @click="langDropdownOpen = !langDropdownOpen"
+                              tabindex="0"
+                              role="combobox"
+                              :aria-expanded="langDropdownOpen"
+                            >
+                              <span class="lang-select-label">{{ activeSubmitLanguage }}</span>
+                              <span class="lang-select-arrow">▼</span>
+                            </div>
+                            <div v-if="langDropdownOpen" class="lang-select-dropdown" @mouseleave="langDropdownOpen = false">
+                              <div
+                                v-for="lang in ALL_LANGUAGES"
+                                :key="`contest-${lang}`"
+                                class="lang-select-option"
+                                :class="{ selected: activeSubmitLanguage === lang }"
+                                @click="activeSubmitLanguage = lang; langDropdownOpen = false"
+                              >{{ lang }}</div>
+                            </div>
+                          </div>
+
+                          <CodeEditor
+                            v-if="canSubmitContest"
                             v-for="lang in ALL_LANGUAGES"
-                            :key="`contest-${lang}`"
-                            class="lang-select-option"
-                            :class="{ selected: activeSubmitLanguage === lang }"
-                            @click="activeSubmitLanguage = lang; langDropdownOpen = false"
-                          >{{ lang }}</div>
+                            :key="`contest-editor-${lang}`"
+                            v-show="activeSubmitLanguage === lang"
+                            v-model="codes[lang]"
+                            class="oj-code-editor"
+                            :language="lang"
+                            placeholder="Enter your source code here"
+                          />
+
+                          <div class="submit-action-row" v-if="canSubmitContest">
+                            <button :disabled="submitLoading" @click="handleContestSubmitCode">{{ submitLoading ? '提交中...' : '提交代码' }}</button>
+                          </div>
+
+                          <div class="error" v-if="activeSubmitState.message && !submitResult">{{ activeSubmitState.message }}</div>
+                        </div>
+
+                        <div class="submit-result-area scrollbar-unified">
+                          <div class="submit-result-empty" v-if="submitLoading">
+                            <div class="result-spinner"></div>
+                            <span>Judging...</span>
+                          </div>
+                          <div class="submit-result-panel" v-else-if="submitResult" :class="`result-${String(submitResult.label || '').toLowerCase()}`">
+                            <div class="result-header">
+                              <span class="result-label">{{ submitResult.label }}</span>
+                            </div>
+                            <div class="result-stats-row">
+                              <div class="result-stat"><span class="stat-label">Score</span><span class="stat-value">{{ submitResult.score }}</span></div>
+                              <div class="result-stat"><span class="stat-label">Time</span><span class="stat-value">{{ submitResult.timeCost }}ms</span></div>
+                              <div class="result-stat"><span class="stat-label">Memory</span><span class="stat-value">{{ submitResult.memoryCost }}KB</span></div>
+                            </div>
+                            <pre class="result-error-block" v-if="submitResult.errInfo">{{ submitResult.errInfo }}</pre>
+                          </div>
+                          <div class="submit-result-empty" v-else>
+                            <span>暂无提交结果</span>
+                          </div>
                         </div>
                       </div>
-
-                      <CodeEditor
-                        v-if="canSubmitContest"
-                        v-for="lang in ALL_LANGUAGES"
-                        :key="`contest-editor-${lang}`"
-                        v-show="activeSubmitLanguage === lang"
-                        v-model="codes[lang]"
-                        class="oj-code-editor"
-                        :language="lang"
-                        placeholder="Enter your source code here"
-                      />
-
-                      <div class="submit-action-row" v-if="canSubmitContest">
-                        <button :disabled="submitLoading" @click="handleContestSubmitCode">{{ submitLoading ? '提交中...' : '提交代码' }}</button>
-                      </div>
-
-                      <div class="error" v-if="activeSubmitState.message && !submitResult">{{ activeSubmitState.message }}</div>
                     </div>
                   </div>
                 </div>
