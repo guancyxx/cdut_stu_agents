@@ -15,6 +15,17 @@ Spec: `specs/013-light-theme/spec.md`
     - `frontend-vue-ai-chat/src/components/ThemeToggle.vue`
     - `frontend-vue-ai-chat/src/App.vue`
 
+- [x] Task 1.1: Increase theme icon visual weight and button hit area for better discoverability.
+  - Acceptance:
+    - Theme icon keeps sun/moon semantics and remains centered.
+    - Icon stroke and size are visibly stronger in both light/dark themes.
+    - Button tap/click area is at least 42x42.
+  - Verify:
+    - Code inspection in `ThemeToggle.vue` (`.theme-icon` + button dimensions).
+    - Docker frontend build succeeds.
+  - Files:
+    - `frontend-vue-ai-chat/src/components/ThemeToggle.vue`
+
 ## Phase 2: Light theme consistency audit and fix
 
 - [x] Task 2: Replace hardcoded dark-only values in global/app-level style blocks with theme variables.
