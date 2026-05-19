@@ -84,6 +84,13 @@ Implement a full UX refresh for the contest page and refine light theme texture 
 7. Pre-start shows countdown; running shows problem list + submit area split.
 8. Light mode visuals are less pale and visibly layered while preserving readability.
 9. Docker frontend build succeeds.
+10. OJ 提交区的编辑器与提交按钮必须是上下两排布局，按钮不得与编辑器同排。
+11. OJ 提交区编辑器在任意断点下不得超出父容器宽度。
+12. 亮色主题下编辑题目弹窗不得出现暗色背景，需跟随主题变量。
+13. 折叠操作按钮必须位于区域最右侧，采用图标按钮形态。
+14. 比赛卡片需要提升信息层级与排版，整卡可点击，操作按钮固定在右上角并同排显示。
+15. 赛题区在比赛进行中需撑满可用高度，题目列表必须采用卡片式并支持整卡点击。
+16. 比赛进行中右侧区域需同时展示代码编辑区与 OJ 提交结果区，并共同撑满父容器。
 
 ## Verification
 
