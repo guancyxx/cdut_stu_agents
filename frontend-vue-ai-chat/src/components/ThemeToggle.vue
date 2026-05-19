@@ -14,17 +14,16 @@ const { theme, toggleTheme } = useTheme()
     <!-- Sun icon (shown in dark mode — click to switch to light) -->
     <svg
       v-if="theme === 'dark'"
+      class="theme-icon"
       xmlns="http://www.w3.org/2000/svg"
-      width="20"
-      height="20"
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      stroke-width="2"
+      stroke-width="2.4"
       stroke-linecap="round"
       stroke-linejoin="round"
     >
-      <circle cx="12" cy="12" r="5" />
+      <circle cx="12" cy="12" r="4.8" />
       <line x1="12" y1="1" x2="12" y2="3" />
       <line x1="12" y1="21" x2="12" y2="23" />
       <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
@@ -38,17 +37,16 @@ const { theme, toggleTheme } = useTheme()
     <!-- Moon icon (shown in light mode — click to switch to dark) -->
     <svg
       v-else
+      class="theme-icon"
       xmlns="http://www.w3.org/2000/svg"
-      width="20"
-      height="20"
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      stroke-width="2"
+      stroke-width="2.4"
       stroke-linecap="round"
       stroke-linejoin="round"
     >
-      <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+      <path d="M20.2 14.1A8.4 8.4 0 1 1 9.9 3.8a7 7 0 1 0 10.3 10.3z" />
     </svg>
   </button>
 </template>
@@ -58,10 +56,10 @@ const { theme, toggleTheme } = useTheme()
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 38px;
-  height: 38px;
+  width: 42px;
+  height: 42px;
   border: 1px solid var(--border-standard);
-  border-radius: 10px;
+  border-radius: 12px;
   background: var(--bg-soft);
   color: var(--text-secondary);
   cursor: pointer;
@@ -73,5 +71,10 @@ const { theme, toggleTheme } = useTheme()
   background: var(--bg-soft-hover);
   border-color: var(--brand-hover);
   color: var(--text-primary);
+}
+
+.theme-icon {
+  width: 22px;
+  height: 22px;
 }
 </style>
