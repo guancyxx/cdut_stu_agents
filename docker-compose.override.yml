@@ -1,8 +1,0 @@
-services:
-  ai-agent-lite:
-    environment:
-      - LITE_DATABASE_URL=postgresql+asyncpg://onlinejudge:onlinejudge@cdut-oj-postgres:5432/onlinejudge
-
-  ai-agent-celery-worker:
-    environment:
-      - LITE_DATABASE_URL=postgresql+asyncpg://onlinejudge:onlinejudge@cdut-oj-postgres:5432/onlinejudge

@@ -14,14 +14,14 @@ services:
       - ./data/training:/app/data/training
       - ./data/chat_history:/app/data/chat_history
       - ./data/problems:/app/data/problems
-      - ./data/test_cases:/data/test_cases
+      - ${TEST_CASES_HOST_PATH:-./data/test_cases}:/data/test_cases
     environment:
       - TZ=Asia/Shanghai
       - LITE_LLM_BASE_URL=${UTU_LLM_BASE_URL}
       - LITE_LLM_API_KEY=${UTU_LLM_API_KEY}
       - LITE_LLM_MODEL=${UTU_LLM_MODEL}
       - LITE_LLM_TIMEOUT=30
-      - LITE_DATABASE_URL=postgresql+asyncpg://onlinejudge:onlinejudge@cdut-oj-postgres:5432/onlinejudge
+      - LITE_DATABASE_URL=postgresql+asyncpg://onlinejudge:onlinejudge@${LITE_DB_HOST:-cdut-postgres}:5432/onlinejudge
       - LITE_DB_SCHEMA=ai_agent
       - LITE_CELERY_BROKER=redis://cdut-redis:6379/1
       - LITE_CELERY_BACKEND=redis://cdut-redis:6379/2
@@ -40,14 +40,18 @@ services:
       context: ./ai-agent-lite
       dockerfile: Dockerfile
     container_name: cdut-ai-agent-celery-worker
-    command: ["celery", "-A", "app.celery_app", "worker", "--loglevel=info", "-Q", "audit", "--concurrency=1"]
+    command: ["celery", "-A", "app.celery_app", "worker", "--loglevel=info", "--concurrency=1", "-Q", "celery,audit"]
     volumes:
+      - ./.env:/app/.env
       - ./ai-agent-lite/app:/app/app
+      - ./data/submissions:/app/data/submissions
+      - ./data/training:/app/data/training
+      - ./data/chat_history:/app/data/chat_history
       - ./data/problems:/app/data/problems
-      - ./data/test_cases:/data/test_cases
+      - ${TEST_CASES_HOST_PATH:-./data/test_cases}:/data/test_cases
     environment:
       - TZ=Asia/Shanghai
-      - LITE_DATABASE_URL=postgresql+asyncpg://onlinejudge:onlinejudge@cdut-oj-postgres:5432/onlinejudge
+      - LITE_DATABASE_URL=postgresql+asyncpg://onlinejudge:onlinejudge@${LITE_DB_HOST:-cdut-postgres}:5432/onlinejudge
       - LITE_DB_SCHEMA=ai_agent
       - LITE_CELERY_BROKER=redis://cdut-redis:6379/1
       - LITE_CELERY_BACKEND=redis://cdut-redis:6379/2
@@ -111,6 +115,8 @@ services:
     privileged: true
     ports:
       - "8899:8899"
+    volumes:
+      - ${TEST_CASES_HOST_PATH:-./data/test_cases}:/data/test_cases
     restart: unless-stopped
     networks:
       - cdut-network
