@@ -1,6 +1,6 @@
 # Spec: Light Theme — 013
 
-Status: draft | Author: Hermes Agent | Date: 2026-05-19
+Status: approved | Author: Hermes Agent | Date: 2026-05-19
 
 ## Objective
 

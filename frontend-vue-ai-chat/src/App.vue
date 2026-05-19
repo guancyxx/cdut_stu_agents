@@ -257,9 +257,9 @@ onBeforeUnmount(() => {
 .btn-create-contest {
   padding: 8px 18px;
   border-radius: 6px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: #191a1b;
-  color: #f7f8f8;
+  border: 1px solid var(--border-standard);
+  background: var(--bg-surface);
+  color: var(--text-primary);
   font-size: 0.9rem;
   cursor: pointer;
   font-weight: 500;
@@ -267,6 +267,6 @@ onBeforeUnmount(() => {
 }
 
 .btn-create-contest:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--bg-soft-hover);
 }
 </style>
