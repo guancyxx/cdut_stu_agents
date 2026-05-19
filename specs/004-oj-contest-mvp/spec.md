@@ -140,7 +140,27 @@ All endpoints are under existing compat prefix `/api` in ai-agent-lite:
 5. Normal non-contest OJ submit path still works.
 6. Docker build and smoke checks pass.
 
+## Known Gaps (2026-05-19 audit)
+1. Contest page lacks lifecycle guidance and action gating:
+   - upcoming/running/ended state exists but no explicit operator guidance text.
+   - contest create entry is exposed globally for admins but without workflow hints.
+2. No countdown/remaining time display in contest detail despite spec objective.
+3. Rank visibility is not gated by contest state (currently visible throughout), inconsistent with “after contest ends” objective.
+4. Join/submit controls are not fully state-driven (e.g., upcoming/ended needs explicit disabled state + reason).
+
+## Additional Acceptance Criteria (this round)
+1. Contest detail must show clear lifecycle status + countdown/remaining text.
+2. Join button behavior:
+   - upcoming: disabled with reason
+   - running: enabled (if not joined)
+   - ended: disabled with reason
+3. Submit area behavior:
+   - hidden or read-only unless contest is running and user joined.
+   - explicit warning text for disallowed states.
+4. Rank area behavior:
+   - for MVP keep list available, but add state banner clarifying provisional/final semantics by lifecycle.
+5. Admin create contest workflow must include immediate refresh/select/focus after creation.
+
 ## Open Questions
-1. Contest creation UI should be in current `admin` page as a new section (default for MVP).
-2. Ranking display in user UI will be basic table (no chart).
-3. MVP does not include hidden test freeze or post-contest rejudge.
+1. Keep rank fully visible during running state with “provisional” label (chosen for MVP).
+2. Do not add freeze board/rejudge in this round.

@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import CodeEditor from '../components/CodeEditor.vue'
 import ContestCreateModal from '../components/ContestCreateModal.vue'
 import { useOjStore } from '../stores/ojStore'
@@ -41,6 +41,7 @@ const activeSubmitLanguage = ref(DEFAULT_LANGUAGE)
 const codes = ref(Object.fromEntries(ALL_LANGUAGES.map((l) => [l, ''])))
 const templateRawByLanguage = ref(Object.fromEntries(ALL_LANGUAGES.map((l) => [l, ''])))
 const activeSubmitState = ref({ type: '', message: '' })
+const timerTick = ref(0)
 
 const selectedContest = computed(() => {
   const cid = String(currentContestId.value || '')
@@ -55,6 +56,78 @@ const contestStatusText = computed(() => {
   if (status === 'ended') return '已结束'
   return '-'
 })
+
+const contestStatusKey = computed(() => String(contestDetail.value?.status || selectedContest.value?.status || '').toLowerCase())
+
+const parseContestDate = (value) => {
+  if (!value) return null
+  const dt = new Date(String(value))
+  if (Number.isNaN(dt.getTime())) return null
+  return dt
+}
+
+const contestTimerText = computed(() => {
+  void timerTick.value
+  const status = contestStatusKey.value
+  const now = Date.now()
+  const startAt = parseContestDate(contestDetail.value?.start_time || selectedContest.value?.start_time)
+  const endAt = parseContestDate(contestDetail.value?.end_time || selectedContest.value?.end_time)
+  if (status === 'upcoming' && startAt) {
+    const diff = Math.max(0, startAt.getTime() - now)
+    return `距离开始：${formatDuration(diff)}`
+  }
+  if (status === 'running' && endAt) {
+    const diff = Math.max(0, endAt.getTime() - now)
+    return `剩余时间：${formatDuration(diff)}`
+  }
+  if (status === 'ended') {
+    return '比赛已结束'
+  }
+  return '时间信息不可用'
+})
+
+const canJoinContest = computed(() => {
+  if (!contestDetail.value) return false
+  if (contestDetail.value.joined) return false
+  return contestStatusKey.value === 'running'
+})
+
+const joinDisabledReason = computed(() => {
+  if (!contestDetail.value || contestDetail.value.joined) return ''
+  if (contestStatusKey.value === 'upcoming') return '比赛未开始，暂不可报名'
+  if (contestStatusKey.value === 'ended') return '比赛已结束，无法报名'
+  return ''
+})
+
+const canSubmitContest = computed(() => {
+  if (!contestDetail.value || !selectedContestProblem.value) return false
+  return contestStatusKey.value === 'running' && Boolean(contestDetail.value.joined)
+})
+
+const contestSubmitBlockReason = computed(() => {
+  if (!contestDetail.value) return '请先选择一个比赛。'
+  if (contestStatusKey.value === 'upcoming') return '比赛尚未开始，暂不可提交。'
+  if (contestStatusKey.value === 'ended') return '比赛已结束，提交入口已关闭。'
+  if (!contestDetail.value.joined) return '请先完成报名后再提交。'
+  return ''
+})
+
+const rankBannerText = computed(() => {
+  if (contestStatusKey.value === 'running') return '当前排行榜为进行中临时榜单'
+  if (contestStatusKey.value === 'ended') return '当前排行榜为最终榜单'
+  if (contestStatusKey.value === 'upcoming') return '比赛未开始，排行榜仅供参考'
+  return ''
+})
+
+const formatDuration = (ms) => {
+  const totalSeconds = Math.max(0, Math.floor(Number(ms || 0) / 1000))
+  const days = Math.floor(totalSeconds / 86400)
+  const hours = Math.floor((totalSeconds % 86400) / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
+  const seconds = totalSeconds % 60
+  if (days > 0) return `${days}天 ${String(hours).padStart(2, '0')}时 ${String(minutes).padStart(2, '0')}分`
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
+}
 
 const selectedContestProblem = computed(() => {
   const rows = Array.isArray(contestDetail.value?.problems) ? contestDetail.value.problems : []
@@ -191,6 +264,8 @@ const onContestCreated = async (result) => {
   await fetchContests('all')
   if (result?.contest_id) {
     currentContestId.value = result.contest_id
+    await fetchContestDetail(result.contest_id)
+    await fetchContestRank(result.contest_id)
   }
 }
 
@@ -202,6 +277,20 @@ const selectedProblemDescription = computed(() => {
 })
 
 const selectedProblemDescriptionHtml = computed(() => sanitizeHtmlContent(selectedProblemDescription.value))
+
+let timerHandle = null
+onMounted(() => {
+  timerHandle = window.setInterval(() => {
+    timerTick.value += 1
+  }, 1000)
+})
+
+onUnmounted(() => {
+  if (timerHandle) {
+    window.clearInterval(timerHandle)
+    timerHandle = null
+  }
+})
 </script>
 
 <template>
@@ -240,7 +329,15 @@ const selectedProblemDescriptionHtml = computed(() => sanitizeHtmlContent(select
           </div>
           <div class="contest-actions">
             <span class="contest-badge" :class="contestDetail.status">{{ contestStatusText }}</span>
-            <button v-if="!contestDetail.joined" @click="handleContestJoin">报名</button>
+            <span class="contest-timer">{{ contestTimerText }}</span>
+            <button
+              v-if="!contestDetail.joined"
+              :disabled="!canJoinContest"
+              :title="joinDisabledReason"
+              @click="handleContestJoin"
+            >
+              报名
+            </button>
           </div>
         </div>
 
@@ -275,7 +372,8 @@ const selectedProblemDescriptionHtml = computed(() => sanitizeHtmlContent(select
         <!-- Submit area -->
         <div class="contest-submit" v-if="contestDetail && selectedContestProblem">
           <h4>比赛提交 - {{ selectedContestProblem._id }}</h4>
-          <div class="lang-select-wrap">
+          <div class="contest-submit-hint" v-if="!canSubmitContest">{{ contestSubmitBlockReason }}</div>
+          <div class="lang-select-wrap" v-if="canSubmitContest">
             <div
               class="lang-select-trigger"
               :class="{ open: langDropdownOpen }"
@@ -298,6 +396,7 @@ const selectedProblemDescriptionHtml = computed(() => sanitizeHtmlContent(select
             </div>
           </div>
           <CodeEditor
+            v-if="canSubmitContest"
             v-for="lang in ALL_LANGUAGES"
             :key="`contest-editor-${lang}`"
             v-show="activeSubmitLanguage === lang"
@@ -306,7 +405,7 @@ const selectedProblemDescriptionHtml = computed(() => sanitizeHtmlContent(select
             :language="lang"
             placeholder="Enter your source code here"
           />
-          <div class="submit-action-row">
+          <div class="submit-action-row" v-if="canSubmitContest">
             <button :disabled="submitLoading" @click="handleContestSubmitCode">{{ submitLoading ? '提交中...' : '提交代码' }}</button>
           </div>
           <div class="error" v-if="activeSubmitState.message && !submitResult">{{ activeSubmitState.message }}</div>
@@ -318,6 +417,7 @@ const selectedProblemDescriptionHtml = computed(() => sanitizeHtmlContent(select
 
       <div class="contest-rank card">
         <h3>排行榜</h3>
+        <div class="rank-banner" v-if="rankBannerText">{{ rankBannerText }}</div>
         <div v-if="contestRankLoading" class="empty">加载中...</div>
         <div v-else class="rank-list">
           <div class="rank-row rank-head">

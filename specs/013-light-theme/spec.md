@@ -127,6 +127,19 @@ Additional variables needed for hardcoded colors currently in CSS:
 5. No impact on auth, session, or submission business state
 6. Docker build succeeds with zero new warnings
 
+## Known Gaps (2026-05-19 audit)
+
+1. Contest submit `CodeEditor` is hard-pinned to `oneDark`, causing obvious dark editor background under light theme.
+2. Admin account form fields (`email`, `student_number`, `admin_type`) use hardcoded dark background in CSS:
+   - `.admin-account-form-grid input, .admin-account-form-grid select { background: rgba(16, 18, 20, 0.9); }`
+3. These two gaps violate the requirement that light theme must be visually consistent across all business-critical forms.
+
+## Additional Acceptance Criteria (this round)
+
+1. `CodeEditor.vue` must switch extension/theme by current UI theme (`light`/`dark`) instead of always using one dark theme.
+2. Admin account page create/edit inputs and selects must use theme tokens (`--input-bg`, `--input-bg-focus`, `--text-primary`) only.
+3. In light mode, contest code input and admin account inputs/selects cannot render dark-only background blocks.
+
 ## Open Questions
 
 - None — all decisions resolved via grill/discovery

@@ -48,13 +48,29 @@
   - `frontend-vue-ai-chat/src/pages/ProblemsetPage.vue`
   - `frontend-vue-ai-chat/src/assets/main.css`
 
-## Task 7 [S] Docker 验证与回归
-- 目标：构建、重启、路由/权限/功能验收。
-- 验收：所有成功标准满足。
-- 命令：
-  - `docker compose build vue-ai-chat`
-  - `docker compose up -d --force-recreate vue-ai-chat`
+## Task 7 [S] 账户管理流程细化（状态反馈与权限边界）
+- 目标：确保账户 CRUD 在 UI 反馈、按钮状态、权限边界上行为一致。
+- 验收：
+  - create/edit/delete 均有明确 success/error 提示。
+  - 提交中按钮禁用，完成后状态恢复。
+  - 普通管理员无法创建/提升 super admin（前后端双重约束）。
+- 文件：
+  - `frontend-vue-ai-chat/src/pages/AdminPage.vue`
+  - `ai-agent-lite/app/routers/admin_accounts.py`（仅在需要修补后端约束时）
 
-## Task 8 [S] Git 流程收尾
+## Task 8 [S] 账户管理表单亮色主题修复
+- 目标：修复账户管理表单在亮色主题下暗底输入框。
+- 验收：`email/student_number/admin_type` 输入控件使用主题变量，不再硬编码暗色背景。
+- 文件：
+  - `frontend-vue-ai-chat/src/assets/main.css`
+
+## Task 9 [S] Docker 验证与回归
+- 目标：构建、重启、路由/权限/功能验收。
+- 验收：所有成功标准满足，覆盖账户权限矩阵。
+- 命令：
+  - `docker compose build vue-ai-chat ai-agent-lite`
+  - `docker compose up -d --force-recreate vue-ai-chat ai-agent-lite`
+
+## Task 10 [S] Git 流程收尾
 - 目标：提交、推送、PR。
 - 验收：提供 PR 链接与验证结果。

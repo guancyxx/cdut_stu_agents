@@ -73,9 +73,39 @@ Depends on: `specs/004-oj-contest-mvp/spec.md`
 ## Checkpoint B
 - End-to-end contest MVP flow works in local Docker stack.
 
-## Phase 3: Regression and Ship
+## Phase 3: Lifecycle UX completion (2026-05-19)
 
-### Task 7 [S] Regression and docs sync
+### Task 7 [M] Contest lifecycle state UX (countdown + status hints)
+- Acceptance:
+  - Contest detail shows upcoming/running/ended lifecycle hint with countdown/remaining text.
+  - Display text updates correctly by `start_time/end_time` and current time.
+- Verify:
+  - Manual check on upcoming/running/ended sample contests.
+- Files:
+  - `frontend-vue-ai-chat/src/pages/ContestPage.vue`
+
+### Task 8 [M] Join/submit/rank action gating by lifecycle
+- Acceptance:
+  - Join button disabled with clear reason when upcoming/ended.
+  - Submit area only available for running + joined user; otherwise read-only guidance shown.
+  - Rank panel shows lifecycle banner (provisional/final semantics).
+- Verify:
+  - UI interaction smoke through contest states.
+- Files:
+  - `frontend-vue-ai-chat/src/pages/ContestPage.vue`
+  - `frontend-vue-ai-chat/src/assets/main.css` (if status style needed)
+
+### Task 9 [S] Admin create-contest post-create workflow polish
+- Acceptance:
+  - After create success, contest list refreshes and newly created contest is focused/selected.
+- Verify:
+  - Create once and verify selected contest detail/rank refresh.
+- Files:
+  - `frontend-vue-ai-chat/src/pages/ContestPage.vue`
+
+## Phase 4: Regression and Ship
+
+### Task 10 [S] Regression and docs sync
 - Acceptance:
   - Non-contest practice mode unaffected.
   - Spec/docs updated with final API notes.
@@ -84,7 +114,7 @@ Depends on: `specs/004-oj-contest-mvp/spec.md`
 - Files:
   - `specs/004-oj-contest-mvp/spec.md` (final touch)
 
-### Task 8 [S] PR and task-board state sync
+### Task 11 [S] PR and task-board state sync
 - Acceptance:
   - Commit, push branch, create PR.
   - Update ShuJieTai task `6c621441-3b3f-4780-8055-0493244d796e` to completed after merge-ready.
@@ -92,4 +122,4 @@ Depends on: `specs/004-oj-contest-mvp/spec.md`
   - PR URL + task PATCH response 200.
 
 ## Dependency Graph
-Task1 -> Task2 -> Task3 -> Task4 -> Task5 -> Task6 -> Task7 -> Task8
+Task1 -> Task2 -> Task3 -> Task4 -> Task5 -> Task6 -> Task7 -> Task8 -> Task9 -> Task10 -> Task11

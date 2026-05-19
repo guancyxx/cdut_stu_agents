@@ -127,6 +127,27 @@
    - 编辑题目保存成功，题库刷新可见。
    - 账户 CRUD 流程完整可用。
 
+## Known Gaps (2026-05-19 audit)
+1. Account management API and UI exist, but flow safeguards still need explicit contract confirmation in spec:
+   - create/edit/delete success/error feedback consistency;
+   - loading-state button disable and optimistic reset behavior;
+   - non-super-admin privilege escalation guard is UI-enforced and must remain backend-enforced.
+2. Light theme mismatch remains for key account form controls (input/select background hardcoded dark).
+3. Account operation path lacks explicit verification checklist for full CRUD + permission boundary matrix.
+
+## Additional Acceptance Criteria (this round)
+1. Account create/edit/delete must each provide deterministic success/error message and refresh list once.
+2. Delete flow must keep guards:
+   - cannot delete current login account;
+   - backend must keep at least one super admin (already required, verify regression).
+3. Admin type privilege rules remain dual-enforced (frontend + backend).
+4. Account form controls must be fully theme-token based; no dark hardcode.
+5. Verification matrix must include:
+   - super admin creates admin/user;
+   - admin cannot create/promote super admin;
+   - self-delete blocked;
+   - CRUD happy path under docker runtime.
+
 ## Success Criteria
 
 1. 题库页面按钮文案变更为“搜索”。
@@ -134,3 +155,4 @@
 3. 管理员可对题目执行编辑并保存。
 4. `/admin` 页面完成账户管理能力并可稳定使用。
 5. 所有变更通过 Docker 构建、运行、接口与页面验证。
+6. 账户管理流程通过权限矩阵验证，且主题样式在亮色模式下无暗底输入控件。

@@ -5,6 +5,7 @@ import { oneDark } from '@codemirror/theme-one-dark'
 import { cpp } from '@codemirror/lang-cpp'
 import { java } from '@codemirror/lang-java'
 import { python } from '@codemirror/lang-python'
+import { useTheme } from '../composables/useTheme'
 
 const props = defineProps({
   modelValue: {
@@ -22,6 +23,7 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['update:modelValue'])
+const { theme } = useTheme()
 
 const basicSetup = {
   lineNumbers: true,
@@ -47,10 +49,13 @@ const codeExtensions = computed(() => {
   return []
 })
 
-const editorExtensions = computed(() => [
-  oneDark,
-  ...codeExtensions.value
-])
+const editorExtensions = computed(() => {
+  const languageExtensions = [...codeExtensions.value]
+  if (theme.value === 'dark') {
+    return [oneDark, ...languageExtensions]
+  }
+  return languageExtensions
+})
 
 const handleCodeChange = (value) => {
   emit('update:modelValue', value)
