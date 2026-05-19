@@ -123,3 +123,8 @@ Depends on: `specs/004-oj-contest-mvp/spec.md`
 
 ## Dependency Graph
 Task1 -> Task2 -> Task3 -> Task4 -> Task5 -> Task6 -> Task7 -> Task8 -> Task9 -> Task10 -> Task11
+
+## Follow-up UX Expansion
+For contest-page information architecture redesign and light-theme texture polish, continue in:
+- `specs/014-contest-page-experience/spec.md`
+- `specs/014-contest-page-experience/tasks.md`
