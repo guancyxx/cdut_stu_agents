@@ -59,7 +59,10 @@
                   <div class="selected-problem-index">{{ idx + 1 }}</div>
                   <div class="selected-problem-main">
                     <div class="problem-id">{{ pid }}</div>
-                    <div class="problem-title">{{ selectedProblemMetaMap[pid]?.title || '未命名题目' }}</div>
+                    <div
+                      class="problem-title"
+                      :title="selectedProblemMetaMap[pid]?.title || '未命名题目'"
+                    >{{ selectedProblemMetaMap[pid]?.title || '未命名题目' }}</div>
                   </div>
                   <button class="remove-btn" @click="toggleProblem(pid)" :disabled="submitting">移除</button>
                 </div>
@@ -93,6 +96,7 @@
                   :key="p._id"
                   class="problem-grid-card"
                   :class="{ selected: isProblemSelected(p._id) }"
+                  :title="p.title || 'Untitled Problem'"
                   :disabled="submitting"
                   @click="toggleProblem(p._id)"
                 >
@@ -395,9 +399,13 @@ onMounted(() => {
 
 .selected-problem-main .problem-id { font-family: monospace; font-size: 12px; color: var(--brand); }
 .selected-problem-main .problem-title {
-  font-size: 12px;
-  color: var(--text-secondary);
-  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.35;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -439,9 +447,11 @@ onMounted(() => {
   border: 1px solid var(--border-subtle);
   border-radius: 8px;
   background: var(--bg-panel);
-  padding: 8px;
+  padding: 10px;
   display: grid;
-  gap: 8px;
+  grid-template-rows: auto auto 1fr;
+  gap: 10px;
+  align-content: start;
   cursor: pointer;
 }
 
@@ -472,11 +482,16 @@ onMounted(() => {
 
 .problem-id { font-size: 11px; color: var(--brand); font-family: monospace; }
 .problem-title {
-  font-size: 12px;
-  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
   line-height: 1.4;
-  min-height: 34px;
+  min-height: 36px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
   overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .problem-diff {

@@ -169,7 +169,11 @@ const selectedProblemDescription = computed(() => {
 })
 
 const selectedProblemDescriptionHtml = computed(() => sanitizeHtmlContent(selectedProblemDescription.value))
-const submitResult = computed(() => getSubmitResultForSession(currentSessionId.value))
+const contestSubmitSessionId = computed(() => {
+  const raw = String(currentSessionId.value || `contest:${currentContestId.value || 'global'}`)
+  return sanitizeTextInput(raw, 64)
+})
+const activeSubmitResult = computed(() => getSubmitResultForSession(contestSubmitSessionId.value))
 
 const getStarterCode = (problem, language) => {
   const tpl = problem?.template || {}
@@ -278,11 +282,11 @@ const handleContestSubmitCode = async () => {
   const normalizedCode = sanitizeTextInput(buildSubmissionCode(templateRaw, normalizedEditableCode), 20000)
 
   const result = await submitSolution({
-    problemId: selectedContestProblem.value.id,
+    problemId: Number(selectedContestProblem.value.id) || selectedContestProblem.value.problem_id || selectedContestProblem.value._id || selectedContestProblem.value.id,
     problemQueryId: selectedContestProblem.value._id,
     language: activeSubmitLanguage.value,
     code: normalizedCode,
-    sessionId: currentSessionId.value,
+    sessionId: contestSubmitSessionId.value,
     contestId: currentContestId.value
   })
 
@@ -529,7 +533,7 @@ onUnmounted(() => {
                             <button :disabled="submitLoading" @click="handleContestSubmitCode">{{ submitLoading ? '提交中...' : '提交代码' }}</button>
                           </div>
 
-                          <div class="error" v-if="activeSubmitState.message && !submitResult">{{ activeSubmitState.message }}</div>
+                          <div class="error" v-if="activeSubmitState.message && !activeSubmitResult">{{ activeSubmitState.message }}</div>
                         </div>
 
                         <div class="submit-result-area scrollbar-unified">
@@ -537,16 +541,16 @@ onUnmounted(() => {
                             <div class="result-spinner"></div>
                             <span>Judging...</span>
                           </div>
-                          <div class="submit-result-panel" v-else-if="submitResult" :class="`result-${String(submitResult.label || '').toLowerCase()}`">
+                          <div class="submit-result-panel" v-else-if="activeSubmitResult" :class="`result-${String(activeSubmitResult.label || '').toLowerCase()}`">
                             <div class="result-header">
-                              <span class="result-label">{{ submitResult.label }}</span>
+                              <span class="result-label">{{ activeSubmitResult.label }}</span>
                             </div>
                             <div class="result-stats-row">
-                              <div class="result-stat"><span class="stat-label">Score</span><span class="stat-value">{{ submitResult.score }}</span></div>
-                              <div class="result-stat"><span class="stat-label">Time</span><span class="stat-value">{{ submitResult.timeCost }}ms</span></div>
-                              <div class="result-stat"><span class="stat-label">Memory</span><span class="stat-value">{{ submitResult.memoryCost }}KB</span></div>
+                              <div class="result-stat"><span class="stat-label">Score</span><span class="stat-value">{{ activeSubmitResult.score }}</span></div>
+                              <div class="result-stat"><span class="stat-label">Time</span><span class="stat-value">{{ activeSubmitResult.timeCost }}ms</span></div>
+                              <div class="result-stat"><span class="stat-label">Memory</span><span class="stat-value">{{ activeSubmitResult.memoryCost }}KB</span></div>
                             </div>
-                            <pre class="result-error-block" v-if="submitResult.errInfo">{{ submitResult.errInfo }}</pre>
+                            <pre class="result-error-block" v-if="activeSubmitResult.errInfo">{{ activeSubmitResult.errInfo }}</pre>
                           </div>
                           <div class="submit-result-empty" v-else>
                             <span>暂无提交结果</span>
