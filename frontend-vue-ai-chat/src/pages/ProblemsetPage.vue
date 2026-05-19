@@ -16,7 +16,7 @@ const {
   isAdmin
 } = useOjStore()
 
-const { selectOrCreateProblemSession } = useChatStore()
+const { selectOrCreateProblemSession, sendProblemContextToAi } = useChatStore()
 
 const selectedTag = ref('')
 const showAdminWorkspaceModal = ref(false)
@@ -68,8 +68,19 @@ const visiblePages = computed(() => {
 
 const selectProblem = async (problem) => {
   if (!problem?._id) return
-  await fetchProblemDetail(String(problem._id))
-  selectOrCreateProblemSession(problem)
+  const detail = await fetchProblemDetail(String(problem._id))
+  const session = selectOrCreateProblemSession(problem)
+  if (session) {
+    const problemContext = {
+      ...problem,
+      ...(detail || {}),
+      _id: detail?._id || problem._id,
+      title: detail?.title || problem.title,
+      difficulty: detail?.difficulty || problem.difficulty,
+      description: detail?.description || detail?.problem_description || problem.description || ''
+    }
+    await sendProblemContextToAi(problemContext, { targetSessionId: session.id })
+  }
   router.push('/')
 }
 
