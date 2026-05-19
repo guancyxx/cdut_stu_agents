@@ -15,8 +15,8 @@ const { theme, toggleTheme } = useTheme()
     <svg
       v-if="theme === 'dark'"
       xmlns="http://www.w3.org/2000/svg"
-      width="18"
-      height="18"
+      width="20"
+      height="20"
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
@@ -39,8 +39,8 @@ const { theme, toggleTheme } = useTheme()
     <svg
       v-else
       xmlns="http://www.w3.org/2000/svg"
-      width="18"
-      height="18"
+      width="20"
+      height="20"
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
@@ -58,10 +58,10 @@ const { theme, toggleTheme } = useTheme()
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
+  width: 38px;
+  height: 38px;
   border: 1px solid var(--border-standard);
-  border-radius: 8px;
+  border-radius: 10px;
   background: var(--bg-soft);
   color: var(--text-secondary);
   cursor: pointer;
