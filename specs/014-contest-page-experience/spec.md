@@ -93,6 +93,8 @@ Implement a full UX refresh for the contest page and refine light theme texture 
 16. 比赛进行中右侧区域需同时展示代码编辑区与 OJ 提交结果区，并共同撑满父容器。
 17. 比赛卡片、赛题卡片与折叠图标按钮需要具备清晰的 hover/focus-visible/active 微交互反馈。
 18. 键盘导航到整卡可点击元素时，需有可见焦点态，不得仅依赖浏览器默认样式。
+19. 比赛页交互动效时长与缓动曲线需通过统一 motion tokens 管理，避免同类组件各自定义。
+20. 比赛卡片、赛题卡片、折叠图标按钮与比赛卡片操作按钮需使用同一动效节奏体系。
 
 ## Verification
 
@@ -107,7 +109,8 @@ Implement a full UX refresh for the contest page and refine light theme texture 
   - open detail modal,
   - join action gating,
   - countdown + running workspace render,
-  - card/button hover/focus-visible/active interaction checks.
+  - card/button hover/focus-visible/active interaction checks,
+  - motion token consistency checks for key interactive elements.
 
 ## Risks
 
