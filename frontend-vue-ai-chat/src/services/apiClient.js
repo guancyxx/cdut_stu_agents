@@ -317,6 +317,42 @@ export function createApiClient(baseUrl = '/oj-api', aiAgentBaseUrl = '/oj-test-
       }
     })
 
+  const adminSetAccountStatus = (username, payload) =>
+    fetch(`${aiAgentBaseUrl}/admin/accounts/${encodeURIComponent(username)}/status`, {
+      method: 'PATCH',
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payload)
+    }).then(async (response) => {
+      const rawText = await response.text()
+      if (!rawText) return { ok: response.ok, status: response.status, data: { error: `Empty response (${response.status})`, data: '' } }
+      try {
+        return { ok: response.ok, status: response.status, data: JSON.parse(rawText) }
+      } catch {
+        return { ok: response.ok, status: response.status, data: { error: `Invalid JSON response (${response.status})`, data: rawText } }
+      }
+    })
+
+  const adminChangeAccountPassword = (username, payload) =>
+    fetch(`${aiAgentBaseUrl}/admin/accounts/${encodeURIComponent(username)}/password`, {
+      method: 'PATCH',
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payload)
+    }).then(async (response) => {
+      const rawText = await response.text()
+      if (!rawText) return { ok: response.ok, status: response.status, data: { error: `Empty response (${response.status})`, data: '' } }
+      try {
+        return { ok: response.ok, status: response.status, data: JSON.parse(rawText) }
+      } catch {
+        return { ok: response.ok, status: response.status, data: { error: `Invalid JSON response (${response.status})`, data: rawText } }
+      }
+    })
+
   return {
     fetchProfile,
     fetchCaptcha,
@@ -345,6 +381,8 @@ export function createApiClient(baseUrl = '/oj-api', aiAgentBaseUrl = '/oj-test-
     adminListAccounts,
     adminCreateAccount,
     adminUpdateAccount,
-    adminDeleteAccount
+    adminDeleteAccount,
+    adminSetAccountStatus,
+    adminChangeAccountPassword
   }
 }

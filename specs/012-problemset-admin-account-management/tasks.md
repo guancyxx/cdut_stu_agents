@@ -74,3 +74,21 @@
 ## Task 10 [S] Git 流程收尾
 - 目标：提交、推送、PR。
 - 验收：提供 PR 链接与验证结果。
+
+## Task 11 [M] 账户管理新增弹窗与快捷操作（2026-05-20）
+- 目标：将新增账号改为按钮 + 弹窗，并补齐账号列表状态、启用/禁用、修改密码快捷操作。
+- 验收：
+  - 新增账号表单不再常驻页面，点击“新增账号”打开弹窗。
+  - 账号列表显示启用/禁用状态；无数据时显示清晰空态。
+  - 每行提供编辑、修改密码、禁用/启用、删除快捷按钮。
+  - `PATCH /admin/accounts/{username}/status` 和 `PATCH /admin/accounts/{username}/password` 不返回 404。
+  - 当前登录账号不能被禁用/删除；最后一个可用管理员不能被禁用/删除。
+- 文件：
+  - `frontend-vue-ai-chat/src/pages/AdminPage.vue`
+  - `frontend-vue-ai-chat/src/services/apiClient.js`
+  - `frontend-vue-ai-chat/src/assets/main.css`
+  - `ai-agent-lite/app/routers/admin_accounts.py`
+  - `ai-agent-lite/app/routers/auth.py`
+  - `ai-agent-lite/app/utils/auth_helpers.py`
+  - `ai-agent-lite/app/database.py`
+  - `ai-agent-lite/app/models/local_user.py`

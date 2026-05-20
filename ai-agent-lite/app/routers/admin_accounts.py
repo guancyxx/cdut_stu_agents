@@ -29,6 +29,14 @@ class AccountUpdateRequest(BaseModel):
     password: str = Field(default="", max_length=128)
 
 
+class AccountStatusRequest(BaseModel):
+    is_disabled: bool
+
+
+class AccountPasswordRequest(BaseModel):
+    password: str = Field(..., min_length=6, max_length=128)
+
+
 def _normalize_email(email: str) -> str | None:
     val = str(email or "").strip()
     if not val:
@@ -54,7 +62,8 @@ async def list_accounts(request: Request):
             await db.execute(
                 text(
                     "SELECT username, COALESCE(email,''), COALESCE(student_number,''), "
-                    "COALESCE(admin_type,0), created_at, updated_at "
+                    "COALESCE(admin_type,0), COALESCE(is_disabled,false), "
+                    "created_at, updated_at "
                     "FROM ai_agent.local_users ORDER BY admin_type DESC, username ASC"
                 )
             )
@@ -69,8 +78,9 @@ async def list_accounts(request: Request):
                     "email": r[1],
                     "student_number": r[2],
                     "admin_type": int(r[3] or 0),
-                    "created_at": r[4].isoformat() if r[4] else "",
-                    "updated_at": r[5].isoformat() if r[5] else "",
+                    "is_disabled": bool(r[4]),
+                    "created_at": r[5].isoformat() if r[5] else "",
+                    "updated_at": r[6].isoformat() if r[6] else "",
                 }
                 for r in rows
             ]
@@ -201,6 +211,81 @@ async def update_account(username: str, request: Request, payload: AccountUpdate
         await db.commit()
 
     return {"error": None, "data": {"username": target_username, "message": "updated"}}
+
+
+@router.patch("/{username}/status")
+async def set_account_status(username: str, request: Request, payload: AccountStatusRequest = Body(...)):
+    operator = await require_admin_username(request)
+    target_username = _validate_username(username)
+
+    if operator == target_username:
+        raise HTTPException(status_code=400, detail="Cannot disable current login account")
+
+    async with async_session() as db:
+        target_row = (
+            await db.execute(
+                text(
+                    "SELECT COALESCE(admin_type,0), COALESCE(is_disabled,false) "
+                    "FROM ai_agent.local_users WHERE username=:u LIMIT 1"
+                ),
+                {"u": target_username},
+            )
+        ).fetchone()
+        if not target_row:
+            raise HTTPException(status_code=404, detail="Account not found")
+
+        target_admin = int(target_row[0] or 0)
+
+        if payload.is_disabled:
+            enabled_admin_count_row = (
+                await db.execute(
+                    text(
+                        "SELECT COUNT(*) FROM ai_agent.local_users "
+                        "WHERE COALESCE(admin_type,0) >= 1 AND COALESCE(is_disabled,false) = false"
+                    )
+                )
+            ).fetchone()
+            enabled_admin_count = int(enabled_admin_count_row[0] or 0)
+
+            if target_admin >= 1 and enabled_admin_count <= 1:
+                raise HTTPException(status_code=400, detail="Cannot disable last enabled admin account")
+
+        await db.execute(
+            text(
+                "UPDATE ai_agent.local_users SET is_disabled=:d, updated_at=:now WHERE username=:u"
+            ),
+            {"u": target_username, "d": payload.is_disabled, "now": datetime.now(timezone.utc)},
+        )
+        await db.commit()
+
+    action = "disabled" if payload.is_disabled else "enabled"
+    return {"error": None, "data": {"username": target_username, "message": action}}
+
+
+@router.patch("/{username}/password")
+async def change_account_password(username: str, request: Request, payload: AccountPasswordRequest = Body(...)):
+    await require_admin_username(request)
+    target_username = _validate_username(username)
+
+    async with async_session() as db:
+        target_row = (
+            await db.execute(
+                text("SELECT 1 FROM ai_agent.local_users WHERE username=:u LIMIT 1"),
+                {"u": target_username},
+            )
+        ).fetchone()
+        if not target_row:
+            raise HTTPException(status_code=404, detail="Account not found")
+
+        await db.execute(
+            text(
+                "UPDATE ai_agent.local_users SET password_hash=:p, updated_at=:now WHERE username=:u"
+            ),
+            {"u": target_username, "p": hash_password(payload.password), "now": datetime.now(timezone.utc)},
+        )
+        await db.commit()
+
+    return {"error": None, "data": {"username": target_username, "message": "password changed"}}
 
 
 @router.delete("/{username}")

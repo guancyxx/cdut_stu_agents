@@ -86,7 +86,10 @@ def current_username(request: Request) -> str | None:
 
 
 async def require_admin_username(request: Request) -> str:
-    """Check that the current user has admin_type >= 1. Raises 401/403."""
+    """Check that the current user has admin_type >= 1 and is not disabled.
+
+    Raises 401/403.
+    """
     username = current_username(request)
     if not username:
         raise HTTPException(status_code=401, detail="Please login first")
@@ -95,13 +98,17 @@ async def require_admin_username(request: Request) -> str:
         row = (
             await db.execute(
                 text(
-                    "SELECT COALESCE(admin_type,0) "
+                    "SELECT COALESCE(admin_type,0), COALESCE(is_disabled,false) "
                     "FROM ai_agent.local_users WHERE username=:u LIMIT 1",
                 ),
                 {"u": username},
             )
         ).fetchone()
 
-    if not row or int(row[0] or 0) < 1:
+    if not row:
+        raise HTTPException(status_code=403, detail="Admin permission required")
+    if row[1]:
+        raise HTTPException(status_code=403, detail="Account is disabled")
+    if int(row[0] or 0) < 1:
         raise HTTPException(status_code=403, detail="Admin permission required")
     return username

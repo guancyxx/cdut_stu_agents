@@ -141,7 +141,7 @@ async def login(response: Response, payload: dict = Body(...)):
         row = (
             await db.execute(
                 text(
-                    "SELECT username, password_hash "
+                    "SELECT username, password_hash, COALESCE(is_disabled,false) "
                     "FROM ai_agent.local_users WHERE username=:u LIMIT 1",
                 ),
                 {"u": username},
@@ -152,6 +152,11 @@ async def login(response: Response, payload: dict = Body(...)):
         return {
             "error": "Invalid username or password",
             "data": "Invalid username or password",
+        }
+    if row[2]:
+        return {
+            "error": "Account is disabled",
+            "data": "Account is disabled",
         }
 
     response.set_cookie("lite_user", username, httponly=True, samesite="lax")

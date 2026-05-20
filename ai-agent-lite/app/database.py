@@ -35,12 +35,16 @@ async def init_db() -> None:
         import sqlalchemy
         await conn.execute(sqlalchemy.text(f"CREATE SCHEMA IF NOT EXISTS {settings.db_schema}"))
         await conn.run_sync(Base.metadata.create_all)
-        await conn.execute(
-            sqlalchemy.text(
-                f"ALTER TABLE {settings.db_schema}.local_users "
-                "ADD COLUMN IF NOT EXISTS student_number VARCHAR(64)"
+        for col, col_type in [
+            ("student_number", "VARCHAR(64)"),
+            ("is_disabled", "BOOLEAN NOT NULL DEFAULT FALSE"),
+        ]:
+            await conn.execute(
+                sqlalchemy.text(
+                    f"ALTER TABLE {settings.db_schema}.local_users "
+                    f"ADD COLUMN IF NOT EXISTS {col} {col_type}"
+                )
             )
-        )
 
 
 async def get_session() -> AsyncSession:
