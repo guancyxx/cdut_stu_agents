@@ -1,40 +1,34 @@
 # Problem Database Backups
 
-Timestamped backups of the QDUOJ problem database (2,683 problems + tags).
+Timestamped backups of the problem database (problem/tags) for the current single-DB runtime.
 
 ## Files
 
-- `problems_dump.json.gz` — Django `dumpdata` output (problem.Problem + problem.ProblemTag), can be restored via `manage.py loaddata`
-- `problems_pg.dump` — PostgreSQL custom-format dump of `problem`, `problem_tags`, `problem_problemtag` tables, can be restored via `pg_restore`
+- `problems_dump.json.gz` — JSON dump (problem + tags)
+- `problems_pg.dump` — PostgreSQL custom dump of problem tables
 
-## Restore via Django loaddata
+## Restore via psql (recommended)
+
+```bash
+docker cp problems_pg.dump cdut-postgres:/tmp/
+docker exec cdut-postgres pg_restore -U cdut -d cdut_oj --clean --if-exists /tmp/problems_pg.dump
+```
+
+## Restore via JSON dump
 
 ```bash
 gunzip -c problems_dump.json.gz > /tmp/problems_dump.json
-docker cp /tmp/problems_dump.json cdut-oj-backend:/tmp/
-docker exec cdut-oj-backend python manage.py loaddata /tmp/problems_dump.json
-```
-
-## Restore via pg_restore
-
-```bash
-docker cp problems_pg.dump cdut-oj-postgres:/tmp/
-docker exec cdut-oj-postgres pg_restore -U onlinejudge -d onlinejudge --clean --if-exists /tmp/problems_pg.dump
+# 使用自定义导入脚本按当前表结构落库
+# 说明：该仓库已不再依赖 QDUOJ Django manage.py loaddata
 ```
 
 ## Generation
 
 ```bash
-# Django dumpdata
-docker exec cdut-oj-backend python manage.py dumpdata problem.Problem problem.ProblemTag \
-  --natural-foreign --natural-primary --indent 2 \
-  -o /tmp/problems_dump.json
-docker cp cdut-oj-backend:/tmp/problems_dump.json .
-
-# pg_dump
-docker exec cdut-oj-postgres pg_dump -U onlinejudge -d onlinejudge \
+# pg_dump (current runtime)
+docker exec cdut-postgres pg_dump -U cdut -d cdut_oj \
   --clean --if-exists \
-  -t problem -t problem_tags -t problem_problemtag -t problem_problem_tags \
+  -t public.problem -t public.problem_tag -t public.problem_tags \
   --format=custom -f /tmp/problems_pg.dump
-docker cp cdut-oj-postgres:/tmp/problems_pg.dump .
+docker cp cdut-postgres:/tmp/problems_pg.dump .
 ```
