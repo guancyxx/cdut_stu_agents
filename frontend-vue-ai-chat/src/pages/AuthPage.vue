@@ -50,6 +50,9 @@ const handleAuthKeydown = (event) => {
         </div>
         <h2>登录 OJ 账号</h2>
         <p>请先完成登录或注册后继续使用题库和聊天功能</p>
+        <div class="auth-migration-notice">
+          系统迁移已完成，目前仅保留管理员账号。其他账号请重新注册创建。
+        </div>
       </div>
 
       <div class="auth-switch-row">

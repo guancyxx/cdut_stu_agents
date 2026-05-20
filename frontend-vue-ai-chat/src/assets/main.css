@@ -331,6 +331,18 @@ body {
   line-height: 1.5;
 }
 
+.auth-migration-notice {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--warning) 38%, transparent);
+  background: var(--warning-subtle-bg);
+  color: var(--warning-subtle-text);
+  font-size: 12px;
+  line-height: 1.45;
+  text-align: left;
+}
+
 .auth-switch-row {
   display: flex;
   gap: 0;
