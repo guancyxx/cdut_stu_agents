@@ -74,10 +74,11 @@
 
 `/admin` 对应 `AdminPage.vue` 改为“账户管理页面”：
 
-- 账号列表（用户名、邮箱、学号、管理员等级、创建时间）。
-- 新增账号（用户名、密码、邮箱、学号、管理员等级）。
-- 编辑账号（邮箱、学号、管理员等级、可选重置密码）。
-- 删除账号（禁止删除当前登录账号；保留至少一个管理员）。
+- 账号列表（用户名、邮箱、学号、管理员等级、启用状态、创建时间）。
+- 新增账号必须以“按钮 + 弹窗”形式呈现，不在页面顶部常驻展开表单。
+- 编辑账号（邮箱、学号、管理员等级）。
+- 快捷操作：禁用/启用账号、修改密码、删除账号。
+- 删除/禁用账号均禁止作用于当前登录账号；保留至少一个可用管理员。
 
 ### C. 后端 API 设计
 
@@ -96,13 +97,17 @@
 - `GET /admin/accounts`
 - `POST /admin/accounts`
 - `PUT /admin/accounts/{username}`
+- `PATCH /admin/accounts/{username}/status`
+- `PATCH /admin/accounts/{username}/password`
 - `DELETE /admin/accounts/{username}`
 
 权限规则：
 - 所有接口需管理员。
 - 创建/编辑时 `admin_type` 仅允许 `0/1/2`。
 - 普通 Admin（1）不能将他人提升为 Super Admin（2）。
-- 不允许删除当前登录账号。
+- 不允许删除、禁用当前登录账号。
+- 禁用账号不能登录，也不能作为管理接口操作者。
+- 不允许删除或禁用最后一个可用管理员。
 
 ## Frontend API Client Extension
 
@@ -112,6 +117,8 @@
 - `adminCreateAccount(payload)`
 - `adminUpdateAccount(username, payload)`
 - `adminDeleteAccount(username)`
+- `adminSetAccountStatus(username, payload)`
+- `adminChangeAccountPassword(username, payload)`
 
 ## Validation Plan
 
@@ -158,3 +165,9 @@
 4. `/admin` 页面完成账户管理能力并可稳定使用。
 5. 所有变更通过 Docker 构建、运行、接口与页面验证。
 6. 账户管理流程通过权限矩阵验证，且主题样式在亮色模式下无暗底输入控件。
+## Additional Acceptance Criteria (2026-05-20 account management optimization)
+1. `/admin` account creation is opened by a primary button and rendered in a modal dialog.
+2. Account list must render backend rows and expose status badges for enabled/disabled accounts.
+3. Backend account API must include status and password quick endpoints to avoid 404 for UI actions.
+4. Quick actions must include enable/disable and password reset without forcing full edit mode.
+5. Disabled accounts cannot login or operate admin endpoints; current user and last enabled admin protections remain server-enforced.

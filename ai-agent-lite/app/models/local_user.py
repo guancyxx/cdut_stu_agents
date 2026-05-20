@@ -2,7 +2,7 @@
 
 from datetime import datetime, timezone
 
-from sqlalchemy import Column, DateTime, Integer, String
+from sqlalchemy import Boolean, Column, DateTime, Integer, String
 
 from app.config import settings
 from app.models.orm import Base
@@ -18,6 +18,7 @@ class LocalUser(Base):
     email = Column(String(120), nullable=True)
     student_number = Column(String(64), nullable=True)
     admin_type = Column(Integer, nullable=False, default=0)
+    is_disabled = Column(Boolean, nullable=False, default=False, server_default="false")
     created_at = Column(
         DateTime(timezone=True),
         nullable=False,
