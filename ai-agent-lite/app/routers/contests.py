@@ -26,6 +26,7 @@ async def ensure_contest_schema() -> None:
     """Create contest tables and schema if they don't exist."""
     async with async_session() as db:
         await db.execute(text("CREATE SCHEMA IF NOT EXISTS ai_agent"))
+        await db.execute(text("ALTER TABLE ai_agent.local_users ADD COLUMN IF NOT EXISTS signature varchar(280)"))
         await db.execute(text("""
             CREATE TABLE IF NOT EXISTS ai_agent.contests (
                 id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -482,9 +483,10 @@ async def contest_rank(contest_id: str = Query(...)):
         participants = (
             await db.execute(
                 text(
-                    "SELECT user_id, joined_at "
-                    "FROM ai_agent.contest_participants "
-                    "WHERE contest_id=:cid ORDER BY joined_at ASC",
+                    "SELECT p.user_id, p.joined_at, COALESCE(u.signature,'') AS signature "
+                    "FROM ai_agent.contest_participants p "
+                    "LEFT JOIN ai_agent.local_users u ON u.username = p.user_id "
+                    "WHERE p.contest_id=:cid ORDER BY p.joined_at ASC",
                 ),
                 {"cid": cid},
             )
@@ -506,7 +508,7 @@ async def contest_rank(contest_id: str = Query(...)):
     rank_state: dict[str, dict[str, Any]] = {}
     for p in participants:
         rank_state[str(p[0])] = {
-            "user_id": str(p[0]), "joined_at": p[1],
+            "user_id": str(p[0]), "joined_at": p[1], "signature": str(p[2] or ''),
             "solved_count": 0, "penalty_time_ms": 0, "problems": {},
         }
 
@@ -518,7 +520,7 @@ async def contest_rank(contest_id: str = Query(...)):
 
         if uid not in rank_state:
             rank_state[uid] = {
-                "user_id": uid, "joined_at": contest_start,
+                "user_id": uid, "joined_at": contest_start, "signature": '',
                 "solved_count": 0, "penalty_time_ms": 0, "problems": {},
             }
 
@@ -549,7 +551,7 @@ async def contest_rank(contest_id: str = Query(...)):
 
     ranked = [
         {
-            "rank": idx, "user_id": item["user_id"],
+            "rank": idx, "user_id": item["user_id"], "signature": str(item.get("signature") or ''),
             "solved_count": int(item["solved_count"]),
             "penalty_time_ms": int(item["penalty_time_ms"]),
             "joined_at": item["joined_at"].isoformat()

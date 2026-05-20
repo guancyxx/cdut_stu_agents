@@ -41,11 +41,14 @@ async def profile(request: Request, response: Response):
         return {"error": "Please login first", "data": "Please login first"}
 
     async with async_session() as db:
+        await db.execute(
+            text("ALTER TABLE ai_agent.local_users ADD COLUMN IF NOT EXISTS signature varchar(280)"),
+        )
         row = (
             await db.execute(
                 text(
                     "SELECT username, COALESCE(email,''), COALESCE(student_number,''), "
-                    "COALESCE(admin_type,0), COALESCE(password_hash,'') "
+                    "COALESCE(admin_type,0), COALESCE(password_hash,''), COALESCE(signature,'') "
                     "FROM ai_agent.local_users WHERE username=:u LIMIT 1",
                 ),
                 {"u": username},
@@ -72,6 +75,76 @@ async def profile(request: Request, response: Response):
             "student_number": row[2],
             "admin_type": admin_type,
             "admin_type_name": admin_name,
+            "signature": row[5] if len(row) > 5 else '',
+        },
+    }
+
+
+@router.put("/profile")
+async def update_profile(request: Request, payload: dict = Body(...)):
+    username = current_username(request)
+    if not username:
+        return {"error": "Please login first", "data": "Please login first"}
+
+    email = str(payload.get("email", "")).strip()
+    student_number = str(payload.get("student_number", "")).strip()
+    signature = str(payload.get("signature", "")).strip()
+
+    if email and not EMAIL_RE.match(email):
+        return {"error": "Invalid email", "data": "Invalid email"}
+    if len(signature) > 280:
+        return {"error": "Signature too long", "data": "Signature too long"}
+
+    async with async_session() as db:
+        await db.execute(
+            text("ALTER TABLE ai_agent.local_users ADD COLUMN IF NOT EXISTS signature varchar(280)"),
+        )
+        await db.execute(
+            text(
+                "UPDATE ai_agent.local_users "
+                "SET email=:e, student_number=:s, signature=:sig, updated_at=:now "
+                "WHERE username=:u"
+            ),
+            {
+                "e": email or None,
+                "s": student_number or None,
+                "sig": signature,
+                "u": username,
+                "now": datetime.now(timezone.utc),
+            },
+        )
+        row = (
+            await db.execute(
+                text(
+                    "SELECT username, COALESCE(email,''), COALESCE(student_number,''), COALESCE(admin_type,0), COALESCE(signature,'') "
+                    "FROM ai_agent.local_users WHERE username=:u LIMIT 1"
+                ),
+                {"u": username},
+            )
+        ).fetchone()
+        await db.commit()
+
+    if not row:
+        return {"error": "User not found", "data": "User not found"}
+
+    admin_type = int(row[3] or 0)
+    if admin_type == 2:
+        admin_name = "Super Admin"
+    elif admin_type == 1:
+        admin_name = "Admin"
+    else:
+        admin_name = "Regular User"
+
+    return {
+        "error": None,
+        "data": {
+            "username": row[0],
+            "profile_name": row[0],
+            "email": row[1],
+            "student_number": row[2],
+            "admin_type": admin_type,
+            "admin_type_name": admin_name,
+            "signature": row[4],
         },
     }
 
