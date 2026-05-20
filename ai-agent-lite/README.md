@@ -177,7 +177,7 @@ Agent 信息（在响应前发送）：
 - `ai_agent.messages` — 用户/助手消息
 - `ai_agent.audit_log` — 审计日志
 
-`LITE_DATABASE_URL` 默认通过 `cdut-oj-postgres` 连接 OJ 共享 PostgreSQL，使用 `ai_agent` schema 做逻辑隔离。
+`LITE_DATABASE_URL` 默认通过 `cdut-postgres` 连接当前唯一 PostgreSQL 实例，使用 `ai_agent` schema 做逻辑隔离。
 
 ## 端口映射
 
