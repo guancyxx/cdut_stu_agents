@@ -149,6 +149,58 @@ async def update_profile(request: Request, payload: dict = Body(...)):
     }
 
 
+@router.put("/profile/password")
+async def update_profile_password(request: Request, payload: dict = Body(...)):
+    username = current_username(request)
+    if not username:
+        return {"error": "Please login first", "data": "Please login first"}
+
+    old_password = str(payload.get("old_password", ""))
+    new_password = str(payload.get("new_password", ""))
+
+    if not old_password or not new_password or len(new_password) < 6:
+        return {"error": "Invalid password", "data": "Invalid password"}
+
+    if old_password == new_password:
+        return {
+            "error": "New password must be different",
+            "data": "New password must be different",
+        }
+
+    async with async_session() as db:
+        row = (
+            await db.execute(
+                text(
+                    "SELECT password_hash, COALESCE(is_disabled,false) "
+                    "FROM ai_agent.local_users WHERE username=:u LIMIT 1"
+                ),
+                {"u": username},
+            )
+        ).fetchone()
+
+        if not row:
+            return {"error": "User not found", "data": "User not found"}
+        if row[1]:
+            return {"error": "Account is disabled", "data": "Account is disabled"}
+        if not verify_password(old_password, str(row[0] or "")):
+            return {"error": "Invalid old password", "data": "Invalid old password"}
+
+        await db.execute(
+            text(
+                "UPDATE ai_agent.local_users SET password_hash=:p, updated_at=:now "
+                "WHERE username=:u"
+            ),
+            {
+                "p": hash_password(new_password),
+                "u": username,
+                "now": datetime.now(timezone.utc),
+            },
+        )
+        await db.commit()
+
+    return {"error": None, "data": "ok"}
+
+
 # ── register ───────────────────────────────────────────────────────────
 
 @router.post("/register")

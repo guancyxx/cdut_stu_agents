@@ -275,6 +275,25 @@ export function useOjAuthAndProblems() {
     return result
   }
 
+  const changeUserPassword = async ({ oldPassword = '', newPassword = '' } = {}) => {
+    const payload = {
+      old_password: String(oldPassword || ''),
+      new_password: String(newPassword || '')
+    }
+
+    if (!payload.old_password || !payload.new_password || payload.new_password.length < 6) {
+      throw new Error('新密码至少 6 位，且需填写旧密码')
+    }
+
+    const response = await apiClient.updateProfilePassword(payload)
+    const result = response.data
+    if (result?.error) {
+      throw new Error(typeof result.data === 'string' ? result.data : result.error)
+    }
+
+    return result
+  }
+
   const hydrateAuthSession = async () => {
     resetAuthError()
 
@@ -976,6 +995,7 @@ export function useOjAuthAndProblems() {
     hydrateAuthSession,
     fetchUserProfile,
     updateUserProfile,
+    changeUserPassword,
     refreshCaptcha,
     login,
     register,

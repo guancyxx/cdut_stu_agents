@@ -2904,6 +2904,36 @@ button:disabled {
   color: var(--text-secondary);
 }
 
+.profile-password-card {
+  margin-top: 16px;
+  border-top: 1px dashed var(--border-standard);
+  padding-top: 12px;
+}
+
+.profile-password-card h3 {
+  margin: 0 0 10px;
+  font-size: 16px;
+}
+
+.profile-password-form {
+  display: grid;
+  gap: 10px;
+}
+
+.profile-password-form label {
+  display: grid;
+  gap: 6px;
+}
+
+.profile-password-form input {
+  width: 100%;
+  border: 1px solid var(--border-standard);
+  background: var(--bg-panel);
+  color: var(--text-primary);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+
 .rank-panel-head {
   display: flex;
   justify-content: space-between;

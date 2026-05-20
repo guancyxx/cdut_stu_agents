@@ -43,6 +43,16 @@ export function createApiClient(baseUrl = '/oj-api', aiAgentBaseUrl = '/oj-test-
       body: JSON.stringify(payload)
     })
 
+  const updateProfilePassword = (payload) =>
+    requestJson('/api/profile/password', {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Referer: window.location.origin
+      },
+      body: JSON.stringify(payload)
+    })
+
   const fetchCaptcha = () => requestJson('/api/captcha?refresh=1')
 
   const login = (payload, csrfToken) =>
@@ -368,6 +378,7 @@ export function createApiClient(baseUrl = '/oj-api', aiAgentBaseUrl = '/oj-test-
   return {
     fetchProfile,
     updateProfile,
+    updateProfilePassword,
     fetchCaptcha,
     login,
     register,

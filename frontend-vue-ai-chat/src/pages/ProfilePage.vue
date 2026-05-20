@@ -6,15 +6,24 @@ import { useChatStore } from '../stores/chatStore'
 import { sanitizeTextInput } from '../utils/validators'
 
 const router = useRouter()
-const { ojUser, logout, updateUserProfile } = useOjStore()
+const { ojUser, logout, updateUserProfile, changeUserPassword } = useOjStore()
 const { switchToUser } = useChatStore()
 
 const editing = ref(false)
 const saving = ref(false)
+const passwordSaving = ref(false)
 const profileState = reactive({
   email: '',
   studentNumber: '',
   signature: '',
+  message: '',
+  error: ''
+})
+
+const passwordState = reactive({
+  oldPassword: '',
+  newPassword: '',
+  confirmPassword: '',
   message: '',
   error: ''
 })
@@ -42,6 +51,7 @@ const cancelEdit = () => {
 const saveProfile = async () => {
   profileState.message = ''
   profileState.error = ''
+  passwordState.message = ''
   saving.value = true
   try {
     await updateUserProfile({
@@ -55,6 +65,46 @@ const saveProfile = async () => {
     profileState.error = error?.message || '保存失败'
   } finally {
     saving.value = false
+  }
+}
+
+const clearPasswordForm = () => {
+  passwordState.oldPassword = ''
+  passwordState.newPassword = ''
+  passwordState.confirmPassword = ''
+}
+
+const savePassword = async () => {
+  passwordState.message = ''
+  passwordState.error = ''
+  profileState.message = ''
+
+  const oldPassword = String(passwordState.oldPassword || '')
+  const newPassword = String(passwordState.newPassword || '')
+  const confirmPassword = String(passwordState.confirmPassword || '')
+
+  if (!oldPassword || !newPassword || !confirmPassword) {
+    passwordState.error = '请填写旧密码、新密码和确认密码'
+    return
+  }
+  if (newPassword.length < 6) {
+    passwordState.error = '新密码至少 6 位'
+    return
+  }
+  if (newPassword !== confirmPassword) {
+    passwordState.error = '两次输入的新密码不一致'
+    return
+  }
+
+  passwordSaving.value = true
+  try {
+    await changeUserPassword({ oldPassword, newPassword })
+    passwordState.message = '密码修改成功'
+    clearPasswordForm()
+  } catch (error) {
+    passwordState.error = error?.message || '密码修改失败'
+  } finally {
+    passwordSaving.value = false
   }
 }
 
@@ -130,8 +180,30 @@ const handleLogout = async () => {
         <button class="danger-btn" @click="handleLogout">退出登录</button>
       </div>
 
-      <div class="success-tip" v-if="profileState.message">{{ profileState.message }}</div>
-      <div class="error" v-if="profileState.error || ojUser.error">{{ profileState.error || ojUser.error }}</div>
+      <section class="profile-password-card">
+        <h3>修改密码</h3>
+        <form class="profile-password-form" @submit.prevent="savePassword">
+          <label>
+            <span>旧密码</span>
+            <input v-model="passwordState.oldPassword" type="password" autocomplete="current-password" placeholder="请输入旧密码" />
+          </label>
+          <label>
+            <span>新密码</span>
+            <input v-model="passwordState.newPassword" type="password" minlength="6" autocomplete="new-password" placeholder="请输入新密码（至少6位）" />
+          </label>
+          <label>
+            <span>确认新密码</span>
+            <input v-model="passwordState.confirmPassword" type="password" minlength="6" autocomplete="new-password" placeholder="请再次输入新密码" />
+          </label>
+          <div class="profile-actions">
+            <button class="secondary-btn" type="button" @click="clearPasswordForm">清空</button>
+            <button type="submit" :disabled="passwordSaving">{{ passwordSaving ? '提交中...' : '修改密码' }}</button>
+          </div>
+        </form>
+      </section>
+
+      <div class="success-tip" v-if="profileState.message || passwordState.message">{{ profileState.message || passwordState.message }}</div>
+      <div class="error" v-if="profileState.error || passwordState.error || ojUser.error">{{ profileState.error || passwordState.error || ojUser.error }}</div>
     </div>
   </section>
 </template>
