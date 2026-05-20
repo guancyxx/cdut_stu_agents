@@ -258,6 +258,23 @@ export function useOjAuthAndProblems() {
     return result
   }
 
+  const updateUserProfile = async ({ email = '', studentNumber = '', signature = '' } = {}) => {
+    const payload = {
+      email: sanitizeTextInput(String(email || ''), 120),
+      student_number: sanitizeTextInput(String(studentNumber || ''), 64),
+      signature: sanitizeTextInput(String(signature || ''), 280)
+    }
+
+    const response = await apiClient.updateProfile(payload)
+    const result = response.data
+    if (result?.error) {
+      throw new Error(typeof result.data === 'string' ? result.data : result.error)
+    }
+
+    applyUserProfileData(result)
+    return result
+  }
+
   const hydrateAuthSession = async () => {
     resetAuthError()
 
@@ -958,6 +975,7 @@ export function useOjAuthAndProblems() {
     isAdmin,
     hydrateAuthSession,
     fetchUserProfile,
+    updateUserProfile,
     refreshCaptcha,
     login,
     register,

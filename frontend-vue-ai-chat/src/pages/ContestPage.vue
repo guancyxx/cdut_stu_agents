@@ -45,6 +45,34 @@ const codes = ref(Object.fromEntries(ALL_LANGUAGES.map((l) => [l, ''])))
 const templateRawByLanguage = ref(Object.fromEntries(ALL_LANGUAGES.map((l) => [l, ''])))
 const activeSubmitState = ref({ type: '', message: '' })
 const timerTick = ref(0)
+const rankPage = ref(1)
+const RANK_PAGE_SIZE = 10
+const signatureDialog = ref({ visible: false, userId: '', signature: '' })
+
+const pagedContestRankRows = computed(() => {
+  const rows = Array.isArray(contestRankRows.value) ? contestRankRows.value : []
+  const start = (rankPage.value - 1) * RANK_PAGE_SIZE
+  return rows.slice(start, start + RANK_PAGE_SIZE)
+})
+
+const rankTotalPages = computed(() => Math.max(1, Math.ceil((contestRankRows.value?.length || 0) / RANK_PAGE_SIZE)))
+
+const goRankPage = (nextPage) => {
+  const p = Number(nextPage) || 1
+  rankPage.value = Math.min(Math.max(1, p), rankTotalPages.value)
+}
+
+const openSignatureDialog = (row) => {
+  signatureDialog.value = {
+    visible: true,
+    userId: String(row?.user_id || ''),
+    signature: sanitizeTextInput(String(row?.signature || ''), 280)
+  }
+}
+
+const closeSignatureDialog = () => {
+  signatureDialog.value = { visible: false, userId: '', signature: '' }
+}
 
 const parseContestDate = (value) => {
   if (!value) return null
@@ -205,6 +233,7 @@ const handleContestSelect = async (contestId) => {
   if (!cid) return
   await fetchContestDetail(cid)
   await fetchContestRank(cid)
+  rankPage.value = 1
   const firstProblem = Array.isArray(contestDetail.value?.problems) ? contestDetail.value.problems[0] : null
   selectedContestProblemId.value = firstProblem?._id ? String(firstProblem._id) : ''
 }
@@ -309,6 +338,7 @@ const onContestCreated = async (result) => {
     currentContestId.value = result.contest_id
     await fetchContestDetail(result.contest_id)
     await fetchContestRank(result.contest_id)
+    rankPage.value = 1
     const firstProblem = Array.isArray(contestDetail.value?.problems) ? contestDetail.value.problems[0] : null
     selectedContestProblemId.value = firstProblem?._id ? String(firstProblem._id) : ''
   }
@@ -572,20 +602,27 @@ onUnmounted(() => {
           </div>
 
           <aside class="contest-rank-panel">
-            <h3>排行榜</h3>
+            <div class="rank-panel-head">
+              <h3>排行榜</h3>
+              <div class="rank-page-indicator">第 {{ rankPage }} / {{ rankTotalPages }} 页</div>
+            </div>
             <div class="rank-banner" v-if="rankBannerText">{{ rankBannerText }}</div>
             <div v-if="contestRankLoading" class="empty">加载中...</div>
-            <div v-else class="rank-list">
+            <div v-else class="rank-list rank-list-competitive">
               <div class="rank-row rank-head">
-                <span>#</span><span>用户</span><span>通过</span><span>罚时(ms)</span>
+                <span>#</span><span>选手</span><span>通过</span><span>罚时(ms)</span>
               </div>
-              <div class="rank-row" v-for="row in contestRankRows" :key="`${row.rank}-${row.user_id}`">
-                <span>{{ row.rank }}</span>
-                <span>{{ row.user_id }}</span>
+              <div class="rank-row rank-competitive" v-for="row in pagedContestRankRows" :key="`${row.rank}-${row.user_id}`">
+                <span class="rank-badge" :class="{ top1: row.rank === 1, top2: row.rank === 2, top3: row.rank === 3 }">{{ row.rank }}</span>
+                <button class="rank-user-btn" @click="openSignatureDialog(row)">{{ row.user_id }}</button>
                 <span>{{ row.solved_count }}</span>
                 <span>{{ row.penalty_time_ms }}</span>
               </div>
-              <div class="empty" v-if="!contestRankRows.length">暂无排行数据</div>
+              <div class="empty" v-if="!pagedContestRankRows.length">暂无排行数据</div>
+              <div class="rank-pagination" v-if="contestRankRows.length > RANK_PAGE_SIZE">
+                <button class="mini-btn" :disabled="rankPage <= 1" @click="goRankPage(rankPage - 1)">上一页</button>
+                <button class="mini-btn" :disabled="rankPage >= rankTotalPages" @click="goRankPage(rankPage + 1)">下一页</button>
+              </div>
             </div>
           </aside>
         </div>
@@ -613,5 +650,20 @@ onUnmounted(() => {
       @close="showContestCreateModal = false"
       @created="onContestCreated"
     />
+
+    <div v-if="signatureDialog.visible" class="contest-detail-modal-overlay" @click.self="closeSignatureDialog">
+      <div class="contest-detail-modal card" role="dialog" aria-label="User signature">
+        <div class="detail-modal-head">
+          <h3>{{ signatureDialog.userId }}</h3>
+          <button class="mini-btn" @click="closeSignatureDialog">关闭</button>
+        </div>
+        <div class="detail-modal-grid">
+          <div class="detail-item full">
+            <span>个性签名</span>
+            <strong>{{ signatureDialog.signature || '该用户暂未设置签名' }}</strong>
+          </div>
+        </div>
+      </div>
+    </div>
   </section>
 </template>
