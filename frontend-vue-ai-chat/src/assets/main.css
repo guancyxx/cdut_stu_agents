@@ -290,16 +290,18 @@ body {
 
 .profile-v2-screen {
   height: 100%;
-  display: grid;
-  place-items: center;
-  padding: 20px;
+  display: block;
+  padding: 14px 18px 18px;
 }
 
 .profile-v2-page {
-  width: min(1120px, 100%);
-  padding: 20px;
+  width: 100%;
+  max-width: none;
+  min-height: calc(100vh - 84px);
+  padding: 18px;
   display: grid;
   gap: 14px;
+  align-content: start;
 }
 
 .profile-v2-hero {
@@ -369,7 +371,7 @@ body {
 
 .profile-v2-layout {
   display: grid;
-  grid-template-columns: 220px minmax(0, 1fr);
+  grid-template-columns: 240px minmax(0, 1fr);
   gap: 14px;
   min-height: 0;
 }
@@ -2921,7 +2923,7 @@ button:disabled {
   }
 
   .profile-v2-page {
-    padding: 16px;
+    padding: 14px;
   }
 
   .profile-v2-hero {
