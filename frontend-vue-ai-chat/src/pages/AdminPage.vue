@@ -12,10 +12,16 @@ const loading = ref(false)
 const message = ref('')
 const error = ref('')
 const accounts = ref([])
-const editingUsername = ref('')
 const showCreateModal = ref(false)
+const showEditModal = ref(false)
 const showPasswordModal = ref(false)
+const editTarget = ref('')
 const passwordTarget = ref('')
+
+const PAGE_SIZE = 12
+const currentPage = ref(1)
+const totalCount = ref(0)
+const totalPages = computed(() => Math.max(1, Math.ceil(totalCount.value / PAGE_SIZE)))
 
 const createForm = reactive({
   username: '',
@@ -47,22 +53,35 @@ const normalizeAccount = (raw) => ({
   updated_at: sanitizeTextInput(raw?.updated_at || '', 64)
 })
 
+const adminTypeLabel = (t) => {
+  if (t === 2) return '超级管理员'
+  if (t === 1) return '管理员'
+  return '普通用户'
+}
+
 const loadAccounts = async () => {
   loading.value = true
   error.value = ''
   try {
-    const resp = await apiClient.adminListAccounts()
+    const resp = await apiClient.adminListAccounts(currentPage.value, PAGE_SIZE)
     const payload = resp.data
     if (!resp.ok || payload?.error || payload?.detail) {
-      throw new Error(payload?.detail || payload?.error || 'Failed to load accounts')
+      throw new Error(payload?.detail || payload?.error || '加载账号列表失败')
     }
+    totalCount.value = Number(payload?.data?.total || 0)
     const rows = Array.isArray(payload?.data?.results) ? payload.data.results : []
     accounts.value = rows.map(normalizeAccount)
   } catch (e) {
-    error.value = e.message || 'Failed to load accounts'
+    error.value = e.message || '加载账号列表失败'
   } finally {
     loading.value = false
   }
+}
+
+const goToPage = (page) => {
+  if (page < 1 || page > totalPages.value || page === currentPage.value) return
+  currentPage.value = page
+  loadAccounts()
 }
 
 const resetCreateForm = () => {
@@ -82,18 +101,17 @@ const closeCreateModal = () => {
   showCreateModal.value = false
 }
 
-const startEdit = (account) => {
-  editingUsername.value = account.username
+const openEditModal = (account) => {
+  editTarget.value = account.username
   editForm.email = account.email || ''
   editForm.student_number = account.student_number || ''
   editForm.admin_type = Number(account.admin_type || 0)
+  showEditModal.value = true
 }
 
-const cancelEdit = () => {
-  editingUsername.value = ''
-  editForm.email = ''
-  editForm.student_number = ''
-  editForm.admin_type = 0
+const closeEditModal = () => {
+  showEditModal.value = false
+  editTarget.value = ''
 }
 
 const createAccount = async () => {
@@ -102,11 +120,11 @@ const createAccount = async () => {
 
   const username = sanitizeTextInput(createForm.username, 32)
   if (!username) {
-    error.value = 'Username is required'
+    error.value = '请输入用户名'
     return
   }
   if (!createForm.password || createForm.password.length < 6) {
-    error.value = 'Password must be at least 6 characters'
+    error.value = '密码至少6个字符'
     return
   }
 
@@ -119,7 +137,7 @@ const createAccount = async () => {
   }
 
   if (!canManageSuperAdmin.value && payload.admin_type === 2) {
-    error.value = 'Only super admin can create super admin account'
+    error.value = '只有超级管理员才能创建超级管理员账号'
     return
   }
 
@@ -128,19 +146,20 @@ const createAccount = async () => {
     const resp = await apiClient.adminCreateAccount(payload)
     const body = resp.data
     if (!resp.ok || body?.error || body?.detail) {
-      throw new Error(body?.detail || body?.error || 'Failed to create account')
+      throw new Error(body?.detail || body?.error || '创建账号失败')
     }
-    message.value = `Account ${payload.username} created`
+    message.value = `账号 ${payload.username} 创建成功`
     closeCreateModal()
+    currentPage.value = 1
     await loadAccounts()
   } catch (e) {
-    error.value = e.message || 'Failed to create account'
+    error.value = e.message || '创建账号失败'
   } finally {
     loading.value = false
   }
 }
 
-const saveEdit = async (username) => {
+const saveEdit = async () => {
   message.value = ''
   error.value = ''
 
@@ -151,22 +170,22 @@ const saveEdit = async (username) => {
   }
 
   if (!canManageSuperAdmin.value && payload.admin_type === 2) {
-    error.value = 'Only super admin can assign super admin'
+    error.value = '只有超级管理员才能设置超级管理员'
     return
   }
 
   loading.value = true
   try {
-    const resp = await apiClient.adminUpdateAccount(username, payload)
+    const resp = await apiClient.adminUpdateAccount(editTarget.value, payload)
     const body = resp.data
     if (!resp.ok || body?.error || body?.detail) {
-      throw new Error(body?.detail || body?.error || 'Failed to update account')
+      throw new Error(body?.detail || body?.error || '编辑账号失败')
     }
-    message.value = `Account ${username} updated`
-    cancelEdit()
+    message.value = `账号 ${editTarget.value} 已更新`
+    closeEditModal()
     await loadAccounts()
   } catch (e) {
-    error.value = e.message || 'Failed to update account'
+    error.value = e.message || '编辑账号失败'
   } finally {
     loading.value = false
   }
@@ -180,7 +199,7 @@ const toggleAccountStatus = async (account) => {
   const newDisabled = !account.is_disabled
 
   if (username === sanitizeTextInput(ojUser.value?.username || '', 32)) {
-    error.value = 'Cannot disable current login account'
+    error.value = '不能禁用当前登录账号'
     return
   }
 
@@ -189,12 +208,12 @@ const toggleAccountStatus = async (account) => {
     const resp = await apiClient.adminSetAccountStatus(username, { is_disabled: newDisabled })
     const body = resp.data
     if (!resp.ok || body?.error || body?.detail) {
-      throw new Error(body?.detail || body?.error || 'Failed to change account status')
+      throw new Error(body?.detail || body?.error || '操作失败')
     }
-    message.value = newDisabled ? `Account ${username} disabled` : `Account ${username} enabled`
+    message.value = newDisabled ? `账号 ${username} 已禁用` : `账号 ${username} 已启用`
     await loadAccounts()
   } catch (e) {
-    error.value = e.message || 'Failed to change account status'
+    error.value = e.message || '操作失败'
   } finally {
     loading.value = false
   }
@@ -216,7 +235,7 @@ const changePassword = async () => {
   error.value = ''
 
   if (!passwordForm.password || passwordForm.password.length < 6) {
-    error.value = 'Password must be at least 6 characters'
+    error.value = '密码至少6个字符'
     return
   }
 
@@ -227,12 +246,12 @@ const changePassword = async () => {
     })
     const body = resp.data
     if (!resp.ok || body?.error || body?.detail) {
-      throw new Error(body?.detail || body?.error || 'Failed to change password')
+      throw new Error(body?.detail || body?.error || '修改密码失败')
     }
-    message.value = `Password changed for ${passwordTarget.value}`
+    message.value = `${passwordTarget.value} 密码已修改`
     closePasswordModal()
   } catch (e) {
-    error.value = e.message || 'Failed to change password'
+    error.value = e.message || '修改密码失败'
   } finally {
     loading.value = false
   }
@@ -245,11 +264,11 @@ const removeAccount = async (account) => {
   const username = account.username
   if (!username) return
   if (username === sanitizeTextInput(ojUser.value?.username || '', 32)) {
-    error.value = 'Cannot delete current login account'
+    error.value = '不能删除当前登录账号'
     return
   }
 
-  const confirmed = window.confirm(`Are you sure you want to delete account ${username}?`)
+  const confirmed = window.confirm(`确定要删除账号 ${username} 吗？`)
   if (!confirmed) return
 
   loading.value = true
@@ -257,13 +276,12 @@ const removeAccount = async (account) => {
     const resp = await apiClient.adminDeleteAccount(username)
     const body = resp.data
     if (!resp.ok || body?.error || body?.detail) {
-      throw new Error(body?.detail || body?.error || 'Failed to delete account')
+      throw new Error(body?.detail || body?.error || '删除账号失败')
     }
-    message.value = `Account ${username} deleted`
-    if (editingUsername.value === username) cancelEdit()
+    message.value = `账号 ${username} 已删除`
     await loadAccounts()
   } catch (e) {
-    error.value = e.message || 'Failed to delete account'
+    error.value = e.message || '删除账号失败'
   } finally {
     loading.value = false
   }
@@ -276,10 +294,10 @@ onMounted(() => {
 
 <template>
   <section class="admin-account-screen">
-    <h2>Account Management</h2>
-    <p class="admin-account-desc">Manage system accounts</p>
+    <h2>账号管理</h2>
+    <p class="admin-account-desc">管理系统账号</p>
 
-    <div class="error" v-if="!isAdmin">Admin access required</div>
+    <div class="error" v-if="!isAdmin">需要管理员权限</div>
 
     <div class="admin-account-panel" v-else>
       <div class="admin-account-alert success" v-if="message">{{ message }}</div>
@@ -287,141 +305,173 @@ onMounted(() => {
 
       <div class="admin-account-toolbar">
         <button class="btn-primary" :disabled="loading" @click="openCreateModal">
-          + New Account
+          + 新增账号
         </button>
       </div>
 
-      <div class="admin-account-list" v-if="!loading || accounts.length > 0">
-        <div class="admin-account-list-empty" v-if="!loading && accounts.length === 0">
-          No accounts found
+      <div class="admin-account-grid" v-if="!loading || accounts.length > 0">
+        <div class="admin-account-grid-empty" v-if="!loading && accounts.length === 0">
+          暂无账号
         </div>
         <div class="admin-account-card" v-for="account in accounts" :key="account.username">
-          <div class="admin-account-card-head">
-            <div class="admin-account-identity">
-              <strong>{{ account.username }}</strong>
-              <span v-if="account.is_disabled" class="admin-status-badge disabled">Disabled</span>
-              <span v-else class="admin-status-badge enabled">Enabled</span>
-              <span class="admin-type-badge" :class="`admin-type-${account.admin_type}`">
-                {{ account.admin_type === 2 ? 'Super Admin' : account.admin_type === 1 ? 'Admin' : 'Regular User' }}
+          <div class="admin-account-card-avatar">
+            {{ account.username.charAt(0).toUpperCase() }}
+          </div>
+          <div class="admin-account-card-body">
+            <div class="admin-account-card-row">
+              <strong class="admin-account-card-username">{{ account.username }}</strong>
+              <div class="admin-account-card-badges">
+                <span
+                  class="admin-status-badge"
+                  :class="account.is_disabled ? 'disabled' : 'enabled'"
+                >
+                  {{ account.is_disabled ? '已禁用' : '已启用' }}
+                </span>
+                <span v-if="account.admin_type > 0" class="admin-type-badge" :class="`admin-type-${account.admin_type}`">
+                  {{ adminTypeLabel(account.admin_type) }}
+                </span>
+              </div>
+            </div>
+            <div class="admin-account-card-meta">
+              <span class="admin-account-card-field">
+                <span class="admin-account-card-label">邮箱</span>
+                <span class="admin-account-card-value">{{ account.email || '-' }}</span>
+              </span>
+              <span class="admin-account-card-field">
+                <span class="admin-account-card-label">学号</span>
+                <span class="admin-account-card-value">{{ account.student_number || '-' }}</span>
+              </span>
+              <span class="admin-account-card-field admin-account-card-time">
+                创建于 {{ account.created_at || '-' }}
               </span>
             </div>
-            <div class="admin-account-meta">
-              <span>created: {{ account.created_at || '-' }}</span>
-              <span>updated: {{ account.updated_at || '-' }}</span>
-            </div>
-          </div>
-
-          <div v-if="editingUsername !== account.username" class="admin-account-readonly">
-            <div><span>Email:</span> {{ account.email || '-' }}</div>
-            <div><span>Student Number:</span> {{ account.student_number || '-' }}</div>
-            <div class="admin-account-actions">
-              <button :disabled="loading" @click="startEdit(account)">Edit</button>
-              <button :disabled="loading" @click="openPasswordModal(account)">Reset Password</button>
+            <div class="admin-account-card-actions">
+              <button :disabled="loading" @click="openEditModal(account)" title="编辑">编辑</button>
+              <button :disabled="loading" @click="openPasswordModal(account)" title="修改密码">改密</button>
               <button
-                :disabled="loading || account.username === ojUser?.username"
+                :disabled="loading"
                 :class="account.is_disabled ? '' : 'warning'"
                 @click="toggleAccountStatus(account)"
-              >
-                {{ account.is_disabled ? 'Enable' : 'Disable' }}
-              </button>
+                :title="account.is_disabled ? '启用' : '禁用'"
+              >{{ account.is_disabled ? '启用' : '禁用' }}</button>
               <button
                 :disabled="loading || account.username === ojUser?.username"
                 class="danger"
                 @click="removeAccount(account)"
-              >
-                Delete
-              </button>
-            </div>
-          </div>
-
-          <div v-else class="admin-account-editing">
-            <div class="admin-account-form-grid">
-              <label>
-                <span>Email</span>
-                <input v-model="editForm.email" maxlength="120" />
-              </label>
-              <label>
-                <span>Student Number</span>
-                <input v-model="editForm.student_number" maxlength="64" />
-              </label>
-              <label>
-                <span>Admin Level</span>
-                <select v-model.number="editForm.admin_type">
-                  <option :value="0">Regular User</option>
-                  <option :value="1">Admin</option>
-                  <option :value="2" :disabled="!canManageSuperAdmin">Super Admin</option>
-                </select>
-              </label>
-            </div>
-            <div class="admin-account-actions">
-              <button :disabled="loading" @click="saveEdit(account.username)">Save</button>
-              <button :disabled="loading" @click="cancelEdit">Cancel</button>
+                title="删除"
+              >删除</button>
             </div>
           </div>
         </div>
       </div>
 
-      <div class="admin-account-loading" v-if="loading && accounts.length === 0">Loading...</div>
+      <div class="admin-account-pagination" v-if="totalPages > 1">
+        <button :disabled="currentPage <= 1 || loading" @click="goToPage(currentPage - 1)">
+          上一页
+        </button>
+        <span class="admin-account-page-info">
+          第 {{ currentPage }} / {{ totalPages }} 页（共 {{ totalCount }} 条）
+        </span>
+        <button :disabled="currentPage >= totalPages || loading" @click="goToPage(currentPage + 1)">
+          下一页
+        </button>
+      </div>
+
+      <div class="admin-account-loading" v-if="loading && accounts.length === 0">加载中...</div>
     </div>
 
-    <!-- Create Account Modal -->
+    <!-- 新增账号弹窗 -->
     <div class="modal-overlay" v-if="showCreateModal" @click.self="closeCreateModal">
-      <div class="modal-container admin-create-modal" role="dialog" aria-label="Create new account">
+      <div class="modal-container admin-create-modal" role="dialog" aria-label="新增账号">
         <div class="modal-header">
-          <h3>New Account</h3>
-          <button class="modal-close-btn" @click="closeCreateModal" aria-label="Close">&times;</button>
+          <h3>新增账号</h3>
+          <button class="modal-close-btn" @click="closeCreateModal" aria-label="关闭">&times;</button>
         </div>
         <div class="modal-body">
           <div class="admin-account-form-grid">
             <label>
-              <span>Username</span>
-              <input v-model="createForm.username" maxlength="32" placeholder="username" />
+              <span>用户名</span>
+              <input v-model="createForm.username" maxlength="32" placeholder="用户名" />
             </label>
             <label>
-              <span>Initial Password</span>
-              <input v-model="createForm.password" type="password" maxlength="128" placeholder="at least 6 chars" />
+              <span>初始密码</span>
+              <input v-model="createForm.password" type="password" maxlength="128" placeholder="至少6个字符" />
             </label>
             <label>
-              <span>Email</span>
+              <span>邮箱</span>
               <input v-model="createForm.email" maxlength="120" placeholder="user@example.com" />
             </label>
             <label>
-              <span>Student Number</span>
-              <input v-model="createForm.student_number" maxlength="64" placeholder="optional" />
+              <span>学号</span>
+              <input v-model="createForm.student_number" maxlength="64" placeholder="可选" />
             </label>
             <label>
-              <span>Admin Level</span>
+              <span>权限级别</span>
               <select v-model.number="createForm.admin_type">
-                <option :value="0">Regular User</option>
-                <option :value="1">Admin</option>
-                <option :value="2" :disabled="!canManageSuperAdmin">Super Admin</option>
+                <option :value="0">普通用户</option>
+                <option :value="1">管理员</option>
+                <option :value="2" :disabled="!canManageSuperAdmin">超级管理员</option>
               </select>
             </label>
           </div>
         </div>
         <div class="modal-footer">
-          <button :disabled="loading" @click="createAccount">{{ loading ? 'Creating...' : 'Create' }}</button>
-          <button :disabled="loading" @click="closeCreateModal">Cancel</button>
+          <button :disabled="loading" @click="createAccount">{{ loading ? '创建中...' : '创建' }}</button>
+          <button :disabled="loading" @click="closeCreateModal">取消</button>
         </div>
       </div>
     </div>
 
-    <!-- Password Reset Modal -->
-    <div class="modal-overlay" v-if="showPasswordModal" @click.self="closePasswordModal">
-      <div class="modal-container admin-password-modal" role="dialog" aria-label="Reset account password">
+    <!-- 编辑账号弹窗 -->
+    <div class="modal-overlay" v-if="showEditModal" @click.self="closeEditModal">
+      <div class="modal-container admin-edit-modal" role="dialog" aria-label="编辑账号">
         <div class="modal-header">
-          <h3>Reset Password — {{ passwordTarget }}</h3>
-          <button class="modal-close-btn" @click="closePasswordModal" aria-label="Close">&times;</button>
+          <h3>编辑账号 — {{ editTarget }}</h3>
+          <button class="modal-close-btn" @click="closeEditModal" aria-label="关闭">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="admin-account-form-grid">
+            <label>
+              <span>邮箱</span>
+              <input v-model="editForm.email" maxlength="120" placeholder="可选" />
+            </label>
+            <label>
+              <span>学号</span>
+              <input v-model="editForm.student_number" maxlength="64" placeholder="可选" />
+            </label>
+            <label>
+              <span>权限级别</span>
+              <select v-model.number="editForm.admin_type">
+                <option :value="0">普通用户</option>
+                <option :value="1">管理员</option>
+                <option :value="2" :disabled="!canManageSuperAdmin">超级管理员</option>
+              </select>
+            </label>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button :disabled="loading" @click="saveEdit">{{ loading ? '保存中...' : '保存' }}</button>
+          <button :disabled="loading" @click="closeEditModal">取消</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 修改密码弹窗 -->
+    <div class="modal-overlay" v-if="showPasswordModal" @click.self="closePasswordModal">
+      <div class="modal-container admin-password-modal" role="dialog" aria-label="修改密码">
+        <div class="modal-header">
+          <h3>修改密码 — {{ passwordTarget }}</h3>
+          <button class="modal-close-btn" @click="closePasswordModal" aria-label="关闭">&times;</button>
         </div>
         <div class="modal-body">
           <label>
-            <span>New Password</span>
-            <input v-model="passwordForm.password" type="password" maxlength="128" placeholder="at least 6 chars" />
+            <span>新密码</span>
+            <input v-model="passwordForm.password" type="password" maxlength="128" placeholder="至少6个字符" />
           </label>
         </div>
         <div class="modal-footer">
-          <button :disabled="loading" @click="changePassword">{{ loading ? 'Saving...' : 'Save' }}</button>
-          <button :disabled="loading" @click="closePasswordModal">Cancel</button>
+          <button :disabled="loading" @click="changePassword">{{ loading ? '保存中...' : '保存' }}</button>
+          <button :disabled="loading" @click="closePasswordModal">取消</button>
         </div>
       </div>
     </div>

@@ -54,24 +54,40 @@ def _validate_username(username: str) -> str:
 
 
 @router.get("")
-async def list_accounts(request: Request):
+async def list_accounts(request: Request, page: int = 1, size: int = 12):
     await require_admin_username(request)
 
+    page = max(1, page)
+    size = max(1, min(size, 100))
+    offset = (page - 1) * size
+
     async with async_session() as db:
+        total_row = (
+            await db.execute(
+                text("SELECT COUNT(*) FROM ai_agent.local_users")
+            )
+        ).fetchone()
+        total = int(total_row[0] or 0) if total_row else 0
+
         rows = (
             await db.execute(
                 text(
                     "SELECT username, COALESCE(email,''), COALESCE(student_number,''), "
                     "COALESCE(admin_type,0), COALESCE(is_disabled,false), "
                     "created_at, updated_at "
-                    "FROM ai_agent.local_users ORDER BY admin_type DESC, username ASC"
-                )
+                    "FROM ai_agent.local_users ORDER BY admin_type DESC, username ASC "
+                    "LIMIT :limit OFFSET :offset"
+                ),
+                {"limit": size, "offset": offset},
             )
         ).fetchall()
 
     return {
         "error": None,
         "data": {
+            "total": total,
+            "page": page,
+            "size": size,
             "results": [
                 {
                     "username": r[0],

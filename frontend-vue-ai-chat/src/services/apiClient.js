@@ -254,8 +254,9 @@ export function createApiClient(baseUrl = '/oj-api', aiAgentBaseUrl = '/oj-test-
       }
     })
 
-  const adminListAccounts = () =>
-    fetch(`${aiAgentBaseUrl}/admin/accounts`, {
+  const adminListAccounts = (page = 1, size = 12) => {
+    const params = new URLSearchParams({ page: String(page), size: String(size) })
+    return fetch(`${baseUrl}/admin/accounts?${params.toString()}`, {
       credentials: 'include'
     }).then(async (response) => {
       const rawText = await response.text()
@@ -266,9 +267,10 @@ export function createApiClient(baseUrl = '/oj-api', aiAgentBaseUrl = '/oj-test-
         return { ok: response.ok, status: response.status, data: { error: `Invalid JSON response (${response.status})`, data: rawText } }
       }
     })
+  }
 
   const adminCreateAccount = (payload) =>
-    fetch(`${aiAgentBaseUrl}/admin/accounts`, {
+    fetch(`${baseUrl}/admin/accounts`, {
       method: 'POST',
       credentials: 'include',
       headers: {
@@ -286,7 +288,7 @@ export function createApiClient(baseUrl = '/oj-api', aiAgentBaseUrl = '/oj-test-
     })
 
   const adminUpdateAccount = (username, payload) =>
-    fetch(`${aiAgentBaseUrl}/admin/accounts/${encodeURIComponent(username)}`, {
+    fetch(`${baseUrl}/admin/accounts/${encodeURIComponent(username)}`, {
       method: 'PUT',
       credentials: 'include',
       headers: {
@@ -304,7 +306,7 @@ export function createApiClient(baseUrl = '/oj-api', aiAgentBaseUrl = '/oj-test-
     })
 
   const adminDeleteAccount = (username) =>
-    fetch(`${aiAgentBaseUrl}/admin/accounts/${encodeURIComponent(username)}`, {
+    fetch(`${baseUrl}/admin/accounts/${encodeURIComponent(username)}`, {
       method: 'DELETE',
       credentials: 'include'
     }).then(async (response) => {
@@ -318,7 +320,7 @@ export function createApiClient(baseUrl = '/oj-api', aiAgentBaseUrl = '/oj-test-
     })
 
   const adminSetAccountStatus = (username, payload) =>
-    fetch(`${aiAgentBaseUrl}/admin/accounts/${encodeURIComponent(username)}/status`, {
+    fetch(`${baseUrl}/admin/accounts/${encodeURIComponent(username)}/status`, {
       method: 'PATCH',
       credentials: 'include',
       headers: {
@@ -336,7 +338,7 @@ export function createApiClient(baseUrl = '/oj-api', aiAgentBaseUrl = '/oj-test-
     })
 
   const adminChangeAccountPassword = (username, payload) =>
-    fetch(`${aiAgentBaseUrl}/admin/accounts/${encodeURIComponent(username)}/password`, {
+    fetch(`${baseUrl}/admin/accounts/${encodeURIComponent(username)}/password`, {
       method: 'PATCH',
       credentials: 'include',
       headers: {

@@ -21,7 +21,7 @@ services:
       - LITE_LLM_API_KEY=${UTU_LLM_API_KEY}
       - LITE_LLM_MODEL=${UTU_LLM_MODEL}
       - LITE_LLM_TIMEOUT=30
-      - LITE_DATABASE_URL=postgresql+asyncpg://onlinejudge:onlinejudge@${LITE_DB_HOST:-cdut-postgres}:5432/onlinejudge
+      - LITE_DATABASE_URL=postgresql+asyncpg://cdut:cdut_oj_2024@${LITE_DB_HOST:-cdut-postgres}:5432/cdut_oj
       - LITE_DB_SCHEMA=ai_agent
       - LITE_CELERY_BROKER=redis://cdut-redis:6379/1
       - LITE_CELERY_BACKEND=redis://cdut-redis:6379/2
@@ -51,7 +51,7 @@ services:
       - ${TEST_CASES_HOST_PATH:-./data/test_cases}:/data/test_cases
     environment:
       - TZ=Asia/Shanghai
-      - LITE_DATABASE_URL=postgresql+asyncpg://onlinejudge:onlinejudge@${LITE_DB_HOST:-cdut-postgres}:5432/onlinejudge
+      - LITE_DATABASE_URL=postgresql+asyncpg://cdut:cdut_oj_2024@${LITE_DB_HOST:-cdut-postgres}:5432/cdut_oj
       - LITE_DB_SCHEMA=ai_agent
       - LITE_CELERY_BROKER=redis://cdut-redis:6379/1
       - LITE_CELERY_BACKEND=redis://cdut-redis:6379/2

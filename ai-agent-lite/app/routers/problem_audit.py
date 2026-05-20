@@ -159,7 +159,7 @@ async def audit_summary():
         with conn.cursor() as cur:
             prefix = settings.audit_problem_id_prefix
             if prefix:
-                cur.execute("SELECT COUNT(*) FROM problem WHERE _id LIKE %s", (f"{prefix}%",))
+                cur.execute("SELECT COUNT(*) FROM public.problem WHERE _id LIKE %s", (f"{prefix}%",))
                 total_problems = cur.fetchone()[0]
                 cur.execute(
                     f"SELECT status, COUNT(*) FROM {settings.db_schema}.problem_audit "
@@ -174,7 +174,7 @@ async def audit_summary():
                 )
                 last_time = cur.fetchone()[0]
             else:
-                cur.execute("SELECT COUNT(*) FROM problem")
+                cur.execute("SELECT COUNT(*) FROM public.problem")
                 total_problems = cur.fetchone()[0]
                 cur.execute(
                     f"SELECT status, COUNT(*) FROM {settings.db_schema}.problem_audit "
