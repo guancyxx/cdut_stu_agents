@@ -810,6 +810,9 @@ body {
 }
 
 .chat-input-area {
+  --chat-composer-min-height: 108px;
+  --chat-composer-preferred-height: clamp(108px, 16vh, 144px);
+  --chat-composer-max-height: min(240px, 32vh);
   border-top: 1px solid var(--border-subtle);
   padding: 12px;
   display: flex;
@@ -895,6 +898,10 @@ body {
 
 .chat-input-area textarea {
   width: 100%;
+  min-height: var(--chat-composer-min-height);
+  height: var(--chat-composer-preferred-height);
+  max-height: var(--chat-composer-max-height);
+  overflow-y: auto;
 }
 
 .chat-input-area textarea:disabled {
