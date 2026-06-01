@@ -19,13 +19,13 @@ from pydantic import BaseModel, Field
 
 from sandbox import (
     Language,
-    Verdict,
     compile_code,
     execute,
     _write_temp,
     _extract_java_class,
     LANG_META,
 )
+from enums import Verdict
 
 app = FastAPI(title="cdut-sandbox-api", version="0.1.0")
 

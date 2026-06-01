@@ -26,6 +26,7 @@ from typing import Optional
 import httpx
 
 from app.config import settings
+from app.models.enums import Verdict
 
 
 JAVA_MEMORY_FLOOR_KB = 1024 * 1024
@@ -77,16 +78,6 @@ class SandboxClient:
 
 
 # ── data structures ───────────────────────────────────────────────────
-class Verdict:
-    AC = "AC"
-    WA = "WA"
-    TLE = "TLE"
-    MLE = "MLE"
-    RE = "RE"
-    CE = "CE"
-    SE = "SE"
-
-
 @dataclass
 class TestCaseResult:
     """Result for a single test case."""

@@ -24,3 +24,14 @@ class ErrorCode(str, Enum):
     INVALID_INPUT = "INVALID_INPUT"
     SESSION_NOT_FOUND = "SESSION_NOT_FOUND"
     INTERNAL = "INTERNAL"
+
+
+class Verdict(str, Enum):
+    """OJ submission verdicts — single source of truth for ai-agent-lite."""
+    AC = "AC"
+    WA = "WA"
+    TLE = "TLE"
+    MLE = "MLE"
+    RE = "RE"
+    CE = "CE"
+    SE = "SE"
