@@ -23,6 +23,8 @@ from enum import Enum
 from pathlib import Path
 from typing import Optional
 
+from enums import Verdict
+
 
 # ── paths ────────────────────────────────────────────────────────────
 ISOLATE_BIN = "/usr/local/bin/isolate"
@@ -31,16 +33,6 @@ BOX_RANGE = range(1, 128)  # available box IDs for concurrent submissions
 
 
 # ── enums / constants ─────────────────────────────────────────────────
-class Verdict(str, Enum):
-    AC = "AC"
-    WA = "WA"
-    TLE = "TLE"
-    MLE = "MLE"
-    RE = "RE"
-    CE = "CE"
-    SE = "SE"  # sandbox / system error
-
-
 class Language(str, Enum):
     C = "c"
     CPP = "cpp"
@@ -106,10 +98,13 @@ class ExecuteResult:
     message: str = ""
 
 
-@dataclass
 class SandboxError(Exception):
-    message: str
-    box_id: Optional[int] = None
+    """Sandbox infrastructure error — isolate init failure, missing artifact, etc."""
+
+    def __init__(self, message: str, box_id: Optional[int] = None):
+        super().__init__(message)
+        self.message = message
+        self.box_id = box_id
 
 
 # ── parse meta ────────────────────────────────────────────────────────
@@ -424,10 +419,6 @@ def _determine_verdict(
     # Sandbox-detected fatal signal (SEGFAULT, etc.) — treat as RE
     if status == "SG":
         return Verdict.RE
-
-    # Sandbox / system error (unexpected)
-    if status == "SG":
-        return Verdict.SE
 
     # Accepted — only if no error condition fired
     return Verdict.AC

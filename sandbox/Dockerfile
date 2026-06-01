@@ -61,6 +61,7 @@ RUN useradd -m -s /bin/bash sandbox && \
 WORKDIR /workspace
 
 # Copy sandbox module and API server
+COPY enums.py /workspace/enums.py
 COPY sandbox.py /workspace/sandbox.py
 COPY api_server.py /workspace/api_server.py
 

@@ -8,12 +8,12 @@ Re-exports public API for backward compatibility:
 """
 from app.models.orm import Base, Session, Message, AuditLog
 from app.models.schemas import StudentState, AgentResponse
-from app.models.enums import AgentType, CompletionStatus, ErrorCode
+from app.models.enums import AgentType, CompletionStatus, ErrorCode, Verdict
 from app.models.ws_messages import WsQueryMessage, WsRawMessage, WsQueryContent
 
 __all__ = [
     "Base", "Session", "Message", "AuditLog",
     "StudentState", "AgentResponse",
-    "AgentType", "CompletionStatus", "ErrorCode",
+    "AgentType", "CompletionStatus", "ErrorCode", "Verdict",
     "WsQueryMessage", "WsRawMessage", "WsQueryContent",
 ]
