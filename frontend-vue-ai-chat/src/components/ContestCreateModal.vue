@@ -608,13 +608,14 @@ onMounted(() => {
 .problem-grid-card {
   position: relative;
   text-align: left;
+  min-height: 116px;
   border: 1px solid var(--border-subtle);
   border-radius: 10px;
   background: var(--bg-panel);
-  padding: 11px 12px 10px;
+  padding: 14px 14px 12px;
   display: grid;
   grid-template-rows: auto 1fr auto;
-  gap: 9px;
+  gap: 12px;
   align-content: start;
   cursor: pointer;
   transition: border-color var(--motion-fast) var(--ease-standard),
@@ -640,10 +641,9 @@ onMounted(() => {
   font-size: 13px;
   font-weight: 600;
   color: var(--text-primary);
-  line-height: 1.4;
-  min-height: 36px;
+  line-height: 1.5;
   display: -webkit-box;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
   text-overflow: ellipsis;
