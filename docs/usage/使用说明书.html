@@ -1,0 +1,649 @@
+<!doctype html><html lang="zh"><head><meta charset="utf-8">
+<style>
+@page { size: A4; margin: 16mm 14mm; }
+body{font-family:"PingFang SC","Hiragino Sans GB","Microsoft YaHei",-apple-system,sans-serif;color:#1a1a1a;line-height:1.7;font-size:13px;max-width:none;}
+h1{font-size:24px;border-bottom:3px solid #4f46e5;padding-bottom:8px;margin-top:0;}
+h2{font-size:19px;border-bottom:1px solid #ddd;padding-bottom:5px;margin-top:28px;color:#4338ca;page-break-after:avoid;}
+h3{font-size:15px;margin-top:20px;color:#1e40af;page-break-after:avoid;}
+h4{font-size:13.5px;margin-top:14px;}
+code{background:#f3f4f6;padding:1px 5px;border-radius:4px;font-family:"SF Mono",Menlo,monospace;font-size:11.5px;color:#b91c1c;}
+pre{background:#1e293b;color:#e2e8f0;padding:12px 14px;border-radius:8px;overflow:auto;font-size:11px;line-height:1.5;page-break-inside:avoid;}
+pre code{background:none;color:inherit;padding:0;}
+table{border-collapse:collapse;width:100%;margin:10px 0;font-size:12px;page-break-inside:avoid;}
+th,td{border:1px solid #d1d5db;padding:6px 9px;text-align:left;}
+th{background:#eef2ff;font-weight:600;}
+tr:nth-child(even){background:#f9fafb;}
+img{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin:8px 0;box-shadow:0 1px 4px rgba(0,0,0,.08);page-break-inside:avoid;}
+blockquote{border-left:4px solid #818cf8;background:#f5f3ff;margin:10px 0;padding:8px 14px;color:#3730a3;border-radius:0 6px 6px 0;}
+a{color:#4f46e5;text-decoration:none;}
+hr{border:none;border-top:1px solid #e5e7eb;margin:20px 0;}
+ul,ol{padding-left:22px;}
+</style></head><body><h1>CDUT 程序设计竞赛 AI 学生培训系统 — 使用说明书</h1>
+<blockquote>
+<p>适用前端：<code>frontend-vue-ai-chat</code>（Vue 3 + Vite）
+后端：<code>ai-agent-lite</code>（FastAPI + 多智能体）、<code>cdut-sandbox</code>（isolate 判题沙盒）、PostgreSQL、Redis、Celery
+本文档分两部分：<strong>第一部分 用户使用手册</strong>（仅覆盖当前前端实际提供的能力）、<strong>第二部分 系统部署手册</strong>。
+验证环境：macOS + Docker。
+仓库地址：<a href="https://github.com/guancyxx/cdut_stu_agents">https://github.com/guancyxx/cdut_stu_agents</a></p>
+</blockquote>
+<hr>
+<h2>目录</h2>
+<ul>
+<li>第一部分 用户使用手册<ul>
+<li><ol>
+<li>系统概览与访问</li>
+</ol>
+</li>
+<li><ol start="2">
+<li>注册 / 登录</li>
+</ol>
+</li>
+<li><ol start="3">
+<li>主页：AI 学习对话</li>
+</ol>
+</li>
+<li><ol start="4">
+<li>题库：浏览与选题</li>
+</ol>
+</li>
+<li><ol start="5">
+<li>题目详情与 OJ 代码提交</li>
+</ol>
+</li>
+<li><ol start="6">
+<li>比赛</li>
+</ol>
+</li>
+<li><ol start="7">
+<li>个人中心</li>
+</ol>
+</li>
+<li><ol start="8">
+<li>管理后台（管理员）</li>
+</ol>
+</li>
+<li><ol start="9">
+<li>通用：主题切换 / 会话管理</li>
+</ol>
+</li>
+</ul>
+</li>
+<li>第二部分 系统部署手册<ul>
+<li><ol start="10">
+<li>架构与端口</li>
+</ol>
+</li>
+<li><ol start="11">
+<li>前置条件</li>
+</ol>
+</li>
+<li><ol start="12">
+<li>环境变量配置</li>
+</ol>
+</li>
+<li><ol start="13">
+<li>一键启动</li>
+</ol>
+</li>
+<li><ol start="14">
+<li>数据库与题库种子恢复</li>
+</ol>
+</li>
+<li><ol start="15">
+<li>测试用例恢复</li>
+</ol>
+</li>
+<li><ol start="16">
+<li>创建首个账号 / 管理员</li>
+</ol>
+</li>
+<li><ol start="17">
+<li>健康检查与冒烟测试</li>
+</ol>
+</li>
+<li><ol start="18">
+<li>常见问题排查</li>
+</ol>
+</li>
+<li><ol start="19">
+<li>停止 / 重建 / 备份</li>
+</ol>
+</li>
+</ul>
+</li>
+</ul>
+<hr>
+<h1>第一部分 用户使用手册</h1>
+<h2>1. 系统概览与访问</h2>
+<p>系统是一个「<strong>OJ 题库 + AI 编程导师</strong>」一体化学习平台。学生登录后可以：</p>
+<ul>
+<li>在<strong>题库</strong>中浏览 2600+ 道竞赛题（蓝桥杯、FPS 导入题等）；</li>
+<li>选题后自动开启一个<strong>学习会话</strong>，AI 导师围绕该题给出讲解、思路提示与代码点评；</li>
+<li>直接在页面内<strong>提交代码</strong>到 OJ 判题（C++ / C / Java / Python3），实时看到判题结果（通过/错误、用时、内存、测试点）；</li>
+<li>参加<strong>比赛</strong>并查看排行榜；</li>
+<li>在<strong>个人中心</strong>维护资料、修改密码、设置个性签名。</li>
+</ul>
+<p><strong>访问地址</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>场景</th>
+<th>地址</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>公共测试地址（外网）</td>
+<td><code>http://8.137.155.24/</code></td>
+</tr>
+<tr>
+<td>本地部署地址（本机）</td>
+<td><code>http://localhost:5173/</code></td>
+</tr>
+</tbody></table>
+<p>两者是<strong>相互独立的两套部署</strong>（数据不互通），区别见部署手册 §10.1。本地部署基础管理员账号：<strong><code>admin</code> / <code>admin123456</code></strong>。</p>
+<p>首次进入未登录会自动跳转到登录页 <code>/auth</code>。</p>
+<blockquote>
+<p>顶部导航栏固定包含：主页、题库、比赛、个人中心；管理员额外显示「管理」。</p>
+</blockquote>
+<hr>
+<h2>2. 注册 / 登录</h2>
+<p><img src="screenshots/01-login.png" alt="登录页"></p>
+<p>页面 <code>/auth</code>，可在「登录 / 注册」之间切换。</p>
+<h3>注册</h3>
+<p><img src="screenshots/02-register.png" alt="注册表单"></p>
+<ol>
+<li>点击「注册」切换到注册模式。</li>
+<li>填写<strong>用户名</strong>、<strong>密码</strong>（≥6 位）。</li>
+<li>可选填<strong>邮箱</strong>、<strong>学号</strong>。</li>
+<li>输入<strong>验证码</strong>（点击验证码图片可刷新）。</li>
+<li>点击「注册 OJ」。成功后自动登录并进入主页。</li>
+</ol>
+<blockquote>
+<p>注意：系统迁移后仅保留管理员账号，<strong>普通学生需自行注册</strong>。账号体系由后端 <code>ai_agent.local_users</code> 维护（与历史 qduoj 用户表独立）。</p>
+</blockquote>
+<h3>登录</h3>
+<p>输入用户名 + 密码，点击「登录 OJ」。登录态基于后端会话 Cookie，刷新页面保持登录。右上角按钮显示当前用户名；点击进入个人中心。</p>
+<hr>
+<h2>3. 主页：AI 学习对话</h2>
+<p><img src="screenshots/03-home.png" alt="主页"></p>
+<p>主页为三栏布局：</p>
+<table>
+<thead>
+<tr>
+<th>区域</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>左侧栏</td>
+<td>会话列表（每个会话对应一道题或一次自由对话），顶部显示会话数与「清空所有对话」</td>
+</tr>
+<tr>
+<td>中间</td>
+<td>对话区 + 底部输入框</td>
+</tr>
+<tr>
+<td>右侧栏</td>
+<td>「题目信息」/「OJ提交」两个标签页</td>
+</tr>
+</tbody></table>
+<h3>发起对话</h3>
+<ul>
+<li>在底部输入框输入问题，<strong>Enter 发送，Shift+Enter 换行</strong>。</li>
+<li>AI 回复以<strong>流式</strong>方式逐字返回。</li>
+<li>回复上方会出现<strong>下一步建议</strong>胶囊（📖 这道题在考什么 / 🎯 给个思路提示 / 🐛 调试 / 🏆 去比赛 等），点击即按该意图继续提问。</li>
+</ul>
+<p><img src="screenshots/05-problem-chat.png" alt="选题后对话 + 题面"></p>
+<h3>多智能体与执行轨迹</h3>
+<p>后端是一个 <strong>supervisor 多智能体</strong>系统，会把问题路由到子智能体：
+<code>code_reviewer</code>（代码评审）、<code>problem_analyzer</code>（问题解析）、<code>contest_coach</code>（竞赛教练）、<code>learning_partner</code>（学习伙伴）、<code>learning_manager</code>（学习管理）。</p>
+<p>处理过程中输入框上方会显示<strong>执行轨迹条</strong>（如 <code>🧠 问题解析专家 ⟳ 运行中 / ✓ 已完成</code>）。</p>
+<p><img src="screenshots/06-chat-reply.png" alt="AI 回复与子智能体轨迹"></p>
+<p><img src="screenshots/18-ai-working.png" alt="AI 正常回答"></p>
+<blockquote>
+<p><strong>重要</strong>：AI 文本生成依赖外部 LLM（默认 DeepSeek）。配置有效 <code>UTU_LLM_API_KEY</code> 后，子智能体返回完整回答（如上图「问题解析专家」给出冒泡排序讲解并反问追问）。若 Key 无效/欠费，则返回「temporarily unavailable」兜底文案（接口本身正常，仅 LLM 调用失败）。更换 Key 后<strong>必须重建容器</strong>（<code>up -d --force-recreate</code>，仅 <code>restart</code> 不会重新读取 <code>.env</code>），详见部署手册 §12、§18。</p>
+</blockquote>
+<h3>把代码 / 判题结果发给 AI（暂存附件流）</h3>
+<p>在「OJ提交」面板里点「发给AI」<strong>不会立即发送</strong>，而是把代码（以及上一次判题结果）作为<strong>附件胶囊</strong>暂存到输入框上方。你可以检查后再点「发送」，附件会以 <code>[Attachment] 文件名</code> + 代码块形式拼进消息。这样能把「代码 + 报错结果」一并交给 AI 点评。</p>
+<hr>
+<h2>4. 题库：浏览与选题</h2>
+<p><img src="screenshots/04-problemset.png" alt="题库"></p>
+<p>页面 <code>/problemset</code>：</p>
+<ul>
+<li><strong>搜索</strong>：按题号或关键词（如 <code>LQ1273</code>）。</li>
+<li><strong>筛选</strong>：难度（Low / Mid / High）、标签（蓝桥杯-算法提高、Dynamic Programming、Greedy、Math 等）。</li>
+<li><strong>分页</strong>：每页 21 题，底部数字翻页（验证环境共 2683 题 / 128 页）。</li>
+<li>点击任意题目卡片 → 自动创建/切换到该题的学习会话，加载题面，AI 给出迎语，并跳转主页。</li>
+</ul>
+<p>管理员在题库页额外可见「新增题目」按钮，每个题卡有「编辑」按钮。</p>
+<hr>
+<h2>5. 题目详情与 OJ 代码提交</h2>
+<p>选题后，主页右侧栏「题目信息」标签展示题面：描述、输入/输出格式、样例输入输出、提示（时间/内存限制）、来源、难度、提交数/通过数/通过率。</p>
+<h3>提交代码</h3>
+<p><img src="screenshots/07-submit-result.png" alt="判题结果"></p>
+<p>切到右侧栏「OJ提交」标签：</p>
+<ol>
+<li>选择语言（C++ / C / Java / Python3），编辑器带各语言起始模板。</li>
+<li>在 CodeMirror 编辑器写代码（语法高亮）。</li>
+<li>点击「提交代码」。</li>
+<li>结果区显示判题中（Judging…）→ 最终结果：<ul>
+<li>状态标签：<code>Accepted</code> / <code>Wrong Answer</code> / <code>Compile Error</code> / <code>Runtime Error</code> / <code>Time Limit Exceeded</code> 等；</li>
+<li><strong>Score / Time(ms) / Memory(KB)</strong>；</li>
+<li><strong>测试点通过数</strong>（如 <code>0/5 PASSED</code>）；</li>
+<li>出错时显示错误信息块。</li>
+</ul>
+</li>
+</ol>
+<blockquote>
+<p>判题链路：前端 → <code>ai-agent-lite</code> → <code>cdut-sandbox</code>（isolate 沙盒）按题目对应的测试用例逐点运行 → 返回结果。需测试用例已恢复到 <code>data/test_cases</code>（见部署手册 §15）。</p>
+</blockquote>
+<p>每个会话的提交草稿（语言 + 代码 + 结果）会被独立保存，切换会话不丢失。</p>
+<hr>
+<h2>6. 比赛</h2>
+<p><img src="screenshots/09-contest.png" alt="比赛"></p>
+<p>页面 <code>/contest</code>，左侧为比赛列表，右侧为比赛工作区：</p>
+<ul>
+<li>比赛卡片显示状态徽标：<strong>即将开始 / 进行中 / 已结束</strong>，以及报名按钮。</li>
+<li>选中比赛后右侧展示：标题、描述、起止时间、报名状态、题目数量，以及<strong>实时倒计时</strong>（开赛倒计时 / 剩余时间）。</li>
+<li><strong>进行中</strong>且<strong>已报名</strong>才可在赛内提交代码（流程同 §5）。</li>
+<li>右侧<strong>排行榜</strong>：按通过数、罚时排序，分页显示；点击选手可查看其个性签名。</li>
+<li>排行榜横幅会标注「进行中临时榜单 / 最终榜单」。</li>
+</ul>
+<p>管理员可见「新增比赛」按钮。</p>
+<h3>学生参赛流程（实测）</h3>
+<ol>
+<li>进入「比赛」，左侧选择一场<strong>进行中</strong>的比赛（卡片有绿色「进行中」徽标与「参加」按钮）。</li>
+<li>点击「参加 / 报名」完成报名，右侧「报名状态」变为<strong>已报名</strong>。</li>
+<li>在「赛题列表」点击题目（A/B/C…），右侧展示题面与代码编辑器。</li>
+<li>选语言 → 写代码 → 「提交代码」，结果区显示判题结果；提交后排行榜刷新。</li>
+</ol>
+<p><img src="screenshots/16-student-contest-joined.png" alt="学生报名进行中比赛"></p>
+<p><img src="screenshots/17-student-contest-submit.png" alt="赛内提交判题结果"></p>
+<blockquote>
+<p>仅<strong>进行中且已报名</strong>才显示提交入口；未开始/已结束会显示对应提示（「比赛尚未开始」/「提交入口已关闭」）。
+排行榜按通过数、罚时排序，横幅标注「进行中临时榜单 / 最终榜单」。</p>
+</blockquote>
+<hr>
+<h2>7. 个人中心</h2>
+<p><img src="screenshots/08-profile.png" alt="个人中心"></p>
+<p>页面 <code>/profile</code>，顶部 Hero 展示头像（用户名首字母）、角色徽标（Regular User / Admin / Super Admin）、邮箱、个性签名。左侧分区导航：</p>
+<table>
+<thead>
+<tr>
+<th>分区</th>
+<th>功能</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>账号信息</td>
+<td>查看用户名/邮箱/学号/角色；「编辑」可改邮箱、学号</td>
+</tr>
+<tr>
+<td>安全设置</td>
+<td>修改密码（需旧密码校验，新密码 ≥6 位、两次一致）</td>
+</tr>
+<tr>
+<td>个性化</td>
+<td>编辑个性签名（≤280 字）</td>
+</tr>
+<tr>
+<td>竞赛数据</td>
+<td>登录状态、身份级别、资料完整度</td>
+</tr>
+</tbody></table>
+<p>右上角可「返回主页」「编辑资料」「退出登录」。</p>
+<hr>
+<h2>8. 管理后台（管理员）</h2>
+<p>仅 <code>admin_type ≥ 1</code> 的账号在导航栏看到「管理」入口（<code>/admin</code>），普通用户访问会被重定向回主页。登录管理员账号后顶部导航多出「管理」一项。</p>
+<h3>8.1 账号管理（<code>/admin</code>）</h3>
+<p><img src="screenshots/10-admin-accounts.png" alt="账号管理"></p>
+<ul>
+<li>卡片列表展示所有账号（用户名、邮箱、学号、启用状态、权限徽标、创建时间），分页（每页 12 条）。</li>
+<li>每张卡片操作：<strong>编辑</strong>（邮箱/学号/权限级别）、<strong>改密</strong>、<strong>启用/禁用</strong>、<strong>删除</strong>。</li>
+<li>权限级别：普通用户(0) / 管理员(1) / 超级管理员(2)；只有超级管理员能创建或设置超级管理员。</li>
+<li>安全限制：不能禁用或删除<strong>当前登录账号</strong>（删除按钮置灰）。</li>
+</ul>
+<p><strong>新增账号</strong>弹窗（用户名、初始密码、邮箱、学号、权限级别）：</p>
+<p><img src="screenshots/11-admin-create-account.png" alt="新增账号"></p>
+<h3>8.2 题库管理（题库页）</h3>
+<p>管理员在题库页右上角可见「新增题目」，每个题卡有「编辑」按钮：</p>
+<p><img src="screenshots/12-admin-problemset.png" alt="管理员题库视图"></p>
+<p><strong>新增题目</strong>弹窗支持「单题上传 / 批量导入」两种模式，单题表单含：标题、难度、来源、题目描述、输入/输出描述、样例（可多组）、提示、标签、各语言模板代码（C/C++/Java/Python3）、测试数据（可多组）、时间/内存限制、特殊判题(SPJ)、公开可见：</p>
+<p><img src="screenshots/13-admin-problem-create.png" alt="新增题目"></p>
+<p>「编辑」题目可改题面、可见性、标签（<code>ProblemEditModal</code>）。</p>
+<h3>8.3 比赛管理（比赛页）</h3>
+<p>管理员在比赛列表可见「新增比赛」。弹窗含「比赛信息 / 题目信息」两个标签：</p>
+<ul>
+<li><strong>比赛信息</strong>：标题、描述、开始/结束时间、对学生可见开关。</li>
+<li><strong>题目信息</strong>：从右侧题库筛选并点选题目（按 A、B、C 排定），左侧显示已选题目。</li>
+</ul>
+<p><img src="screenshots/14-admin-contest-create.png" alt="新增比赛"></p>
+<p>创建后比赛即出现在列表，按时间自动推导状态（即将开始/进行中/已结束）。下图为一场创建后<strong>进行中</strong>的比赛，带实时剩余倒计时、赛题列表与排行榜：</p>
+<p><img src="screenshots/15-admin-contest-running.png" alt="进行中比赛（管理员视角）"></p>
+<blockquote>
+<p>⚠️ 时间字段说明：前端创建比赛时会把所填时间按 <strong>UTC</strong> 提交（<code>normalizeDateTime</code> 追加 <code>Z</code>）。若希望比赛「立即进行中」，填写开始/结束时间时需按 UTC 时间填（比北京时间早 8 小时），否则会比预期晚 8 小时开赛。</p>
+</blockquote>
+<hr>
+<h2>9. 通用功能</h2>
+<ul>
+<li><strong>主题切换</strong>：顶部栏「Switch to dark/light theme」按钮，明暗主题切换，偏好本地保存。</li>
+<li><strong>会话管理</strong>：左侧栏可切换会话、查看创建时间；「clear」清空所有会话并跳转题库。</li>
+<li><strong>退出登录</strong>：个人中心或右上角用户菜单。</li>
+</ul>
+<hr>
+<h1>第二部分 系统部署手册</h1>
+<h2>10. 架构与端口</h2>
+<pre><code>浏览器  (下为单套部署内部拓扑；公共/本地为两套独立部署，各一份)
+  │  入口: 公共 http://8.137.155.24/(:80 反代→5173) 或 本地 http://localhost:5173/
+  ├─ vue-ai-chat (Vite dev server, 宿主 5173)
+  │     ├─ /ws       → ws://ai-agent-lite:8848   (WebSocket 代理)
+  │     ├─ /oj-api   → http://ai-agent-lite:8848 (REST 代理, 去前缀)
+  │     └─ /oj-test-cases → http://ai-agent-lite:8848/oj
+  │
+ai-agent-lite (FastAPI, 容器内 8848 → 宿主 8850)
+  ├─ PostgreSQL  cdut-postgres   (schema: public=OJ数据, ai_agent=会话/账号)
+  ├─ Redis       cdut-redis      (Celery broker/backend)
+  ├─ Celery      cdut-ai-agent-celery-worker  (题目审核 audit 队列)
+  └─ Sandbox     cdut-sandbox    (isolate 判题, 宿主 8899)
+</code></pre>
+<h3>宿主端口占用（本项目）</h3>
+<table>
+<thead>
+<tr>
+<th>服务</th>
+<th>宿主端口</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>vue-ai-chat</td>
+<td><strong>5173</strong></td>
+<td>前端</td>
+</tr>
+<tr>
+<td>ai-agent-lite</td>
+<td><strong>8850</strong></td>
+<td>后端 API/WS（容器内 8848）</td>
+</tr>
+<tr>
+<td>cdut-sandbox</td>
+<td><strong>8899</strong></td>
+<td>判题沙盒</td>
+</tr>
+<tr>
+<td>cdut-postgres</td>
+<td>仅容器内 5432</td>
+<td><strong>不映射宿主</strong>，避免与其他项目冲突</td>
+</tr>
+<tr>
+<td>cdut-redis</td>
+<td>仅容器内 6379</td>
+<td><strong>不映射宿主</strong></td>
+</tr>
+</tbody></table>
+<blockquote>
+<p><strong>避免与其他 Docker 项目冲突</strong>：本项目所有容器名带 <code>cdut-</code> 前缀，跑在独立的 <code>cdut-network</code> 桥接网络，Postgres/Redis 不暴露宿主端口。已确认 5173 / 8850 / 8899 与宿主上其它项目（magicedit-* 占用 80/3306/6379/8500 等、dreampal-* 占用 8300/8400/8600 等）<strong>无端口冲突</strong>。</p>
+</blockquote>
+<h3>10.1 两个访问地址的区别</h3>
+<p>两个地址是<strong>两套相互独立的部署</strong>，各自有独立的数据库、账号、题库与会话数据——<strong>不互通、不同步</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>地址</th>
+<th>类型</th>
+<th>部署位置</th>
+<th>数据</th>
+<th>端口</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>http://8.137.155.24/</code></td>
+<td><strong>公共测试地址</strong>（外网）</td>
+<td>云服务器</td>
+<td>独立一套</td>
+<td>80（反向代理转发到容器 5173）</td>
+</tr>
+<tr>
+<td><code>http://localhost:5173/</code></td>
+<td><strong>本地部署地址</strong>（本机）</td>
+<td>本机 Docker</td>
+<td>独立一套</td>
+<td>5173（compose 直接映射宿主）</td>
+</tr>
+</tbody></table>
+<p>说明：</p>
+<ul>
+<li>二者<strong>不是同一套数据</strong>：在公共地址注册的账号，在本地地址登录不了，反之亦然；题库/比赛/提交记录各自独立。</li>
+<li>公共地址走 80 端口，由云服务器上的反向代理（如 Nginx）转发到容器 5173；本地地址直连 compose 映射的 5173。</li>
+<li>异地访问只能用公共测试地址；本机开发/调试用本地地址。</li>
+<li>后端 API/沙盒端口（8850 / 8899）仅供<strong>各自所在主机本机</strong>调用（健康检查、排错），未公网暴露。</li>
+</ul>
+<p><strong>基础管理员账号</strong>（<strong>本地部署</strong>，由本手册 §16 方式 B 创建）：</p>
+<table>
+<thead>
+<tr>
+<th>用户名</th>
+<th>密码</th>
+<th>权限</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>admin</code></td>
+<td><code>admin123456</code></td>
+<td>超级管理员（admin_type=2）</td>
+</tr>
+</tbody></table>
+<blockquote>
+<p>该账号属于本地部署。公共测试地址为独立环境，管理员账号由该服务器维护方提供，未必相同。
+⚠️ 生产/公网环境请立即修改默认密码或删除该账号（个人中心 → 安全设置，或管理后台 → 改密）。</p>
+</blockquote>
+<hr>
+<h2>11. 前置条件</h2>
+<ul>
+<li>Docker + Docker Compose v2。</li>
+<li>磁盘空间：镜像约 6GB（含 isolate 沙盒、Node、Python），测试用例解压约数百 MB。</li>
+<li>一个<strong>有效的 LLM API Key</strong>（默认 DeepSeek <code>chat.completions</code> 接口）——AI 对话功能必需。</li>
+</ul>
+<hr>
+<h2>12. 环境变量配置</h2>
+<p>项目根目录 <code>.env</code>（参考 <code>.env.example</code>）。关键项：</p>
+<pre><code class="language-bash"># LLM（必需 —— AI 对话依赖）
+UTU_LLM_TYPE=chat.completions
+UTU_LLM_MODEL=deepseek-chat
+UTU_LLM_BASE_URL=https://api.deepseek.com/v1
+UTU_LLM_API_KEY=&lt;你的有效 Key&gt;      # ← 务必有效，否则 AI 回复 401 兜底
+
+# 搜索（可选）
+SERPER_API_KEY=&lt;可选&gt;
+
+# 题目审核 Celery worker 用的 LLM（可选）
+# XIAOMI_API_KEY=&lt;可选&gt;            # 未设置时 worker 仅警告，不影响主流程
+
+# 前端端口（compose 内已固定）
+UTU_WEBUI_PORT=8848
+TZ=Asia/Shanghai
+</code></pre>
+<blockquote>
+<p><strong>校验 LLM Key 是否有效</strong>：</p>
+<pre><code class="language-bash">curl -s -o /dev/null -w &quot;%{http_code}\n&quot; -X POST https://api.deepseek.com/v1/chat/completions \
+  -H &quot;Authorization: Bearer $UTU_LLM_API_KEY&quot; -H &quot;Content-Type: application/json&quot; \
+  -d &#39;{&quot;model&quot;:&quot;deepseek-chat&quot;,&quot;messages&quot;:[{&quot;role&quot;:&quot;user&quot;,&quot;content&quot;:&quot;hi&quot;}],&quot;max_tokens&quot;:5}&#39;
+</code></pre>
+<p>返回 <code>200</code> 为有效；<code>401</code> 表示 Key 无效/欠费（此时 AI 对话会回退为「temporarily unavailable」）。</p>
+<p><strong>更换 Key 后必须重建容器</strong>（<code>restart</code> 不会重新注入 <code>compose</code> 的环境变量）：</p>
+<pre><code class="language-bash">docker compose up -d --force-recreate ai-agent-lite ai-agent-celery-worker
+</code></pre>
+<p>重建后浏览器刷新页面重连 WebSocket 即可。</p>
+</blockquote>
+<hr>
+<h2>13. 一键启动</h2>
+<pre><code class="language-bash">cd /path/to/cdut_stu_agents
+docker compose up -d --build
+</code></pre>
+<p>启动 6 个服务：<code>cdut-postgres</code>、<code>cdut-redis</code>、<code>cdut-sandbox</code>、<code>ai-agent-lite</code>、<code>ai-agent-celery-worker</code>、<code>vue-ai-chat</code>。</p>
+<blockquote>
+<p><strong>首次构建注意</strong>：<code>cdut-sandbox</code> 基于 <code>ubuntu:24.04</code> 需 <code>apt-get</code> 安装 isolate/JDK 等，偶发网络抖动导致 <code>exit code 100</code>。重试即可：</p>
+<pre><code class="language-bash">docker compose build cdut-sandbox &amp;&amp; docker compose up -d
+</code></pre>
+</blockquote>
+<blockquote>
+<p><strong>启动时序</strong>：<code>ai-agent-lite</code> 依赖 Postgres，首启可能因 Postgres 尚未就绪而 <code>ConnectionRefusedError</code> 退出。Postgres 起来后重启一次后端即可：</p>
+<pre><code class="language-bash">docker compose restart ai-agent-lite ai-agent-celery-worker
+</code></pre>
+<p>（后端 <code>restart: unless-stopped</code>，多数情况下会自愈。）</p>
+</blockquote>
+<p>启动后后端会自动执行 <code>init_db()</code>：创建 <code>ai_agent</code> schema 及 <code>local_users</code> / <code>sessions</code> / <code>messages</code> 等表（幂等）。</p>
+<hr>
+<h2>14. 数据库与题库种子恢复</h2>
+<p><strong>全新 Postgres 卷不含 OJ 题库数据</strong>（<code>public.problem</code> 等表不存在，题库/比赛页会 500）。需恢复种子库。</p>
+<p>备份位于 <code>backups/</code>：</p>
+<table>
+<thead>
+<tr>
+<th>文件</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>qduoj_full_20260424_234948.sql</code></td>
+<td>全量 SQL（<code>public.*</code> OJ 表：problem/user/contest/submission + <code>ai_agent.*</code>）</td>
+</tr>
+<tr>
+<td><code>qduoj_full_20260424_234948.dump</code></td>
+<td>同上，pg_restore 自定义格式</td>
+</tr>
+<tr>
+<td><code>qduoj_testcase_20260424_234948.tar.gz</code></td>
+<td>测试用例文件</td>
+</tr>
+</tbody></table>
+<p><strong>恢复（追加式，向已存在的 <code>cdut_oj</code> 库导入）</strong>：</p>
+<pre><code class="language-bash">docker exec -i cdut-postgres psql -U cdut -d cdut_oj -v ON_ERROR_STOP=0 \
+  &lt; backups/qduoj_full_20260424_234948.sql
+</code></pre>
+<blockquote>
+<p><code>ai_agent.*</code> 表因后端已建会报「already exists / multiple primary keys」——<strong>可忽略</strong>，<code>public.*</code> OJ 表会正常创建并载入数据。</p>
+</blockquote>
+<p><strong>校验</strong>：</p>
+<pre><code class="language-bash">docker exec cdut-postgres psql -U cdut -d cdut_oj -t -c \
+  &quot;SELECT &#39;problems=&#39;||count(*) FROM public.problem;&quot;
+# 预期：problems=2683
+</code></pre>
+<p>恢复后重启后端使其连上完整库：<code>docker compose restart ai-agent-lite</code>。</p>
+<hr>
+<h2>15. 测试用例恢复</h2>
+<p>判题需要测试用例落到 <code>data/test_cases/&lt;test_case_id&gt;/</code>（compose 已挂载该目录到沙盒 <code>/data/test_cases</code>）。</p>
+<pre><code class="language-bash">tar xzf backups/qduoj_testcase_20260424_234948.tar.gz \
+  -C data/test_cases --strip-components=1
+# 校验：
+ls data/test_cases | wc -l        # 预期约 3528 个用例目录
+</code></pre>
+<blockquote>
+<p>tar 内顶层为 <code>test_case/</code>，故用 <code>--strip-components=1</code> 去掉前缀。</p>
+</blockquote>
+<p>可通过 <code>TEST_CASES_HOST_PATH</code> 环境变量自定义宿主测试用例目录（默认 <code>./data/test_cases</code>）。</p>
+<hr>
+<h2>16. 创建首个账号 / 管理员</h2>
+<p>账号存于 <code>ai_agent.local_users</code>，恢复后仍为空。两种方式：</p>
+<p><strong>方式 A（推荐，走正常流程）</strong>：浏览器打开 <code>http://localhost:5173/auth</code> → 注册（含验证码）。第一个注册的是普通用户。</p>
+<p><strong>方式 B（脚本造管理员，需直连 DB）</strong>：用后端自带的密码哈希工具生成 Django 兼容 <code>pbkdf2_sha256</code> 哈希再插库：</p>
+<pre><code class="language-bash">HASH=$(docker exec cdut-ai-agent-lite \
+  python -c &quot;from app.utils.auth_helpers import hash_password; print(hash_password(&#39;你的密码&#39;))&quot;)
+
+docker exec cdut-postgres psql -U cdut -d cdut_oj -c \
+  &quot;INSERT INTO ai_agent.local_users (username,password_hash,email,admin_type,is_disabled,created_at,updated_at)
+   VALUES (&#39;admin&#39;,&#39;$HASH&#39;,&#39;admin@cdut.edu&#39;,2,false,now(),now())
+   ON CONFLICT (username) DO UPDATE SET password_hash=EXCLUDED.password_hash, admin_type=2;&quot;
+</code></pre>
+<p><code>admin_type</code>：0=普通，1=管理员，2=超级管理员。建好后即可登录并看到「管理」入口。</p>
+<blockquote>
+<p>当前验证环境已用方式 B 创建超级管理员：<strong>用户名 <code>admin</code> / 密码 <code>admin123456</code></strong>（<code>admin_type=2</code>）。生产环境请立即改密或删除。</p>
+</blockquote>
+<hr>
+<h2>17. 健康检查与冒烟测试</h2>
+<pre><code class="language-bash"># 后端就绪（db / llm / model）
+curl -s http://localhost:8850/readyz
+# 预期：{&quot;ok&quot;:true,&quot;db&quot;:true,&quot;llm&quot;:true,&quot;model&quot;:&quot;deepseek-chat&quot;}
+
+# 前端
+curl -s -o /dev/null -w &quot;%{http_code}\n&quot; http://8.137.155.24/     # 200
+
+# 题库 API（需已恢复种子库）
+curl -s &quot;http://localhost:8850/api/problem/?offset=0&amp;limit=2&quot;
+
+# 题目详情
+curl -s &quot;http://localhost:8850/api/problem/?problem_id=LQ1273&quot;
+</code></pre>
+<blockquote>
+<p><code>readyz</code> 的 <code>llm:true</code> 仅表示<strong>配置存在</strong>，不代表 Key 有效；真实有效性以 §12 的直连测试为准。</p>
+</blockquote>
+<p>完整页面冒烟（已验证）：注册登录 → 题库筛选/翻页 → 选题建会话 → AI 迎语 → 题面展示 → OJ 提交得到判题结果（含测试点）→ 个人中心 → 比赛空状态。</p>
+<hr>
+<h2>18. 常见问题排查</h2>
+<table>
+<thead>
+<tr>
+<th>现象</th>
+<th>原因</th>
+<th>处理</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>题库/比赛页 500，日志 <code>relation &quot;problem&quot; does not exist</code></td>
+<td>未恢复种子库</td>
+<td>执行 §14</td>
+</tr>
+<tr>
+<td>AI 回复「temporarily unavailable」，日志 <code>LLM server returned 401</code></td>
+<td><code>UTU_LLM_API_KEY</code> 无效/欠费</td>
+<td>换有效 Key 后 <code>docker compose up -d --force-recreate ai-agent-lite ai-agent-celery-worker</code>（<strong>注意</strong>：<code>restart</code> 不重读 <code>.env</code>，必须 <code>--force-recreate</code>），再刷新页面重连</td>
+</tr>
+<tr>
+<td>后端启动即退出 <code>ConnectionRefusedError</code></td>
+<td>Postgres 未就绪先于后端</td>
+<td><code>docker compose restart ai-agent-lite ai-agent-celery-worker</code></td>
+</tr>
+<tr>
+<td><code>cdut-sandbox</code> 构建 <code>exit code 100</code></td>
+<td>apt 镜像网络抖动</td>
+<td>重试 <code>docker compose build cdut-sandbox</code></td>
+</tr>
+<tr>
+<td>提交一直 Judging / 判题失败</td>
+<td>测试用例缺失或沙盒未起</td>
+<td>检查 §15；<code>docker compose ps cdut-sandbox</code>；沙盒需 <code>privileged</code></td>
+</tr>
+<tr>
+<td>worker 警告 <code>XIAOMI_API_KEY is not set</code></td>
+<td>题目审核 LLM 未配</td>
+<td>可忽略（不影响主流程），如需审核功能则配置</td>
+</tr>
+<tr>
+<td>端口冲突</td>
+<td>5173/8850/8899 被占</td>
+<td>改 <code>docker-compose.yml</code> 端口映射</td>
+</tr>
+</tbody></table>
+<p>查看日志：</p>
+<pre><code class="language-bash">docker compose logs -f ai-agent-lite
+docker compose logs --tail=50 cdut-sandbox
+docker compose ps
+</code></pre>
+<hr>
+<h2>19. 停止 / 重建 / 备份</h2>
+<pre><code class="language-bash"># 停止（保留数据卷）
+docker compose down
+
+# 停止并删除数据（危险：清空 DB 卷与测试用例需自行确认）
+docker compose down            # 数据在宿主 ./data 下，down 不会删 bind 挂载
+
+# 重建单个服务
+docker compose up -d --build vue-ai-chat
+
+# 备份数据库
+docker exec cdut-postgres pg_dump -U cdut -d cdut_oj &gt; backups/cdut_oj_$(date +%Y%m%d).sql
+</code></pre>
+<p>数据持久化在宿主：<code>./data/postgres</code>（库）、<code>./data/redis</code>、<code>./data/test_cases</code>、<code>./data/{submissions,training,chat_history,problems}</code>。</p>
+<hr>
+<p><em>前端能力以 <code>frontend-vue-ai-chat</code> 当前代码为准。</em></p>
+</body></html>
