@@ -163,6 +163,7 @@ onMounted(() => {
           <div class="problem-item-main">
             <div class="pid">{{ p._id }}</div>
             <div class="pdiff">{{ p.difficulty || 'Unknown' }}</div>
+            <span v-if="p.ac" class="ac-badge" title="已通过">✓</span>
           </div>
           <div class="ptitle">{{ p.title }}</div>
           <div v-if="isAdmin" class="problem-admin-actions">

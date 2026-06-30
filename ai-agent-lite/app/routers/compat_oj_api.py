@@ -354,12 +354,14 @@ async def logout(response: Response):
 
 @router.get("/problem/")
 async def list_or_get_problem(
+    request: Request,
     problem_id: str | None = Query(default=None),
     keyword: str | None = Query(default=None),
     difficulty: str | None = Query(default=None),
     limit: int = Query(default=21, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
 ):
+    username = _current_username(request)
     async with async_session() as db:
         if problem_id:
             row = (
@@ -417,6 +419,19 @@ async def list_or_get_problem(
             )
         ).fetchall()
 
+        ac_set: set[str] = set()
+        if username:
+            ac_rows = (
+                await db.execute(
+                    text(
+                        "SELECT DISTINCT problem_id FROM ai_agent.submissions "
+                        "WHERE user_id=:u AND verdict='AC'"
+                    ),
+                    {"u": username},
+                )
+            ).fetchall()
+            ac_set = {r[0] for r in ac_rows}
+
     results = [
         {
             "id": r[0],
@@ -425,6 +440,7 @@ async def list_or_get_problem(
             "difficulty": r[3] or "Low",
             "time_limit": int(r[4] or 1000),
             "memory_limit": int(r[5] or 256),
+            "ac": r[1] in ac_set,
         }
         for r in rows
     ]
