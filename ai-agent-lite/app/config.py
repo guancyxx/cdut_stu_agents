@@ -55,6 +55,9 @@ class Settings:
     # WebSocket
     ws_chunk_size: int = int(os.getenv("LITE_WS_CHUNK_SIZE", "80"))
 
+    # Security — shared secret for internal service-to-service calls
+    internal_api_secret: str = os.getenv("LITE_INTERNAL_API_SECRET", "").strip()
+
     # Problem auditor
     audit_batch_size: int = int(os.getenv("LITE_AUDIT_BATCH_SIZE", "50"))
     audit_concurrency: int = int(os.getenv("LITE_AUDIT_CONCURRENCY", "2"))

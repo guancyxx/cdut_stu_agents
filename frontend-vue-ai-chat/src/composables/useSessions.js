@@ -22,7 +22,9 @@ export function useSessions(storageKey) {
   const messages = computed(() => currentSession.value?.messages || [])
 
   const saveSessions = () => {
-    localStorage.setItem(activeStorageKey, JSON.stringify(sessions.value))
+    // ponytail: strip messages — chat content must not persist in localStorage (VULN-12)
+    const toSave = sessions.value.map(({ messages: _msgs, ...meta }) => meta)
+    localStorage.setItem(activeStorageKey, JSON.stringify(toSave))
   }
 
   const createSession = (title = '新会话', metadata = {}) => {
@@ -131,6 +133,16 @@ export function useSessions(storageKey) {
     saveSessions()
   }
 
+  const deleteSession = (sessionId) => {
+    const idx = sessions.value.findIndex((s) => s.id === sessionId)
+    if (idx === -1) return
+    sessions.value.splice(idx, 1)
+    if (currentSessionId.value === sessionId) {
+      currentSessionId.value = sessions.value[0]?.id || ''
+    }
+    saveSessions()
+  }
+
   return {
     sessions,
     currentSessionId,
@@ -148,6 +160,7 @@ export function useSessions(storageKey) {
     upsertSessionHistory,
     updateSessionMeta,
     clearAllSessions,
+    deleteSession,
     createTimeLabel
   }
 }

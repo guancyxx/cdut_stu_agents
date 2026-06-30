@@ -42,7 +42,15 @@ async def lifespan(app: FastAPI):
 
 def create_app() -> FastAPI:
     """Application factory — compose routes and middleware."""
-    app = FastAPI(title="ai-agent-lite", lifespan=lifespan)
+    import os
+    _hide_docs = os.getenv("DISABLE_DOCS", "0") == "1"
+    app = FastAPI(
+        title="ai-agent-lite",
+        lifespan=lifespan,
+        docs_url=None if _hide_docs else "/docs",
+        redoc_url=None if _hide_docs else "/redoc",
+        openapi_url=None if _hide_docs else "/openapi.json",
+    )
     app.add_middleware(RequestMiddleware)
     app.include_router(health.router)
     app.include_router(metrics_router.router)

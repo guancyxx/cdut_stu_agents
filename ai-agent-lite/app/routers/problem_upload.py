@@ -122,11 +122,13 @@ UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 # ---------------------------------------------------------------------------
 
 @router.post("/create", response_model=ProblemCreateResponse)
-async def create_single_problem(req: ProblemCreateRequest):
+async def create_single_problem(req: ProblemCreateRequest, request: Request):
     """Create a single problem via direct DB write.
 
     If test_cases are provided, writes test case files to the shared volume.
     """
+    from app.utils.auth_helpers import require_admin_username
+    await require_admin_username(request)
     # Convert pydantic models to plain dicts
     samples = [{"input": s.input, "output": s.output} for s in req.samples]
     test_cases = [{"input": tc.input, "output": tc.output} for tc in req.test_cases]
@@ -208,6 +210,7 @@ async def update_single_problem(problem_id: str, req: ProblemUpdateRequest, requ
 
 @router.post("/upload/batch", response_model=BatchImportResponse)
 async def upload_batch(
+    request: Request,
     file: UploadFile = File(...),
     format: str = Form("auto"),
     tags: str = Form(""),
@@ -219,6 +222,8 @@ async def upload_batch(
     The file is saved to a shared volume, then a Celery task is dispatched
     to process it asynchronously. The caller polls the status endpoint.
     """
+    from app.utils.auth_helpers import require_admin_username
+    await require_admin_username(request)
     if not file.filename:
         raise HTTPException(status_code=400, detail="未提供文件")
 
@@ -267,8 +272,10 @@ async def upload_batch(
 
 
 @router.get("/import/status/{task_id}", response_model=ImportStatusResponse)
-async def get_import_status(task_id: str):
+async def get_import_status(task_id: str, request: Request):
     """Poll the status of a batch import task."""
+    from app.utils.auth_helpers import require_admin_username
+    await require_admin_username(request)
     progress = get_import_progress(task_id)
 
     if progress is None:
@@ -319,8 +326,10 @@ async def get_import_status(task_id: str):
 
 
 @router.get("/tags")
-async def list_tags():
+async def list_tags(request: Request):
     """List all available problem tags from the database."""
+    from app.utils.auth_helpers import require_admin_username
+    await require_admin_username(request)
     async with async_session() as session:
         tags = await get_tag_list(session)
         return {"tags": tags}

@@ -5,6 +5,7 @@ Compatible with the legacy QDUOJ frontend API contract.
 
 from __future__ import annotations
 
+import secrets
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Body, Request, Response
@@ -24,7 +25,7 @@ router = APIRouter(prefix="/api", tags=["auth"])
 @router.get("/captcha")
 async def captcha(response: Response):
     response.set_cookie(
-        "csrftoken", "lite-csrf-token", httponly=False, samesite="lax",
+        "csrftoken", secrets.token_urlsafe(32), httponly=False, samesite="lax",
     )
     return {"error": None, "data": captcha_svg_data_url()}
 
@@ -35,7 +36,7 @@ async def captcha(response: Response):
 async def profile(request: Request, response: Response):
     username = current_username(request)
     response.set_cookie(
-        "csrftoken", "lite-csrf-token", httponly=False, samesite="lax",
+        "csrftoken", secrets.token_urlsafe(32), httponly=False, samesite="lax",
     )
     if not username:
         return {"error": "Please login first", "data": "Please login first"}
@@ -158,7 +159,7 @@ async def update_profile_password(request: Request, payload: dict = Body(...)):
     old_password = str(payload.get("old_password", ""))
     new_password = str(payload.get("new_password", ""))
 
-    if not old_password or not new_password or len(new_password) < 6:
+    if not old_password or not new_password or len(new_password) < 8:
         return {"error": "Invalid password", "data": "Invalid password"}
 
     if old_password == new_password:
@@ -212,7 +213,7 @@ async def register(response: Response, payload: dict = Body(...)):
 
     if not USERNAME_RE.match(username):
         return {"error": "Invalid username", "data": "Invalid username"}
-    if len(password) < 6:
+    if len(password) < 8:
         return {"error": "Invalid password", "data": "Invalid password"}
     if email and not EMAIL_RE.match(email):
         return {"error": "Invalid email", "data": "Invalid email"}
@@ -250,7 +251,7 @@ async def register(response: Response, payload: dict = Body(...)):
 
     response.set_cookie("lite_user", username, httponly=True, samesite="lax")
     response.set_cookie(
-        "csrftoken", "lite-csrf-token", httponly=False, samesite="lax",
+        "csrftoken", secrets.token_urlsafe(32), httponly=False, samesite="lax",
     )
     return {"error": None, "data": {"username": username}}
 
@@ -286,7 +287,7 @@ async def login(response: Response, payload: dict = Body(...)):
 
     response.set_cookie("lite_user", username, httponly=True, samesite="lax")
     response.set_cookie(
-        "csrftoken", "lite-csrf-token", httponly=False, samesite="lax",
+        "csrftoken", secrets.token_urlsafe(32), httponly=False, samesite="lax",
     )
     return {"error": None, "data": {"username": username}}
 

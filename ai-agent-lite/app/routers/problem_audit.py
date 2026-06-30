@@ -9,16 +9,17 @@ Provides endpoints to:
 import logging
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 
 from app.celery_app import celery_app
 from app.tasks.problem_auditor import audit_single_problem, audit_all_problems, clean_problem_statement
 from app.tasks.submission_events import retry_submission_dlq_task
+from app.utils.auth_helpers import require_admin_username
 
 logger = logging.getLogger("ai-agent-lite.audit_api")
 
-router = APIRouter(prefix="/audit", tags=["audit"])
+router = APIRouter(prefix="/audit", tags=["audit"], dependencies=[Depends(require_admin_username)])
 
 
 # ---------------------------------------------------------------------------

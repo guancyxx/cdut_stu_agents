@@ -4,10 +4,11 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, Request
 from sqlalchemy import text
 
 from app.database import async_session
+from app.utils.auth_helpers import current_username
 from app.utils.oj_helpers import parse_json
 
 router = APIRouter(prefix="/api", tags=["problems"])
@@ -15,12 +16,15 @@ router = APIRouter(prefix="/api", tags=["problems"])
 
 @router.get("/problem/")
 async def list_or_get_problem(
+    request: Request,
     problem_id: str | None = Query(default=None),
     keyword: str | None = Query(default=None),
     difficulty: str | None = Query(default=None),
     limit: int = Query(default=21, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
 ):
+    if not current_username(request):
+        return {"error": "Please login first", "data": "Please login first"}
     async with async_session() as db:
         # ── single-problem detail ──
         if problem_id:

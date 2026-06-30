@@ -1,9 +1,10 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useOjStore } from './stores/ojStore'
 import { useChatStore } from './stores/chatStore'
-import ProblemSubmitPanel from './components/ProblemSubmitPanel.vue'
+import ProblemInfoPanel from './components/ProblemInfoPanel.vue'
+import CodeSubmitPanel from './components/CodeSubmitPanel.vue'
 import ThemeToggle from './components/ThemeToggle.vue'
 import { useTheme } from './composables/useTheme'
 import { AUTH_MODES, OJ_DIFFICULTY_OPTIONS, initMessageRenderer } from './utils/validators'
@@ -35,6 +36,7 @@ const {
   switchToUser,
   loadSessions,
   selectSession,
+  deleteOneSession,
   closeSocket
 } = useChatStore()
 
@@ -44,13 +46,18 @@ const requiresAuth = computed(() => authReady.value && !ojUser.value.loggedIn)
 
 const routeTitle = computed(() => route.meta?.title || 'CDUT AI')
 
-// Whether to show the 3-column layout (left sidebar + main + right sidebar)
 const showLayout = computed(() => {
   if (requiresAuth.value) return false
   return route.name === 'home' || route.name === 'problemset'
 })
 
-const showRightSidebar = computed(() => route.name === 'home')
+const panelCollapsed = reactive({ chat: false, problem: false, code: false })
+
+const gridCols = computed(() => {
+  if (route.name === 'problemset') return '260px 1fr'
+  const w = (key) => panelCollapsed[key] ? '40px' : '1fr'
+  return `260px ${w('chat')} ${w('problem')} ${w('code')}`
+})
 
 const authActionText = computed(() =>
   ojUser.value.loggedIn ? ojUser.value.profileName : '去登录'
@@ -95,6 +102,10 @@ const handleClearAllSessions = () => {
 const handleSelectSession = (sessionId) => {
   selectSession(sessionId)
   router.push('/')
+}
+
+const handleDeleteSession = (sessionId) => {
+  deleteOneSession(sessionId)
 }
 
 const getSessionTag = (session) => {
@@ -191,13 +202,13 @@ onBeforeUnmount(() => {
     <!-- ─── Auth Screen (full-page, no layout) ──────────────────────────── -->
     <router-view v-if="requiresAuth" />
 
-    <!-- ─── 3-Column Layout (home / problemset) ────────────────────────── -->
+    <!-- ─── Main Layout ───────────────────────────────────────────────── -->
     <div
       class="content-grid"
-      :class="{ 'problemset-mode': route.name === 'problemset' }"
+      :style="{ gridTemplateColumns: gridCols }"
       v-else-if="showLayout"
     >
-      <!-- Left sidebar: sessions -->
+      <!-- Left sidebar: sessions (fixed width, no collapse) -->
       <aside class="left-sidebar">
         <div class="card sessions-card">
           <div class="session-header-row">
@@ -210,30 +221,76 @@ onBeforeUnmount(() => {
             >clear</button>
           </div>
           <div class="session-list scrollbar-unified">
-            <button
+            <div
               v-for="s in sessions"
               :key="s.id"
               class="session-item"
               :class="{ active: s.id === currentSessionId }"
+              role="button"
+              tabindex="0"
               @click="handleSelectSession(s.id)"
+              @keydown.enter.space.prevent="handleSelectSession(s.id)"
             >
               <div class="session-main">
                 <div class="session-tag">{{ getSessionTag(s) }}</div>
                 <div class="stitle">{{ s.title }}</div>
                 <div class="smeta">{{ new Date(s.createdAt).toLocaleString() }}</div>
               </div>
-            </button>
+              <button
+                class="session-delete-btn"
+                type="button"
+                title="删除此会话"
+                @click.stop="handleDeleteSession(s.id)"
+              >&times;</button>
+            </div>
           </div>
         </div>
       </aside>
 
-      <!-- Main content (router-view) -->
-      <router-view />
+      <!-- Chat panel (collapsible) -->
+      <div class="panel-wrapper" :class="{ collapsed: panelCollapsed.chat }">
+        <div class="panel-header" v-show="!panelCollapsed.chat">
+          <span class="panel-title">AI 对话</span>
+          <button class="panel-toggle-btn" title="折叠" @click="panelCollapsed.chat = true">◀</button>
+        </div>
+        <div class="panel-strip" v-show="panelCollapsed.chat">
+          <button class="panel-toggle-btn" title="展开" @click="panelCollapsed.chat = false">▶</button>
+          <span class="panel-title-v">AI 对话</span>
+        </div>
+        <div class="panel-body" v-show="!panelCollapsed.chat">
+          <router-view />
+        </div>
+      </div>
 
-      <!-- Right sidebar: problem info + OJ submit (home only) -->
-      <aside class="right-sidebar" v-if="showRightSidebar">
-        <ProblemSubmitPanel />
-      </aside>
+      <!-- Problem info panel (home only, collapsible) -->
+      <div class="panel-wrapper" v-if="route.name === 'home'" :class="{ collapsed: panelCollapsed.problem }">
+        <div class="panel-header" v-show="!panelCollapsed.problem">
+          <span class="panel-title">题目信息</span>
+          <button class="panel-toggle-btn" title="折叠" @click="panelCollapsed.problem = true">◀</button>
+        </div>
+        <div class="panel-strip" v-show="panelCollapsed.problem">
+          <button class="panel-toggle-btn" title="展开" @click="panelCollapsed.problem = false">▶</button>
+          <span class="panel-title-v">题目信息</span>
+        </div>
+        <div class="panel-body" v-show="!panelCollapsed.problem">
+          <ProblemInfoPanel />
+        </div>
+      </div>
+
+      <!-- Code submit panel (home only, collapsible) -->
+      <div class="panel-wrapper" v-if="route.name === 'home'" :class="{ collapsed: panelCollapsed.code }">
+        <div class="panel-header" v-show="!panelCollapsed.code">
+          <span class="panel-title">代码提交</span>
+          <button class="panel-toggle-btn" title="折叠" @click="panelCollapsed.code = true">◀</button>
+        </div>
+        <div class="panel-strip" v-show="panelCollapsed.code">
+          <button class="panel-toggle-btn" title="展开" @click="panelCollapsed.code = false">▶</button>
+          <span class="panel-title-v">代码提交</span>
+        </div>
+        <div class="panel-body" v-show="!panelCollapsed.code">
+          <CodeSubmitPanel />
+        </div>
+      </div>
     </div>
 
     <!-- ─── Full-Width Pages (contest / admin / profile) ────────────────── -->

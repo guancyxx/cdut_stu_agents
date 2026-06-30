@@ -70,14 +70,8 @@ const loadHistoryFromLocalStorage = (youtuSessionId) => {
   }
 }
 
-const saveHistoryToLocalStorage = (youtuSessionId, messages = []) => {
-  if (!youtuSessionId) return
-
-  const sanitized = Array.isArray(messages)
-    ? messages.map((message) => sanitizeStoredMessage(message)).filter(Boolean)
-    : []
-
-  localStorage.setItem(createHistoryStorageKey(youtuSessionId), JSON.stringify(sanitized))
+const saveHistoryToLocalStorage = (_youtuSessionId, _messages = []) => {
+  // ponytail: disabled — chat history must not persist in localStorage (VULN-12)
 }
 
 const LANGUAGE_EXTENSIONS = {
@@ -95,6 +89,16 @@ const buildCodeFilename = (language) => {
 const buildResultFilename = () => 'submit-result.txt'
 
 export function useChatFeature() {
+  // VULN-12 migration: purge any history keys written by previous app versions
+  ;(function purgeStoredHistoryKeys() {
+    const toRemove = []
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i)
+      if (k && k.startsWith('cdut-ai-chat-history-')) toRemove.push(k)
+    }
+    toRemove.forEach((k) => localStorage.removeItem(k))
+  })()
+
   const input = ref('')
   const listRef = ref(null)
   const sending = ref(false)
@@ -224,6 +228,7 @@ export function useChatFeature() {
     upsertSessionHistory,
     updateSessionMeta,
     clearAllSessions,
+    deleteSession,
     createTimeLabel
   } = useSessions(buildSessionsStorageKey(''))
 
@@ -421,6 +426,16 @@ export function useChatFeature() {
     socketDriver.closeSocket()
   }
 
+  const deleteOneSession = (sessionId) => {
+    const session = sessions.value.find((s) => s.id === sessionId)
+    if (session?.youtuSessionId) {
+      localStorage.removeItem(`cdut-ai-chat-history-${session.youtuSessionId}`)
+    }
+    deleteSession(sessionId)
+    pruneOrphanAttachments()
+    pruneOrphanSuggestions()
+  }
+
   const clearAllConversationData = () => {
     // Remove history localStorage keys that belong to current user's sessions
     const currentYtIds = new Set(sessions.value.map((s) => s.youtuSessionId).filter(Boolean))
@@ -482,6 +497,7 @@ export function useChatFeature() {
     ensureSessionMetadata,
     sendMessage,
     sendProblemContextToAi,
+    deleteOneSession,
     clearAllConversationData,
     closeSocket
   }

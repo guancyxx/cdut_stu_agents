@@ -7,6 +7,10 @@ FROM ubuntu:24.04
 ENV DEBIAN_FRONTEND=noninteractive \
     TZ=Asia/Shanghai
 
+# Switch to Tsinghua mirror for reliable apt in China
+RUN sed -i 's|http://archive.ubuntu.com/ubuntu|https://mirrors.tuna.tsinghua.edu.cn/ubuntu|g' /etc/apt/sources.list.d/ubuntu.sources && \
+    sed -i 's|http://security.ubuntu.com/ubuntu|https://mirrors.tuna.tsinghua.edu.cn/ubuntu|g' /etc/apt/sources.list.d/ubuntu.sources
+
 # Build dependencies for isolate + language toolchains + Python web server
 RUN apt-get update && apt-get install -y --no-install-recommends \
     # Isolate build dependencies

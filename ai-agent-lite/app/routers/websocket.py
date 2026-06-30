@@ -59,6 +59,11 @@ def _parse_ws_message(raw: str):
 @router.websocket("/ws")
 async def ws_handler(websocket: WebSocket) -> None:
     """Main WebSocket handler — thin protocol layer."""
+    authed_user = websocket.cookies.get("lite_user")
+    if not authed_user:
+        await websocket.close(code=4001, reason="Unauthorized")
+        return
+
     from app.database import async_session
     from app.di import get_supervisor
 
@@ -69,7 +74,7 @@ async def ws_handler(websocket: WebSocket) -> None:
     ws_connections_active.inc()
 
     session_id_str = websocket.query_params.get("session_id") or websocket.query_params.get("sid") or ""
-    user_id = websocket.query_params.get("user_id") or "anonymous"
+    user_id = authed_user
     request_id = uuid.uuid4()
 
     async with async_session() as db:

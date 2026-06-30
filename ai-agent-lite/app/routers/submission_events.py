@@ -125,6 +125,9 @@ async def ingest_submission_fallback(
     db: AsyncSession = Depends(get_session),
 ) -> SubmissionFallbackResponse:
     """Ingest fallback submission result and persist idempotently."""
+    from app.config import settings
+    if settings.internal_api_secret and request.headers.get("X-Internal-Secret") != settings.internal_api_secret:
+        raise HTTPException(status_code=403, detail="Forbidden")
     normalized = _normalize_event_payload(body)
     if not normalized["session_id"]:
         session_row = await session_repo.find_recent_active_session(

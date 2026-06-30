@@ -32,7 +32,6 @@ const {
   addPendingAttachment, clearPendingAttachments
 } = useChatStore()
 
-const rightPanelTab = ref('problem')
 const langDropdownOpen = ref(false)
 const activeSubmitLanguage = ref(DEFAULT_LANGUAGE)
 const codes = ref(Object.fromEntries(ALL_LANGUAGES.map((l) => [l, ''])))
@@ -265,15 +264,8 @@ const buildResultAttachmentContent = (result) => {
 </script>
 
 <template>
-  <div class="card side-tab-card">
-    <div class="switch-row side-tabs">
-      <button :class="{ active: rightPanelTab === 'problem' }" @click="rightPanelTab = 'problem'">题目信息</button>
-      <button :class="{ active: rightPanelTab === 'submit' }" @click="rightPanelTab = 'submit'">OJ提交</button>
-    </div>
-  </div>
-
-  <!-- Problem info tab -->
-  <div class="card side-content-card" v-if="rightPanelTab === 'problem'">
+  <!-- Problem info -->
+  <div class="card side-content-card">
     <div class="problem-detail" v-if="hasSelectedProblem">
       <div class="problem-detail-top">
         <div class="card-title">{{ selectedProblem.title }}</div>
@@ -335,8 +327,8 @@ const buildResultAttachmentContent = (result) => {
     <div class="empty" v-else>请先在题库中选择一道题目</div>
   </div>
 
-  <!-- Submit tab -->
-  <div class="card side-content-card" v-else>
+  <!-- OJ Submit -->
+  <div class="card side-content-card">
     <template v-if="hasSelectedProblem">
       <div class="submit-layout">
         <div class="submit-editor-area">
