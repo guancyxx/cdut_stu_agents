@@ -725,73 +725,6 @@ export function useOjAuthAndProblems() {
     }
   }
 
-  const reportSubmissionToFallback = async ({
-    sessionId,
-    problemId,
-    language,
-    result
-  }) => {
-    if (!result || !result.label || !isFinalSubmissionStatus(result.status)) {
-      return null
-    }
-
-    const userId = sanitizeTextInput(
-      ojUser.value.profileName || ojUser.value.username || 'anonymous',
-      64
-    )
-    if (!userId) return null
-
-    const payload = {
-      session_id: sanitizeTextInput(String(sessionId || ''), 64) || null,
-      user_id: userId,
-      problem_id: sanitizeTextInput(String(problemId || ''), 64),
-      submission_id: sanitizeTextInput(String(result.submissionId || ''), 64),
-      status_code: result.status != null ? Number(result.status) : null,
-      status_label: sanitizeTextInput(String(result.label || 'UNKNOWN').toUpperCase(), 64),
-      status_display: sanitizeTextInput(String(result.display || result.label || 'Unknown'), 64),
-      language: sanitizeTextInput(String(language || ''), 32),
-      score: Number(result.score || 0),
-      time_cost_ms: Number(result.timeCost || 0),
-      memory_cost_kb: Number(result.memoryCost || 0),
-      err_info: typeof result.errInfo === 'string' ? result.errInfo : '',
-      test_cases: Array.isArray(result.testCases)
-        ? result.testCases.map((tc) => ({
-          index: Number(tc.index || 0),
-          status: tc.status != null ? Number(tc.status) : null,
-          label: sanitizeTextInput(String(tc.label || ''), 32)
-        }))
-        : [],
-      source: 'frontend_fb',
-      should_trigger_ai: true
-    }
-
-    if (!payload.problem_id || !payload.submission_id) {
-      return null
-    }
-
-    const maxAttempts = 3
-    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-      try {
-        const response = await apiClient.reportSubmissionFallback(payload)
-        if (response.data?.error) {
-          console.warn('Submission fallback rejected:', response.data.error)
-          if (attempt === maxAttempts) return null
-        } else {
-          return response.data || null
-        }
-      } catch (err) {
-        console.warn(`Submission fallback request failed (attempt ${attempt}/${maxAttempts}):`, err)
-        if (attempt === maxAttempts) {
-          return null
-        }
-      }
-
-      await new Promise((resolve) => setTimeout(resolve, 250 * attempt))
-    }
-
-    return null
-  }
-
   const submitSolution = async ({ problemId, problemQueryId, language, code, sessionId, contestId = '' }) => {
     const sid = sessionId || '_default'
     submitLoading.value = true
@@ -977,9 +910,7 @@ export function useOjAuthAndProblems() {
     problemDetailLoading,
     fetchProblemDetail,
     submitLoading,
-    submitResultBySessionId,
     getSubmitResultForSession,
-    setSubmitResultForSession,
     pruneSubmitResults,
     keyword,
     difficulty,
@@ -1003,7 +934,6 @@ export function useOjAuthAndProblems() {
     fetchProblems,
     fetchProblemTags,
     submitSolution,
-    reportSubmissionToFallback,
     contestList,
     contestListLoading,
     contestError,

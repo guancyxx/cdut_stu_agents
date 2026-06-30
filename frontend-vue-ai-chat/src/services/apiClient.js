@@ -178,24 +178,6 @@ export function createApiClient(baseUrl = '/oj-api', aiAgentBaseUrl = '/oj-test-
     })
   }
 
-  const reportSubmissionFallback = (payload) =>
-    fetch(`${aiAgentBaseUrl}/submission-events/fallback`, {
-      method: 'POST',
-      credentials: 'include',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(payload)
-    }).then(async (response) => {
-      const rawText = await response.text()
-      if (!rawText) return { ok: response.ok, status: response.status, data: { error: `Empty response (${response.status})`, data: '' } }
-      try {
-        return { ok: response.ok, status: response.status, data: JSON.parse(rawText) }
-      } catch {
-        return { ok: response.ok, status: response.status, data: { error: `Invalid JSON response (${response.status})`, data: rawText } }
-      }
-    })
-
   // Admin problem upload API methods (all go through ai-agent-lite)
   const adminCreateProblem = (payload) =>
     fetch(`${aiAgentBaseUrl}/admin/problems/create`, {
@@ -396,7 +378,6 @@ export function createApiClient(baseUrl = '/oj-api', aiAgentBaseUrl = '/oj-test-
     submitContestCode,
     fetchContestRank,
     fetchTestCaseContent,
-    reportSubmissionFallback,
     adminCreateProblem,
     adminBatchUpload,
     adminImportStatus,
