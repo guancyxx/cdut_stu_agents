@@ -440,7 +440,7 @@ async def list_or_get_problem(
             "difficulty": r[3] or "Low",
             "time_limit": int(r[4] or 1000),
             "memory_limit": int(r[5] or 256),
-            "ac": r[1] in ac_set,
+            "ac": str(r[0]) in ac_set,
         }
         for r in rows
     ]
